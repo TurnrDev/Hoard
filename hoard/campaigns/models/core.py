@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q, Sum
@@ -17,10 +18,22 @@ if TYPE_CHECKING:
     from hoard.campaigns.services.actions import CoinAmounts
 
 
+DEFAULT_ITEM_SOURCES: list[str] = ['5e', '5e2024']
+
+
 class Campaign(models.Model):
+    item_sources: list[str]
+
     name = models.CharField(max_length=200)
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
+    item_sources = ArrayField(
+        models.CharField(max_length=10, choices=(('5e', 'D&D 5e'), ('5e2024', 'D&D 5e (2024)'))),
+        default=DEFAULT_ITEM_SOURCES,
+    )
+
+    def allows_item_source(self, source_system: str) -> bool:
+        return source_system in self.item_sources
 
     def inventory_system_account(self) -> InventoryAccount:
         from ..services.ledger import system_account
@@ -47,6 +60,16 @@ class Campaign(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        allowed_sources = {'5e', '5e2024'}
+        if (
+            not isinstance(self.item_sources, list)
+            or any(not isinstance(source, str) or source not in allowed_sources for source in self.item_sources)
+            or len(self.item_sources) != len(set(self.item_sources))
+        ):
+            raise ValidationError({'item_sources': 'Choose zero or more supported item sources: 5e, 5e2024.'})
 
 
 class Player(models.Model):

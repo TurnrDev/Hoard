@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import admin
+from django import forms
 from django.forms.models import BaseModelForm
 from django.http import HttpRequest
 
@@ -21,9 +22,23 @@ from .models import (
 )
 
 
+class CampaignAdminForm(forms.ModelForm):
+    item_sources = forms.MultipleChoiceField(
+        choices=(('5e', 'D&D 5e'), ('5e2024', 'D&D 5e (2024)')),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text='Imported catalogue sources available to this campaign.',
+    )
+
+    class Meta:
+        model = Campaign
+        fields = '__all__'
+
+
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = ('name', 'use_shared_exp', 'shared_experience')
+    form = CampaignAdminForm
+    list_display = ('name', 'use_shared_exp', 'shared_experience', 'item_sources')
     search_fields = ('name',)
 
 

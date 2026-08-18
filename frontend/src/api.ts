@@ -1,8 +1,8 @@
 export type User = { id: number; username: string }
 export type CampaignSummary = { id: number; name: string; is_game_master: boolean }
-export type Item = { id: number; name: string; description: string; campaign_id: number | null; created_by_id: number | null; source_system: string | null; source_identifier: string | null; source_repository: string | null; is_imported: boolean }
+export type Item = { id: number; name: string; description: string; campaign_id: number | null; created_by_id: number | null; created_by_username: string | null; source_system: string | null; source_identifier: string | null; source_repository: string | null; is_imported: boolean }
 export type Character = { id: number; name: string; is_active: boolean; race: string; class: string; experience: number; money: Record<string, number | string>; inventory: Array<{ item_id: number; name: string; quantity: number }> }
-export type Campaign = CampaignSummary & { use_shared_exp: boolean; shared_experience: number; characters: Character[] }
+export type Campaign = CampaignSummary & { use_shared_exp: boolean; shared_experience: number; item_sources: string[]; characters: Character[] }
 export type LedgerEntry = { account_id: number; amount: number; item_id?: number; item_name?: string; denomination?: string }
 export type LedgerTransaction = { id: number; ledger: string; description: string; created_at: string; entries: LedgerEntry[]; reversal_of_id: number | null; is_reversed: boolean; reason?: string; requested_amount?: number; discarded_amount?: number }
 

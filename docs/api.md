@@ -12,7 +12,7 @@ shared custom item.
 | --- | --- | --- |
 | `GET /` | member | Campaign state. GMs receive every character; players receive their own characters. |
 | `GET /api/campaigns/` | authenticated | Campaign memberships for the campaign picker. |
-| `GET /items/` | member | Global imported and campaign-local item catalogue. |
+| `GET /items/` | member | Campaign-local items plus global imported items enabled by the campaign's `item_sources` setting. |
 | `POST /items/` | member | Create `{ "name", "description" }` custom campaign item. |
 | `POST /items/<item_id>/copy/` | GM | Make an editable campaign-local copy of a global item. |
 | `POST /actions/<action>/` | GM | Post a domain action. |
@@ -22,6 +22,7 @@ shared custom item.
 Available actions and payloads:
 
 - `grant-loot`: `{ "recipient_id", "item_id", "quantity", "description" }`
+- `take-loot`: `{ "source_id", "item_id", "quantity", "description" }`
 - `transfer-item`: `{ "source_id", "recipient_id", "item_id", "quantity", "description" }`
 - `grant-coins` and `spend-coins`: `{ "character_id", "coins": {"gp": 5}, "description" }`
 - `exchange-coins`: `{ "character_id", "given": {"gp": 1}, "received": {"sp": 10}, "description" }`
@@ -32,3 +33,12 @@ integers. Exchanges must have equal copper value. Posted actions return their
 transaction metadata, while XP actions return `{ "per_character", "dry_run" }`.
 Invalid input produces DRF’s structured `400` response; missing campaign
 membership is `404`, and a non-GM mutation is `403`.
+
+## Item source settings
+
+Each campaign stores `item_sources` as a list of enabled imported catalogue
+systems, currently `5e` and `5e2024`. Configure it from the campaign’s Django
+admin page with the source checkboxes. The item API and item pickers only show
+global items from enabled sources; campaign custom items are always available.
+Disabling a source never removes items already held by a character, and those
+items may still be returned to the system account.

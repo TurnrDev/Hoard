@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from hoard.campaigns.models import Campaign, InventoryItem, MoneyEntry
-from hoard.campaigns.services import exchange_coins, grant_coins, grant_loot, spend_coins, transfer_item
+from hoard.campaigns.services import exchange_coins, grant_coins, grant_loot, spend_coins, take_loot, transfer_item
 
 from .helpers import make_character
 
@@ -19,6 +19,8 @@ class CampaignActionTests(TestCase):
         transfer_item(source=self.first, recipient=self.second, item=self.item, quantity=1)
         self.assertEqual(self.first.inventory[self.item], 1)
         self.assertEqual(self.second.inventory[self.item], 1)
+        take_loot(source=self.second, item=self.item, quantity=1)
+        self.assertNotIn(self.item, self.second.inventory)
         with self.assertRaises(ValidationError):
             transfer_item(source=self.first, recipient=self.second, item=self.item, quantity=2)
 

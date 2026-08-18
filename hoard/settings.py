@@ -38,6 +38,7 @@ INSTALLED_APPS: list[str] = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.postgres',
     'django.contrib.staticfiles',
     'django_vite',
     'rest_framework',

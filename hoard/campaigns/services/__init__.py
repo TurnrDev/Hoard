@@ -10,6 +10,7 @@ from .actions import (
     preview_shared_experience,
     reverse_transaction,
     spend_coins,
+    take_loot,
     transfer_item,
 )
 from .ledger import (
@@ -26,6 +27,6 @@ __all__ = [
     'post_inventory_transaction', 'post_money_transaction',
     'exchange_coins', 'grant_coins', 'grant_loot', 'preview_shared_experience',
     'reverse_experience_transaction', 'reverse_inventory_transaction',
-    'reverse_money_transaction', 'reverse_transaction', 'spend_coins', 'system_account',
+    'reverse_money_transaction', 'reverse_transaction', 'spend_coins', 'system_account', 'take_loot',
     'transfer_item',
 ]

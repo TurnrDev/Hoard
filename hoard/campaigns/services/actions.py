@@ -57,6 +57,8 @@ def grant_loot(
     *, recipient: Character, item: InventoryItem, quantity: int, description: str = ''
 ) -> InventoryTransaction:
     """Create items in the campaign system account and grant them to a character."""
+    if item.campaign_id is None and not recipient.campaign.allows_item_source(item.source_system):
+        raise ValidationError('This item source is not enabled for the campaign.')
     return post_inventory_transaction(
         from_account=recipient.campaign.inventory_system_account(),
         to_account=recipient.inventory_account(),
@@ -75,6 +77,21 @@ def transfer_item(
     return post_inventory_transaction(
         from_account=source.inventory_account(),
         to_account=recipient.inventory_account(),
+        item=item,
+        quantity=quantity,
+        description=description,
+    )
+
+
+def take_loot(
+    *, source: Character, item: InventoryItem, quantity: int, description: str = ''
+) -> InventoryTransaction:
+    """Remove held inventory by returning it to the campaign system account."""
+    if quantity <= 0 or source.inventory.get(item, 0) < quantity:
+        raise ValidationError('A character cannot give up more of an item than they hold.')
+    return post_inventory_transaction(
+        from_account=source.inventory_account(),
+        to_account=source.campaign.inventory_system_account(),
         item=item,
         quantity=quantity,
         description=description,

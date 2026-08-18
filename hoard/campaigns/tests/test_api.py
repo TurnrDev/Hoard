@@ -46,6 +46,43 @@ class CampaignApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([character['id'] for character in response.json()['characters']], [self.player_character.pk])
 
+    def test_item_sources_filter_global_catalogue_but_do_not_strand_held_items(self) -> None:
+        newer_item = InventoryItem.objects.create(
+            campaign=None,
+            name='2024 Torch',
+            source_identifier='torch-2024',
+            source_system='5e2024',
+            source_repository='https://example.test',
+        )
+        self.client.force_login(self.gm_user)
+
+        response = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/actions/grant-loot/',
+            {'recipient_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 201)
+
+        self.campaign.item_sources = ['5e']
+        self.campaign.save()
+        response = self.client.get(f'/api/campaigns/{self.campaign.pk}/items/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(newer_item.pk, [item['id'] for item in response.json()])
+
+        response = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/actions/grant-loot/',
+            {'recipient_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 404)
+        response = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/actions/take-loot/',
+            {'source_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertNotIn(newer_item, self.player_character.inventory)
+
     def test_login_campaign_list_and_history_respect_membership(self) -> None:
         client = APIClient(enforce_csrf_checks=True)
         csrf_response = client.get('/api/auth/csrf/')

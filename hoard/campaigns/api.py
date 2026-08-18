@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -23,7 +23,7 @@ from .models import (
     MoneyTransaction,
     Player,
 )
-from .services import exchange_coins, grant_coins, grant_loot, reverse_transaction, spend_coins, transfer_item
+from .services import exchange_coins, grant_coins, grant_loot, reverse_transaction, spend_coins, take_loot, transfer_item
 
 
 def _validation_error(error: DjangoValidationError) -> ValidationError:
@@ -63,7 +63,9 @@ def _character_data(character: Character) -> dict[str, object]:
 def _item_data(item: InventoryItem) -> dict[str, object]:
     return {
         'id': item.pk, 'name': item.name, 'description': item.description, 'campaign_id': item.campaign_id,
-        'created_by_id': item.created_by_id, 'source_system': item.source_system or None,
+        'created_by_id': item.created_by_id,
+        'created_by_username': item.created_by.user.get_username() if item.created_by_id else None,
+        'source_system': item.source_system or None,
         'source_identifier': item.source_identifier or None, 'source_repository': item.source_repository or None,
         'is_imported': item.is_imported,
     }
@@ -85,9 +87,23 @@ class CampaignAccessView(APIView):
     def character(self, character_id: object) -> Character:
         return get_object_or_404(Character, pk=character_id, campaign=self.campaign)
 
-    def item(self, item_id: object) -> InventoryItem:
-        items = InventoryItem.objects.filter(Q(campaign=self.campaign) | Q(campaign__isnull=True))
+    def item(self, item_id: object, *, include_disabled_sources: bool = False) -> InventoryItem:
+        items = self.all_campaign_items() if include_disabled_sources else self.items()
         return get_object_or_404(items, pk=item_id)
+
+    def all_campaign_items(self) -> QuerySet[InventoryItem]:
+        """Return campaign items plus every global item, including disabled sources.
+
+        This is only used when removing an item already held by a character.
+        Changing a campaign's catalogue must not strand existing inventory.
+        """
+        return InventoryItem.objects.filter(
+            Q(campaign=self.campaign) | Q(campaign__isnull=True)
+        ).select_related('created_by__user')
+
+    def items(self) -> QuerySet[InventoryItem]:
+        source_query = Q(campaign__isnull=True, source_system__in=self.campaign.item_sources)
+        return self.all_campaign_items().filter(Q(campaign=self.campaign) | source_query)
 
 
 class CampaignListView(APIView):
@@ -111,13 +127,14 @@ class CampaignDetailView(CampaignAccessView):
         return Response({
             'id': self.campaign.pk, 'name': self.campaign.name, 'use_shared_exp': self.campaign.use_shared_exp,
             'shared_experience': self.campaign.shared_experience, 'is_game_master': self.player.is_game_master,
+            'item_sources': self.campaign.item_sources,
             'characters': [_character_data(character) for character in characters],
         })
 
 
 class ItemListCreateView(CampaignAccessView):
     def get(self, request: Request, campaign_id: int) -> Response:
-        items = InventoryItem.objects.filter(Q(campaign=self.campaign) | Q(campaign__isnull=True)).order_by('name')
+        items = self.items().order_by('name')
         return Response([_item_data(item) for item in items])
 
     def post(self, request: Request, campaign_id: int) -> Response:
@@ -134,7 +151,7 @@ class ItemListCreateView(CampaignAccessView):
 class ItemCopyView(CampaignAccessView):
     def post(self, request: Request, campaign_id: int, item_id: int) -> Response:
         self.require_game_master()
-        source = get_object_or_404(InventoryItem, pk=item_id, campaign__isnull=True)
+        source = self.item(item_id)
         name = request.data.get('name', source.name)
         description = request.data.get('description', source.description)
         if not isinstance(name, str) or not name.strip() or not isinstance(description, str):
@@ -152,6 +169,8 @@ class CampaignActionView(CampaignAccessView):
         try:
             if action == 'grant-loot':
                 posted = grant_loot(recipient=self.character(request.data.get('recipient_id')), item=self.item(request.data.get('item_id')), quantity=request.data.get('quantity'), description=request.data.get('description', ''))
+            elif action == 'take-loot':
+                posted = take_loot(source=self.character(request.data.get('source_id')), item=self.item(request.data.get('item_id'), include_disabled_sources=True), quantity=request.data.get('quantity'), description=request.data.get('description', ''))
             elif action == 'transfer-item':
                 posted = transfer_item(source=self.character(request.data.get('source_id')), recipient=self.character(request.data.get('recipient_id')), item=self.item(request.data.get('item_id')), quantity=request.data.get('quantity'), description=request.data.get('description', ''))
             elif action == 'grant-coins':
