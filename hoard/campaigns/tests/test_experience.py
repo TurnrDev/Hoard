@@ -8,10 +8,10 @@ from .helpers import make_character
 
 
 class SharedExperienceTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.campaign = Campaign.objects.create(name='Hoard')
 
-    def test_dry_run_returns_share_without_side_effects(self):
+    def test_dry_run_returns_share_without_side_effects(self) -> None:
         recipients = [make_character(self.campaign, f'Hero {index}') for index in range(5)]
         for character in recipients:
             character.activate()
@@ -25,7 +25,7 @@ class SharedExperienceTests(TestCase):
         award = ExperienceTransaction.objects.get()
         self.assertEqual(award.discarded_amount, 1)
 
-    def test_active_player_characters_only_receive_xp_and_late_joiners_catch_up(self):
+    def test_active_player_characters_only_receive_xp_and_late_joiners_catch_up(self) -> None:
         active = make_character(self.campaign, 'Active')
         active.activate()
         inactive = make_character(self.campaign, 'Inactive')
@@ -38,7 +38,7 @@ class SharedExperienceTests(TestCase):
         inactive.activate()
         self.assertEqual(inactive.experience, 10)
 
-    def test_invalid_awards_and_reversal_are_handled(self):
+    def test_invalid_awards_and_reversal_are_handled(self) -> None:
         with self.assertRaises(ValidationError):
             self.campaign.award_shared_experience(1)
         character = make_character(self.campaign)

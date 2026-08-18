@@ -11,3 +11,11 @@ dependencies = [
     "django>=6.1",
     "psycopg[binary]>=3.3.4",
 ]
+
+[dependency-groups]
+dev = [
+    "django-stubs>=6.1.0",
+]
+
+[tool.django-stubs]
+django_settings_module = "hoard.settings"

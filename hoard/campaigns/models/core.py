@@ -11,7 +11,9 @@ from django.db import models
 from django.db.models import Q, Sum
 
 if TYPE_CHECKING:
-    from hoard.campaigns.models.inventory import InventoryItem
+    from hoard.campaigns.models.experience import ExperienceAccount
+    from hoard.campaigns.models.inventory import InventoryAccount, InventoryItem
+    from hoard.campaigns.models.money import MoneyAccount
 
 
 class Campaign(models.Model):
@@ -19,41 +21,44 @@ class Campaign(models.Model):
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
 
-    def inventory_system_account(self):
-        from .inventory import InventoryAccount
+    def inventory_system_account(self) -> InventoryAccount:
         from ..services.ledger import system_account
+        from .inventory import InventoryAccount
 
         return system_account(InventoryAccount, self)
 
-    def money_system_account(self):
-        from .money import MoneyAccount
+    def money_system_account(self) -> MoneyAccount:
         from ..services.ledger import system_account
+        from .money import MoneyAccount
 
         return system_account(MoneyAccount, self)
 
-    def experience_system_account(self):
-        from .experience import ExperienceAccount
+    def experience_system_account(self) -> ExperienceAccount:
         from ..services.ledger import system_account
+        from .experience import ExperienceAccount
 
         return system_account(ExperienceAccount, self)
 
-    def award_shared_experience(self, amount, description='', dry_run=False) -> int:
+    def award_shared_experience(self, amount: int, description: str = '', dry_run: bool = False) -> int:
         from ..services.experience import award_shared_experience
 
         return award_shared_experience(self, amount, description=description, dry_run=dry_run)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
 class Player(models.Model):
+    campaign_id: int
+    user_id: int
+
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='players')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='campaign_players')
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('campaign', 'user'), name='unique_player_per_campaign')]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.user} in {self.campaign}'
 
 
@@ -77,6 +82,9 @@ class MoneyBalance:
 
 
 class Character(models.Model):
+    campaign_id: int
+    player_id: int | None
+
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='characters')
     player = models.ForeignKey(Player, null=True, blank=True, on_delete=models.SET_NULL, related_name='characters')
     is_active = models.BooleanField(default=False)
@@ -99,7 +107,7 @@ class Character(models.Model):
             ),
         ]
 
-    def clean(self):
+    def clean(self) -> None:
         super().clean()
         if self.player_id and self.player.campaign_id != self.campaign_id:
             raise ValidationError({'player': 'A player must belong to the same campaign as the character.'})
@@ -138,28 +146,28 @@ class Character(models.Model):
         items = InventoryItem.objects.in_bulk([row['item_id'] for row in rows])
         return {items[row['item_id']]: row['total'] for row in rows}
 
-    def activate(self):
+    def activate(self) -> Character:
         from ..services.experience import activate_character
 
         return activate_character(self)
 
-    def inventory_account(self):
-        from .inventory import InventoryAccount
+    def inventory_account(self) -> InventoryAccount:
         from ..services.ledger import character_account
+        from .inventory import InventoryAccount
 
         return character_account(InventoryAccount, self)
 
-    def money_account(self):
-        from .money import MoneyAccount
+    def money_account(self) -> MoneyAccount:
         from ..services.ledger import character_account
+        from .money import MoneyAccount
 
         return character_account(MoneyAccount, self)
 
-    def experience_account(self):
-        from .experience import ExperienceAccount
+    def experience_account(self) -> ExperienceAccount:
         from ..services.ledger import character_account
+        from .experience import ExperienceAccount
 
         return character_account(ExperienceAccount, self)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name

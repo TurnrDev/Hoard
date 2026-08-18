@@ -14,11 +14,11 @@ from .helpers import make_character
 
 
 class LedgerTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.campaign = Campaign.objects.create(name='Hoard')
         self.character = make_character(self.campaign)
 
-    def test_inventory_entries_balance_are_immutable_and_reversible(self):
+    def test_inventory_entries_balance_are_immutable_and_reversible(self) -> None:
         item = InventoryItem.objects.create(campaign=self.campaign, name='Torch')
         system = self.campaign.inventory_system_account()
         account = self.character.inventory_account()
@@ -44,7 +44,7 @@ class LedgerTests(TestCase):
                 quantity=1,
             )
 
-    def test_money_tracks_coins_and_decimal_gold_value(self):
+    def test_money_tracks_coins_and_decimal_gold_value(self) -> None:
         system = self.campaign.money_system_account()
         account = self.character.money_account()
         post_money_transaction([
@@ -61,7 +61,7 @@ class LedgerTests(TestCase):
         with self.assertRaises(ValidationError):
             post_money_transaction([(account, MoneyEntry.Denomination.GOLD, 1)])
 
-    def test_cross_campaign_inventory_and_money_operations_are_rejected(self):
+    def test_cross_campaign_inventory_and_money_operations_are_rejected(self) -> None:
         other_campaign = Campaign.objects.create(name='Other')
         other_character = make_character(other_campaign, 'Other hero')
         item = InventoryItem.objects.create(campaign=self.campaign, name='Torch')

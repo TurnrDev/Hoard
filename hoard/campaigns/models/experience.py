@@ -5,6 +5,9 @@ from .ledger import ImmutableLedgerEntry, LedgerTransaction
 
 
 class ExperienceAccount(models.Model):
+    campaign_id: int
+    character_id: int | None
+
     campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE, related_name='experience_accounts')
     character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='experience_ledger_account')
     is_system = models.BooleanField(default=False)
@@ -20,6 +23,8 @@ class ExperienceAccount(models.Model):
 
 
 class ExperienceTransaction(LedgerTransaction):
+    reversal_of_id: int | None
+
     class Reason(models.TextChoices):
         SHARED_AWARD = 'shared_award', 'Shared award'
         BASELINE = 'baseline', 'Activation baseline'
@@ -32,6 +37,9 @@ class ExperienceTransaction(LedgerTransaction):
 
 
 class ExperienceEntry(ImmutableLedgerEntry):
+    transaction_id: int
+    account_id: int
+
     transaction = models.ForeignKey(ExperienceTransaction, on_delete=models.PROTECT, related_name='entries')
     account = models.ForeignKey(ExperienceAccount, on_delete=models.PROTECT, related_name='entries')
 

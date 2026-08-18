@@ -3,7 +3,13 @@ from django.contrib.auth import get_user_model
 from hoard.campaigns.models import Campaign, Character, Player
 
 
-def make_character(campaign, name='Hero', *, active=False, player=True):
+def make_character(
+    campaign: Campaign,
+    name: str = 'Hero',
+    *,
+    active: bool = False,
+    player: bool = True,
+) -> Character:
     membership = None
     if player:
         user = get_user_model().objects.create_user(username=f'{name}-{Player.objects.count()}')

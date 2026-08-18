@@ -1,12 +1,31 @@
+from __future__ import annotations
+
+from typing import Protocol, TypeVar, cast
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from ..models import (
+    Campaign,
+    Character,
+    InventoryAccount,
     InventoryEntry,
+    InventoryItem,
     InventoryTransaction,
+    MoneyAccount,
     MoneyEntry,
     MoneyTransaction,
 )
+
+
+class CampaignScoped(Protocol):
+    campaign_id: int
+
+
+AccountT = TypeVar('AccountT', bound=CampaignScoped)
+TransactionT = TypeVar('TransactionT', InventoryTransaction, MoneyTransaction)
+EntryT = TypeVar('EntryT', InventoryEntry, MoneyEntry)
+type MoneyEntryInput = tuple[MoneyAccount, MoneyEntry.Denomination, int]
 
 COPPER_VALUES = {
     MoneyEntry.Denomination.COPPER: 1,
@@ -17,27 +36,40 @@ COPPER_VALUES = {
 }
 
 
-def system_account(account_model, campaign):
+def system_account[AccountT: CampaignScoped](
+    account_model: type[AccountT], campaign: Campaign
+) -> AccountT:
     """Return the campaign's balancing system account for a ledger type."""
-    return account_model.objects.get_or_create(campaign=campaign, is_system=True, defaults={'character': None})[0]
+    account, _ = account_model.objects.get_or_create(campaign=campaign, is_system=True, defaults={'character': None})
+    return cast(AccountT, account)
 
 
-def character_account(account_model, character):
+def character_account[AccountT: CampaignScoped](
+    account_model: type[AccountT], character: Character
+) -> AccountT:
     """Return a character's account for a ledger type."""
-    return account_model.objects.get_or_create(
+    account, _ = account_model.objects.get_or_create(
         campaign=character.campaign,
         character=character,
         defaults={'is_system': False},
-    )[0]
+    )
+    return cast(AccountT, account)
 
 
-def _validate_campaign_scope(campaign, *objects):
+def _validate_campaign_scope(campaign: Campaign, *objects: CampaignScoped) -> None:
     for obj in objects:
         if obj.campaign_id != campaign.id:
             raise ValidationError('Every supplied object must belong to the same campaign.')
 
 
-def post_inventory_transaction(*, from_account, to_account, item, quantity, description=''):
+def post_inventory_transaction(
+    *,
+    from_account: InventoryAccount,
+    to_account: InventoryAccount,
+    item: InventoryItem,
+    quantity: int,
+    description: str = '',
+) -> InventoryTransaction:
     """Transfer a positive quantity of one item between two campaign accounts."""
     campaign = from_account.campaign
     _validate_campaign_scope(campaign, to_account, item)
@@ -54,7 +86,7 @@ def post_inventory_transaction(*, from_account, to_account, item, quantity, desc
     return posted
 
 
-def post_money_transaction(entries, *, description=''):
+def post_money_transaction(entries: list[MoneyEntryInput], *, description: str = '') -> MoneyTransaction:
     """Post [(account, denomination, signed_amount), ...] when copper value balances."""
     entries = list(entries)
     if not entries:
@@ -78,7 +110,7 @@ def post_money_transaction(entries, *, description=''):
     return posted
 
 
-def _entry_data(entry):
+def _entry_data(entry: InventoryEntry | MoneyEntry) -> dict[str, object]:
     values = {'amount': -entry.amount}
     if isinstance(entry, InventoryEntry):
         values['item'] = entry.item
@@ -87,7 +119,16 @@ def _entry_data(entry):
     return values
 
 
-def _reverse_entries(original, transaction_model, entry_model, *, description=''):
+def _reverse_entries[
+    TransactionT: (InventoryTransaction, MoneyTransaction),
+    EntryT: (InventoryEntry, MoneyEntry),
+](
+    original: TransactionT,
+    transaction_model: type[TransactionT],
+    entry_model: type[EntryT],
+    *,
+    description: str = "",
+) -> TransactionT:
     with transaction.atomic():
         original = transaction_model.objects.select_for_update().get(pk=original.pk)
         if hasattr(original, 'reversal'):
@@ -101,12 +142,20 @@ def _reverse_entries(original, transaction_model, entry_model, *, description=''
             entry_model(transaction=reverse, account=entry.account, **_entry_data(entry))
             for entry in original.entries.all()
         ])
-        return reverse
+        return cast(TransactionT, reverse)
 
 
-def reverse_inventory_transaction(transaction_to_reverse, *, description=''):
+def reverse_inventory_transaction(
+    transaction_to_reverse: InventoryTransaction,
+    *,
+    description: str = '',
+) -> InventoryTransaction:
     return _reverse_entries(transaction_to_reverse, InventoryTransaction, InventoryEntry, description=description)
 
 
-def reverse_money_transaction(transaction_to_reverse, *, description=''):
+def reverse_money_transaction(
+    transaction_to_reverse: MoneyTransaction,
+    *,
+    description: str = '',
+) -> MoneyTransaction:
     return _reverse_entries(transaction_to_reverse, MoneyTransaction, MoneyEntry, description=description)

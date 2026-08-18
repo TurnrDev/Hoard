@@ -5,6 +5,9 @@ from .ledger import ImmutableLedgerEntry, LedgerTransaction
 
 
 class MoneyAccount(models.Model):
+    campaign_id: int
+    character_id: int | None
+
     campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE, related_name='money_accounts')
     character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='money_ledger_account')
     is_system = models.BooleanField(default=False)
@@ -20,10 +23,15 @@ class MoneyAccount(models.Model):
 
 
 class MoneyTransaction(LedgerTransaction):
+    reversal_of_id: int | None
+
     reversal_of = models.OneToOneField('self', null=True, blank=True, on_delete=models.PROTECT, related_name='reversal')
 
 
 class MoneyEntry(ImmutableLedgerEntry):
+    transaction_id: int
+    account_id: int
+
     class Denomination(models.TextChoices):
         COPPER = 'cp', 'Copper'
         SILVER = 'sp', 'Silver'

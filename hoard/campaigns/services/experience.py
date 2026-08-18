@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
@@ -5,13 +7,24 @@ from django.db.models import Sum
 from ..models import (
     Campaign,
     Character,
+    ExperienceAccount,
     ExperienceEntry,
     ExperienceTransaction,
 )
 from .ledger import _validate_campaign_scope
 
+type ExperienceEntryInput = tuple[ExperienceAccount, int]
 
-def _post_experience_transaction(entries, *, reason, description='', requested_amount=0, discarded_amount=0, reversal_of=None):
+
+def _post_experience_transaction(
+    entries: list[ExperienceEntryInput],
+    *,
+    reason: ExperienceTransaction.Reason,
+    description: str = '',
+    requested_amount: int = 0,
+    discarded_amount: int = 0,
+    reversal_of: ExperienceTransaction | None = None,
+) -> ExperienceTransaction:
     if not entries or any(not amount for _, amount in entries) or sum(amount for _, amount in entries) != 0:
         raise ValidationError('Experience transactions must contain non-zero entries that balance to zero.')
     campaign = entries[0][0].campaign
@@ -30,7 +43,12 @@ def _post_experience_transaction(entries, *, reason, description='', requested_a
     return posted
 
 
-def award_shared_experience(campaign, amount, description='', dry_run=False) -> int:
+def award_shared_experience(
+    campaign: Campaign,
+    amount: int,
+    description: str = '',
+    dry_run: bool = False,
+) -> int:
     """Award group XP and return the XP each eligible character would receive."""
     if amount <= 0:
         raise ValidationError('XP awards must be positive.')
@@ -67,7 +85,7 @@ def award_shared_experience(campaign, amount, description='', dry_run=False) -> 
         return per_character
 
 
-def activate_character(character):
+def activate_character(character: Character) -> Character:
     """Activate a character and align its XP to the campaign's shared XP baseline."""
     with transaction.atomic():
         character = Character.objects.select_for_update().get(pk=character.pk)
@@ -76,7 +94,7 @@ def activate_character(character):
             return character
         if character.player_id:
             existing = Character.objects.filter(
-                player=character.player,
+                player_id=character.player_id,
                 is_active=True,
             ).exclude(pk=character.pk)
             if existing.exists():
@@ -96,7 +114,11 @@ def activate_character(character):
         return character
 
 
-def reverse_experience_transaction(transaction_to_reverse, *, description=''):
+def reverse_experience_transaction(
+    transaction_to_reverse: ExperienceTransaction,
+    *,
+    description: str = '',
+) -> ExperienceTransaction:
     with transaction.atomic():
         original = ExperienceTransaction.objects.select_for_update().get(pk=transaction_to_reverse.pk)
         if hasattr(original, 'reversal'):

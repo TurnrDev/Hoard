@@ -1,8 +1,14 @@
+from __future__ import annotations
+
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
 
 class LedgerTransaction(models.Model):
+    campaign_id: int
+
     campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -17,10 +23,10 @@ class ImmutableLedgerEntry(models.Model):
     class Meta:
         abstract = True
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.pk:
             raise ValidationError('Posted ledger entries are immutable; post a reversal instead.')
         super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: Any, **kwargs: Any) -> None:
         raise ValidationError('Posted ledger entries are immutable; post a reversal instead.')
