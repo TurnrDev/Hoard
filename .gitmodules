@@ -1,0 +1,3 @@
+[submodule "vendor/rpg-companion-app-systems"]
+	path = vendor/rpg-companion-app-systems
+	url = https://github.com/blastervla/rpg-companion-app-systems.git

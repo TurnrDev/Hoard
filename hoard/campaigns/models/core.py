@@ -12,8 +12,9 @@ from django.db.models import Q, Sum
 
 if TYPE_CHECKING:
     from hoard.campaigns.models.experience import ExperienceAccount
-    from hoard.campaigns.models.inventory import InventoryAccount, InventoryItem
-    from hoard.campaigns.models.money import MoneyAccount
+    from hoard.campaigns.models.inventory import InventoryAccount, InventoryItem, InventoryTransaction
+    from hoard.campaigns.models.money import MoneyAccount, MoneyTransaction
+    from hoard.campaigns.services.actions import CoinAmounts
 
 
 class Campaign(models.Model):
@@ -54,6 +55,7 @@ class Player(models.Model):
 
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='players')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='campaign_players')
+    is_game_master = models.BooleanField(default=False)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('campaign', 'user'), name='unique_player_per_campaign')]
@@ -150,6 +152,35 @@ class Character(models.Model):
         from ..services.experience import activate_character
 
         return activate_character(self)
+
+    def grant_loot(self, item: InventoryItem, quantity: int, description: str = '') -> InventoryTransaction:
+        from ..services.actions import grant_loot
+
+        return grant_loot(recipient=self, item=item, quantity=quantity, description=description)
+
+    def transfer_item(
+        self, recipient: Character, item: InventoryItem, quantity: int, description: str = ''
+    ) -> InventoryTransaction:
+        from ..services.actions import transfer_item
+
+        return transfer_item(source=self, recipient=recipient, item=item, quantity=quantity, description=description)
+
+    def grant_coins(self, coins: CoinAmounts, description: str = '') -> MoneyTransaction:
+        from ..services.actions import grant_coins
+
+        return grant_coins(recipient=self, coins=coins, description=description)
+
+    def spend_coins(self, coins: CoinAmounts, description: str = '') -> MoneyTransaction:
+        from ..services.actions import spend_coins
+
+        return spend_coins(spender=self, coins=coins, description=description)
+
+    def exchange_coins(
+        self, given: CoinAmounts, received: CoinAmounts, description: str = ''
+    ) -> MoneyTransaction:
+        from ..services.actions import exchange_coins
+
+        return exchange_coins(character=self, given=given, received=received, description=description)
 
     def inventory_account(self) -> InventoryAccount:
         from ..services.ledger import character_account

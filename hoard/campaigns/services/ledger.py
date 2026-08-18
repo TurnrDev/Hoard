@@ -72,8 +72,10 @@ def post_inventory_transaction(
 ) -> InventoryTransaction:
     """Transfer a positive quantity of one item between two campaign accounts."""
     campaign = from_account.campaign
-    _validate_campaign_scope(campaign, to_account, item)
-    if quantity <= 0:
+    _validate_campaign_scope(campaign, to_account)
+    if item.campaign_id not in (None, campaign.id):
+        raise ValidationError('The supplied item must be global or belong to the same campaign.')
+    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
         raise ValidationError('Inventory quantities must be positive.')
     if from_account.pk == to_account.pk:
         raise ValidationError('Inventory transfers need different source and destination accounts.')

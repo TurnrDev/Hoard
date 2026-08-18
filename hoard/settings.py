@@ -38,6 +38,7 @@ INSTALLED_APPS: list[str] = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'hoard.campaigns',
 ]
 
@@ -121,6 +122,11 @@ USE_TZ: bool = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL: str = 'static/'
+
+REST_FRAMEWORK: dict[str, object] = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework.authentication.SessionAuthentication',),
+    'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
+}
 
 
 # Email

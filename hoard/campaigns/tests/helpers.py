@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from django.contrib.auth import get_user_model
 
 from hoard.campaigns.models import Campaign, Character, Player
@@ -8,10 +10,12 @@ def make_character(
     name: str = 'Hero',
     *,
     active: bool = False,
-    player: bool = True,
+    player: Player | bool = True,
 ) -> Character:
     membership = None
-    if player:
+    if isinstance(player, Player):
+        membership = player
+    elif player:
         user = get_user_model().objects.create_user(username=f'{name}-{Player.objects.count()}')
         membership = Player.objects.create(campaign=campaign, user=user)
     return Character.objects.create(

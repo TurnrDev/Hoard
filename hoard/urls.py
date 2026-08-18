@@ -18,6 +18,22 @@ from django.contrib import admin
 from django.urls import path
 from django.urls.resolvers import URLPattern
 
+from hoard.campaigns.api import (
+    CampaignActionView,
+    CampaignDetailView,
+    ItemCopyView,
+    ItemListCreateView,
+    TransactionReverseView,
+)
+
 urlpatterns: list[URLPattern] = [
     path('admin/', admin.site.urls),
+    path('api/campaigns/<int:campaign_id>/', CampaignDetailView.as_view()),
+    path('api/campaigns/<int:campaign_id>/items/', ItemListCreateView.as_view()),
+    path('api/campaigns/<int:campaign_id>/items/<int:item_id>/copy/', ItemCopyView.as_view()),
+    path('api/campaigns/<int:campaign_id>/actions/<str:action>/', CampaignActionView.as_view()),
+    path(
+        'api/campaigns/<int:campaign_id>/transactions/<str:ledger>/<int:transaction_id>/reverse/',
+        TransactionReverseView.as_view(),
+    ),
 ]
