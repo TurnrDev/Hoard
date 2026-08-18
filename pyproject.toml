@@ -1,0 +1,12 @@
+[project]
+name = "Hoard"
+version = "0.1.0"
+description = "A D&D 5e tool for our campaign with specific tools for our homebrew rules. You won't be interested."
+readme = "README.md"
+authors = [
+    { name = "Jay Turner", email = "jay@turnr.dev" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "django>=6.1",
+]
