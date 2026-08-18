@@ -15,6 +15,7 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
+FRONTEND_DIST_DIR: Path = BASE_DIR / 'frontend' / 'dist'
 
 
 # Quick-start development settings - unsuitable for production
@@ -24,7 +25,7 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 SECRET_KEY: str = 'django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG: bool = True
+DEBUG: bool = os.environ.get('DJANGO_DEBUG', 'true').lower() in {'1', 'true', 'yes', 'on'}
 
 ALLOWED_HOSTS: list[str] = []
 
@@ -38,6 +39,7 @@ INSTALLED_APPS: list[str] = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_vite',
     'rest_framework',
     'hoard.campaigns',
 ]
@@ -57,7 +59,7 @@ ROOT_URLCONF: str = 'hoard.urls'
 TEMPLATES: list[dict[str, object]] = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'hoard' / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -122,6 +124,16 @@ USE_TZ: bool = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL: str = 'static/'
+STATICFILES_DIRS: list[Path] = [FRONTEND_DIST_DIR]
+STATIC_ROOT: Path = BASE_DIR / 'staticfiles'
+
+DJANGO_VITE: dict[str, dict[str, object]] = {
+    'default': {
+        'dev_mode': DEBUG,
+        'dev_server_port': 5173,
+        'manifest_path': FRONTEND_DIST_DIR / '.vite' / 'manifest.json',
+    },
+}
 
 REST_FRAMEWORK: dict[str, object] = {
     'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework.authentication.SessionAuthentication',),

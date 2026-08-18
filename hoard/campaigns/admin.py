@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import admin
+from django.forms.models import BaseModelForm
 from django.http import HttpRequest
 
 from .models import (
@@ -38,6 +39,14 @@ class CharacterAdmin(admin.ModelAdmin):
     list_display = ('name', 'campaign', 'player', 'is_active', 'race', 'character_class')
     list_filter = ('campaign', 'is_active')
     search_fields = ('name', 'player__user__username')
+
+    def save_model(self, request: HttpRequest, obj: Character, form: BaseModelForm, change: bool) -> None:
+        activate = obj.is_active and (not change or 'is_active' in form.changed_data)
+        if activate:
+            obj.is_active = False
+        super().save_model(request, obj, form, change)
+        if activate:
+            obj.activate()
 
 
 @admin.register(InventoryItem)

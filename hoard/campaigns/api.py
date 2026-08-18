@@ -11,7 +11,18 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Campaign, Character, ExperienceTransaction, InventoryItem, InventoryTransaction, MoneyTransaction, Player
+from .models import (
+    Campaign,
+    Character,
+    ExperienceEntry,
+    ExperienceTransaction,
+    InventoryEntry,
+    InventoryItem,
+    InventoryTransaction,
+    MoneyEntry,
+    MoneyTransaction,
+    Player,
+)
 from .services import exchange_coins, grant_coins, grant_loot, reverse_transaction, spend_coins, transfer_item
 
 
@@ -77,6 +88,19 @@ class CampaignAccessView(APIView):
     def item(self, item_id: object) -> InventoryItem:
         items = InventoryItem.objects.filter(Q(campaign=self.campaign) | Q(campaign__isnull=True))
         return get_object_or_404(items, pk=item_id)
+
+
+class CampaignListView(APIView):
+    def get(self, request: Request) -> Response:
+        memberships = Player.objects.filter(user=request.user).select_related('campaign').order_by('campaign__name')
+        return Response([
+            {
+                'id': membership.campaign_id,
+                'name': membership.campaign.name,
+                'is_game_master': membership.is_game_master,
+            }
+            for membership in memberships
+        ])
 
 
 class CampaignDetailView(CampaignAccessView):
@@ -163,3 +187,59 @@ class TransactionReverseView(CampaignAccessView):
         except DjangoValidationError as error:
             raise _validation_error(error) from error
         return Response(_transaction_data(reversed_transaction), status=status.HTTP_201_CREATED)
+
+
+def _entry_data(entry: InventoryEntry | MoneyEntry | ExperienceEntry) -> dict[str, object]:
+    data: dict[str, object] = {'account_id': entry.account_id, 'amount': entry.amount}
+    if isinstance(entry, InventoryEntry):
+        data['item_id'] = entry.item_id
+        data['item_name'] = entry.item.name
+    elif isinstance(entry, MoneyEntry):
+        data['denomination'] = entry.denomination
+    return data
+
+
+def _history_data(transaction: InventoryTransaction | MoneyTransaction | ExperienceTransaction) -> dict[str, object]:
+    data = _transaction_data(transaction)
+    data['entries'] = [_entry_data(entry) for entry in transaction.entries.all()]
+    data['reversal_of_id'] = transaction.reversal_of_id
+    data['is_reversed'] = type(transaction).objects.filter(reversal_of=transaction).exists()
+    if isinstance(transaction, ExperienceTransaction):
+        data['reason'] = transaction.reason
+        data['requested_amount'] = transaction.requested_amount
+        data['discarded_amount'] = transaction.discarded_amount
+    return data
+
+
+class TransactionHistoryView(CampaignAccessView):
+    transaction_models = {
+        'inventory': InventoryTransaction,
+        'money': MoneyTransaction,
+        'experience': ExperienceTransaction,
+    }
+
+    def get(self, request: Request, campaign_id: int) -> Response:
+        ledger = request.query_params.get('ledger', 'all')
+        if ledger != 'all' and ledger not in self.transaction_models:
+            raise ValidationError({'ledger': 'Unknown ledger.'})
+        try:
+            page = max(int(request.query_params.get('page', '1')), 1)
+            page_size = min(max(int(request.query_params.get('page_size', '25')), 1), 100)
+        except ValueError as error:
+            raise ValidationError({'page': 'Page and page_size must be integers.'}) from error
+        models = self.transaction_models.items() if ledger == 'all' else ((ledger, self.transaction_models[ledger]),)
+        transactions: list[InventoryTransaction | MoneyTransaction | ExperienceTransaction] = []
+        for _, model in models:
+            queryset = model.objects.filter(campaign=self.campaign).prefetch_related('entries')
+            if not self.player.is_game_master:
+                queryset = queryset.filter(entries__account__character__player=self.player).distinct()
+            transactions.extend(queryset)
+        transactions.sort(key=lambda transaction: transaction.created_at, reverse=True)
+        start = (page - 1) * page_size
+        results = transactions[start:start + page_size]
+        return Response({
+            'count': len(transactions),
+            'page': page,
+            'page_size': page_size,
+            'results': [_history_data(transaction) for transaction in results],
+        })

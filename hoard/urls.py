@@ -15,19 +15,28 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
 from django.urls.resolvers import URLPattern
 
 from hoard.campaigns.api import (
     CampaignActionView,
     CampaignDetailView,
+    CampaignListView,
     ItemCopyView,
     ItemListCreateView,
+    TransactionHistoryView,
     TransactionReverseView,
 )
+from hoard.campaigns.auth_api import CsrfView, LoginView, LogoutView, SessionView
+from hoard.campaigns.frontend import frontend
 
 urlpatterns: list[URLPattern] = [
     path('admin/', admin.site.urls),
+    path('api/auth/csrf/', CsrfView.as_view()),
+    path('api/auth/login/', LoginView.as_view()),
+    path('api/auth/logout/', LogoutView.as_view()),
+    path('api/auth/session/', SessionView.as_view()),
+    path('api/campaigns/', CampaignListView.as_view()),
     path('api/campaigns/<int:campaign_id>/', CampaignDetailView.as_view()),
     path('api/campaigns/<int:campaign_id>/items/', ItemListCreateView.as_view()),
     path('api/campaigns/<int:campaign_id>/items/<int:item_id>/copy/', ItemCopyView.as_view()),
@@ -36,4 +45,6 @@ urlpatterns: list[URLPattern] = [
         'api/campaigns/<int:campaign_id>/transactions/<str:ledger>/<int:transaction_id>/reverse/',
         TransactionReverseView.as_view(),
     ),
+    path('api/campaigns/<int:campaign_id>/transactions/', TransactionHistoryView.as_view()),
+    re_path(r'^(?!api/|admin/).*$', frontend),
 ]
