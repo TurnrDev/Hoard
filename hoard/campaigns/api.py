@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -67,8 +68,72 @@ def _item_data(item: InventoryItem) -> dict[str, object]:
         'created_by_username': item.created_by.user.get_username() if item.created_by_id else None,
         'source_system': item.source_system or None,
         'source_identifier': item.source_identifier or None, 'source_repository': item.source_repository or None,
+        'equipment': {
+            'category': item.equipment_category or None,
+            'source_book': item.source_book or None,
+            'item_type': item.item_type or None,
+            'cost_amount': str(item.cost_amount) if item.cost_amount is not None else None,
+            'cost_currency': item.cost_currency or None,
+            'weight_amount': str(item.weight_amount) if item.weight_amount is not None else None,
+            'weight_unit': item.weight_unit or None,
+            'rarity': item.rarity or None,
+            'is_magic': item.is_magic,
+            'requires_attunement': item.requires_attunement,
+        },
         'is_imported': item.is_imported,
     }
+
+
+def _metadata_from_request(data: object, *, defaults: InventoryItem | None = None) -> dict[str, object]:
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise ValidationError({'metadata': 'Metadata must be an object.'})
+
+    def text(name: str, default: str = '') -> str:
+        value = data.get(name, default)
+        if value is None:
+            return ''
+        if not isinstance(value, str):
+            raise ValidationError({f'metadata.{name}': 'Must be a string.'})
+        return value.strip()
+
+    def number(name: str, default: Decimal | None = None) -> Decimal | None:
+        value = data.get(name, default)
+        if value in (None, ''):
+            return None
+        if isinstance(value, bool):
+            raise ValidationError({f'metadata.{name}': 'Must be a number or null.'})
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError) as error:
+            raise ValidationError({f'metadata.{name}': 'Must be a number or null.'}) from error
+
+    def boolean(name: str, default: bool | None = None) -> bool | None:
+        value = data.get(name, default)
+        if value is None or isinstance(value, bool):
+            return value
+        raise ValidationError({f'metadata.{name}': 'Must be true, false, or null.'})
+
+    values = {
+        'equipment_category': text('category', defaults.equipment_category if defaults else ''),
+        'source_book': text('source_book', defaults.source_book if defaults else ''),
+        'item_type': text('item_type', defaults.item_type if defaults else ''),
+        'cost_amount': number('cost_amount', defaults.cost_amount if defaults else None),
+        'cost_currency': text('cost_currency', defaults.cost_currency if defaults else ''),
+        'weight_amount': number('weight_amount', defaults.weight_amount if defaults else None),
+        'weight_unit': text('weight_unit', defaults.weight_unit if defaults else ''),
+        'rarity': text('rarity', defaults.rarity if defaults else ''),
+        'is_magic': boolean('is_magic', defaults.is_magic if defaults else None),
+        'requires_attunement': boolean('requires_attunement', defaults.requires_attunement if defaults else None),
+    }
+    if values['cost_currency'] and values['cost_currency'] not in {'cp', 'sp', 'ep', 'gp', 'pp'}:
+        raise ValidationError({'metadata.cost_currency': 'Must be cp, sp, ep, gp, or pp.'})
+    if (values['cost_amount'] is None) == bool(values['cost_currency']):
+        raise ValidationError({'metadata.cost_amount': 'Cost amount and currency must be supplied together.'})
+    if (values['weight_amount'] is None) == bool(values['weight_unit']):
+        raise ValidationError({'metadata.weight_amount': 'Weight amount and unit must be supplied together.'})
+    return values
 
 
 class CampaignAccessView(APIView):
@@ -144,7 +209,18 @@ class ItemListCreateView(CampaignAccessView):
             raise ValidationError({'name': 'A non-empty item name is required.'})
         if not isinstance(description, str):
             raise ValidationError({'description': 'Description must be a string.'})
-        item = InventoryItem.objects.create(campaign=self.campaign, created_by=self.player, name=name.strip(), description=description)
+        item = InventoryItem(
+            campaign=self.campaign,
+            created_by=self.player,
+            name=name.strip(),
+            description=description,
+            **_metadata_from_request(request.data.get('metadata')),
+        )
+        try:
+            item.full_clean()
+        except DjangoValidationError as error:
+            raise _validation_error(error) from error
+        item.save()
         return Response(_item_data(item), status=status.HTTP_201_CREATED)
 
 
@@ -156,10 +232,15 @@ class ItemCopyView(CampaignAccessView):
         description = request.data.get('description', source.description)
         if not isinstance(name, str) or not name.strip() or not isinstance(description, str):
             raise ValidationError('Name and description must be strings, and name cannot be blank.')
-        item = InventoryItem.objects.create(
+        item = InventoryItem(
             campaign=self.campaign, created_by=self.player, name=name.strip(), description=description,
-            source_data={'copied_from_item_id': source.pk},
+            source_data={'copied_from_item_id': source.pk}, **_metadata_from_request(request.data.get('metadata'), defaults=source),
         )
+        try:
+            item.full_clean()
+        except DjangoValidationError as error:
+            raise _validation_error(error) from error
+        item.save()
         return Response(_item_data(item), status=status.HTTP_201_CREATED)
 
 

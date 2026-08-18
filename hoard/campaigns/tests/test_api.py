@@ -46,6 +46,26 @@ class CampaignApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([character['id'] for character in response.json()['characters']], [self.player_character.pk])
 
+    def test_members_can_create_items_with_equipment_metadata(self) -> None:
+        self.client.force_login(self.player_user)
+        response = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/items/',
+            {
+                'name': 'Homebrew rapier',
+                'description': 'A fine blade.',
+                'metadata': {
+                    'category': 'weapon', 'source_book': 'Homebrew', 'item_type': 'rapier',
+                    'cost_amount': '25', 'cost_currency': 'gp', 'weight_amount': '2',
+                    'weight_unit': 'pounds', 'rarity': 'uncommon', 'is_magic': True,
+                    'requires_attunement': False,
+                },
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['equipment']['category'], 'weapon')
+        self.assertEqual(response.json()['equipment']['cost_currency'], 'gp')
+
     def test_item_sources_filter_global_catalogue_but_do_not_strand_held_items(self) -> None:
         newer_item = InventoryItem.objects.create(
             campaign=None,

@@ -66,9 +66,9 @@ class CharacterAdmin(admin.ModelAdmin):
 
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'campaign', 'created_by', 'source_system', 'source_identifier')
-    list_filter = ('campaign', 'source_system')
-    search_fields = ('name', 'source_identifier')
+    list_display = ('name', 'equipment_category', 'rarity', 'campaign', 'created_by', 'source_system', 'source_book')
+    list_filter = ('campaign', 'source_system', 'equipment_category', 'rarity')
+    search_fields = ('name', 'source_identifier', 'source_book', 'item_type')
     readonly_fields = ('source_repository', 'source_system', 'source_identifier', 'source_data')
 
     def has_change_permission(self, request: HttpRequest, obj: InventoryItem | None = None) -> bool:

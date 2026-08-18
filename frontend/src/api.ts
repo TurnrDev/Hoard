@@ -1,6 +1,18 @@
 export type User = { id: number; username: string }
 export type CampaignSummary = { id: number; name: string; is_game_master: boolean }
-export type Item = { id: number; name: string; description: string; campaign_id: number | null; created_by_id: number | null; created_by_username: string | null; source_system: string | null; source_identifier: string | null; source_repository: string | null; is_imported: boolean }
+export type EquipmentMetadata = {
+  category: string | null
+  source_book: string | null
+  item_type: string | null
+  cost_amount: string | null
+  cost_currency: string | null
+  weight_amount: string | null
+  weight_unit: string | null
+  rarity: string | null
+  is_magic: boolean | null
+  requires_attunement: boolean | null
+}
+export type Item = { id: number; name: string; description: string; campaign_id: number | null; created_by_id: number | null; created_by_username: string | null; source_system: string | null; source_identifier: string | null; source_repository: string | null; equipment: EquipmentMetadata; is_imported: boolean }
 export type Character = { id: number; name: string; is_active: boolean; race: string; class: string; experience: number; money: Record<string, number | string>; inventory: Array<{ item_id: number; name: string; quantity: number }> }
 export type Campaign = CampaignSummary & { use_shared_exp: boolean; shared_experience: number; item_sources: string[]; characters: Character[] }
 export type LedgerEntry = { account_id: number; amount: number; item_id?: number; item_name?: string; denomination?: string }
@@ -44,8 +56,8 @@ export const logout = () => request<void>('/api/auth/logout/', { method: 'POST' 
 export const getCampaigns = () => request<CampaignSummary[]>('/api/campaigns/')
 export const getCampaign = (id: number) => request<Campaign>(`/api/campaigns/${id}/`)
 export const getItems = (id: number) => request<Item[]>(`/api/campaigns/${id}/items/`)
-export const createItem = (id: number, name: string, description: string) => request<Item>(`/api/campaigns/${id}/items/`, { method: 'POST', body: JSON.stringify({ name, description }) })
-export const copyItem = (campaignId: number, itemId: number, name: string, description: string) => request<Item>(`/api/campaigns/${campaignId}/items/${itemId}/copy/`, { method: 'POST', body: JSON.stringify({ name, description }) })
+export const createItem = (id: number, name: string, description: string, metadata: Partial<EquipmentMetadata> = {}) => request<Item>(`/api/campaigns/${id}/items/`, { method: 'POST', body: JSON.stringify({ name, description, metadata }) })
+export const copyItem = (campaignId: number, itemId: number, name: string, description: string, metadata: Partial<EquipmentMetadata> = {}) => request<Item>(`/api/campaigns/${campaignId}/items/${itemId}/copy/`, { method: 'POST', body: JSON.stringify({ name, description, metadata }) })
 export const postAction = (campaignId: number, action: string, payload: object) => request(`/api/campaigns/${campaignId}/actions/${action}/`, { method: 'POST', body: JSON.stringify(payload) })
 export const getTransactions = (campaignId: number, ledger = 'all', page = 1) => request<{ count: number; page: number; page_size: number; results: LedgerTransaction[] }>(`/api/campaigns/${campaignId}/transactions/?ledger=${ledger}&page=${page}`)
 export const reverseTransaction = (campaignId: number, transaction: LedgerTransaction, description: string) => request(`/api/campaigns/${campaignId}/transactions/${transaction.ledger}/${transaction.id}/reverse/`, { method: 'POST', body: JSON.stringify({ description }) })

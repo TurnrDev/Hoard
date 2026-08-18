@@ -13,8 +13,8 @@ shared custom item.
 | `GET /` | member | Campaign state. GMs receive every character; players receive their own characters. |
 | `GET /api/campaigns/` | authenticated | Campaign memberships for the campaign picker. |
 | `GET /items/` | member | Campaign-local items plus global imported items enabled by the campaign's `item_sources` setting. |
-| `POST /items/` | member | Create `{ "name", "description" }` custom campaign item. |
-| `POST /items/<item_id>/copy/` | GM | Make an editable campaign-local copy of a global item. |
+| `POST /items/` | member | Create `{ "name", "description", "metadata" }` custom campaign equipment. |
+| `POST /items/<item_id>/copy/` | GM | Make an editable campaign-local copy of a global item, optionally overriding `metadata`. |
 | `POST /actions/<action>/` | GM | Post a domain action. |
 | `POST /transactions/<ledger>/<id>/reverse/` | GM | Reverse an inventory, money, or experience transaction. |
 | `GET /transactions/` | member | Paginated ledger history; GMs receive all history and players receive entries involving their characters. |
@@ -33,6 +33,12 @@ integers. Exchanges must have equal copper value. Posted actions return their
 transaction metadata, while XP actions return `{ "per_character", "dry_run" }`.
 Invalid input produces DRF’s structured `400` response; missing campaign
 membership is `404`, and a non-GM mutation is `403`.
+
+Item `metadata` is optional and has the following shape. Null or omitted facts
+mean unknown: `{ "category", "source_book", "item_type", "cost_amount",
+"cost_currency", "weight_amount", "weight_unit", "rarity", "is_magic",
+"requires_attunement" }`. Costs use `cp`, `sp`, `ep`, `gp`, or `pp`; an amount
+and currency must be provided together, as must a weight amount and unit.
 
 ## Item source settings
 

@@ -21,7 +21,17 @@ class InventoryItem(models.Model):
     description = models.TextField(blank=True)
     source_repository = models.URLField(blank=True)
     source_system = models.CharField(max_length=100, blank=True)
+    source_book = models.CharField(max_length=100, blank=True)
+    equipment_category = models.CharField(max_length=20, blank=True)
+    item_type = models.CharField(max_length=100, blank=True)
     source_identifier = models.CharField(max_length=200, blank=True)
+    cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_currency = models.CharField(max_length=3, blank=True)
+    weight_amount = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    weight_unit = models.CharField(max_length=20, blank=True)
+    rarity = models.CharField(max_length=50, blank=True)
+    is_magic = models.BooleanField(null=True, blank=True)
+    requires_attunement = models.BooleanField(null=True, blank=True)
     source_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -32,9 +42,9 @@ class InventoryItem(models.Model):
                 name='unique_inventory_item_name_per_campaign',
             ),
             models.UniqueConstraint(
-                fields=('source_repository', 'source_system', 'source_identifier'),
+                fields=('source_repository', 'source_system', 'equipment_category', 'source_identifier'),
                 condition=Q(source_identifier__gt=''),
-                name='unique_imported_inventory_item_source',
+                name='unique_imported_equipment_source',
             ),
         ]
 
@@ -45,6 +55,12 @@ class InventoryItem(models.Model):
         super().clean()
         if self.created_by_id and (self.campaign_id is None or self.created_by.campaign_id != self.campaign_id):
             raise ValidationError({'created_by': 'Custom item creators must belong to the item campaign.'})
+        if (self.cost_amount is None) == bool(self.cost_currency):
+            raise ValidationError({'cost_currency': 'Cost amount and currency must be supplied together.'})
+        if self.cost_currency and self.cost_currency not in {'cp', 'sp', 'ep', 'gp', 'pp'}:
+            raise ValidationError({'cost_currency': 'Currency must be cp, sp, ep, gp, or pp.'})
+        if (self.weight_amount is None) == bool(self.weight_unit):
+            raise ValidationError({'weight_unit': 'Weight amount and unit must be supplied together.'})
 
     @property
     def is_imported(self) -> bool:

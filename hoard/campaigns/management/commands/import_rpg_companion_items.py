@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from hoard.campaigns.models import InventoryItem
 
 SOURCE_REPOSITORY = 'https://github.com/blastervla/rpg-companion-app-systems'
 SYSTEMS = ('5e', '5e2024')
+EQUIPMENT_RESOURCE_IDS = ('item', 'weapon', 'armor')
+CURRENCY_UNITS = {'copper': 'cp', 'silver': 'sp', 'electrum': 'ep', 'gold': 'gp', 'platinum': 'pp'}
 
 
 def _stat_value(stats: dict[str, Any], name: str) -> object | None:
@@ -19,6 +22,47 @@ def _stat_value(stats: dict[str, Any], name: str) -> object | None:
     if isinstance(value, dict):
         return value.get('value')
     return value
+
+
+def _nested_stat_value(value: object, name: str) -> object | None:
+    if not isinstance(value, dict):
+        return None
+    stats = value.get('stats')
+    return _stat_value(stats, name) if isinstance(stats, dict) else None
+
+
+def _decimal(value: object) -> Decimal | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _equipment_defaults(resource: dict[str, Any], resource_id: str, stats: dict[str, Any]) -> dict[str, object]:
+    cost = _stat_value(stats, 'cost')
+    weight = _stat_value(stats, 'weight')
+    raw_cost_currency = _nested_stat_value(cost, 'unit')
+    raw_weight_unit = _nested_stat_value(weight, 'unit')
+    cost_currency = CURRENCY_UNITS.get(raw_cost_currency) if isinstance(raw_cost_currency, str) else None
+    return {
+        'campaign': None,
+        'created_by': None,
+        'name': _stat_value(stats, 'name'),
+        'description': _stat_value(stats, 'description') if isinstance(_stat_value(stats, 'description'), str) else '',
+        'source_book': _stat_value(stats, 'source') if isinstance(_stat_value(stats, 'source'), str) else '',
+        'equipment_category': resource_id,
+        'item_type': _stat_value(stats, 'type') if isinstance(_stat_value(stats, 'type'), str) else '',
+        'cost_amount': _decimal(_nested_stat_value(cost, 'value')) if cost_currency else None,
+        'cost_currency': cost_currency or '',
+        'weight_amount': _decimal(_nested_stat_value(weight, 'value')),
+        'weight_unit': raw_weight_unit if isinstance(raw_weight_unit, str) else '',
+        'rarity': _stat_value(stats, 'rarity') if isinstance(_stat_value(stats, 'rarity'), str) else '',
+        'is_magic': _stat_value(stats, 'is_magic') if isinstance(_stat_value(stats, 'is_magic'), bool) else None,
+        'requires_attunement': _stat_value(stats, 'requires_attunement') if isinstance(_stat_value(stats, 'requires_attunement'), bool) else None,
+        'source_data': resource,
+    }
 
 
 class Command(BaseCommand):
@@ -48,26 +92,21 @@ class Command(BaseCommand):
                     resource = json.loads(path.read_text(encoding='utf-8'))
                 except json.JSONDecodeError as error:
                     raise CommandError(f'Invalid JSON in {path}: {error}') from error
-                if resource.get('resource_id') != 'item':
+                resource_id = resource.get('resource_id')
+                if resource_id not in EQUIPMENT_RESOURCE_IDS:
                     continue
                 stats = resource.get('stats')
                 identifier = _stat_value(stats, 'id') if isinstance(stats, dict) else None
                 name = _stat_value(stats, 'name') if isinstance(stats, dict) else None
-                description = _stat_value(stats, 'description') if isinstance(stats, dict) else ''
                 if not isinstance(identifier, str) or not isinstance(name, str) or not name:
                     skipped += 1
                     continue
                 item, was_created = InventoryItem.objects.update_or_create(
                     source_repository=SOURCE_REPOSITORY,
                     source_system=system,
+                    equipment_category=resource_id,
                     source_identifier=identifier,
-                    defaults={
-                        'campaign': None,
-                        'created_by': None,
-                        'name': name,
-                        'description': description if isinstance(description, str) else '',
-                        'source_data': resource,
-                    },
+                    defaults=_equipment_defaults(resource, resource_id, stats),
                 )
                 if was_created:
                     created += 1
