@@ -16,7 +16,17 @@ function getCookie(name: string): string {
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = getCookie('csrftoken') || csrfToken
-  const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json', 'X-CSRFToken': token } : {}), ...options.headers } })
+  const unsafe = !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(options.method ?? 'GET')
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(unsafe ? { 'X-CSRFToken': token } : {}),
+      ...options.headers,
+    },
+  })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }))
     throw new Error(typeof error.detail === 'string' ? error.detail : JSON.stringify(error))
