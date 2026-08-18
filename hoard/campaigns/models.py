@@ -1,3 +1,6 @@
 from django.db import models
 
-# Create your models here.
+
+class Campaign(models.Model):
+    name = models.CharField()
+    use_shared_exp = models.BooleanField(default=True)

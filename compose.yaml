@@ -1,0 +1,20 @@
+services:
+  db:
+    container_name: hoard_db
+    image: postgres:18
+    environment:
+      POSTGRES_DB: hoard
+      POSTGRES_USER: hoard
+      POSTGRES_PASSWORD: hoard
+    ports:
+      - "5432:5432"
+    volumes:
+      - hoard_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hoard -d hoard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  hoard_db_data:

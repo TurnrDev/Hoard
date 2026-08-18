@@ -11,8 +11,15 @@ A D&D 5e tool for our campaign with specific tools for our homebrew rules. You w
 Run Django management commands from the repository root:
 
 ```sh
+docker compose up -d db
+uv run python manage.py migrate
 uv run python manage.py runserver
 ```
+
+The Compose database is available at `localhost:5432` with the development
+database name, user, and password all set to `hoard`. Override the
+`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, and
+`POSTGRES_PORT` environment variables as needed.
 
 ## AI Policy
 
