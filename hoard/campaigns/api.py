@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -290,7 +290,18 @@ class TransactionReverseView(CampaignAccessView):
 
 
 def _entry_data(entry: InventoryEntry | MoneyEntry | ExperienceEntry) -> dict[str, object]:
-    data: dict[str, object] = {'account_id': entry.account_id, 'amount': entry.amount}
+    ledger_name = entry.transaction._meta.model_name.removesuffix('transaction')
+    account_name = (
+        f'Campaign {ledger_name} system'
+        if entry.account.is_system
+        else entry.account.character.name
+    )
+    data: dict[str, object] = {
+        'account_id': entry.account_id,
+        'account_name': account_name,
+        'is_system_account': entry.account.is_system,
+        'amount': entry.amount,
+    }
     if isinstance(entry, InventoryEntry):
         data['item_id'] = entry.item_id
         data['item_name'] = entry.item.name
@@ -330,7 +341,12 @@ class TransactionHistoryView(CampaignAccessView):
         models = self.transaction_models.items() if ledger == 'all' else ((ledger, self.transaction_models[ledger]),)
         transactions: list[InventoryTransaction | MoneyTransaction | ExperienceTransaction] = []
         for _, model in models:
-            queryset = model.objects.filter(campaign=self.campaign).prefetch_related('entries')
+            entry_model = model._meta.get_field('entries').related_model
+            queryset = model.objects.filter(campaign=self.campaign).prefetch_related(
+                Prefetch('entries', queryset=entry_model.objects.select_related('account__character', 'item'))
+                if model is InventoryTransaction
+                else Prefetch('entries', queryset=entry_model.objects.select_related('account__character'))
+            )
             if not self.player.is_game_master:
                 queryset = queryset.filter(entries__account__character__player=self.player).distinct()
             transactions.extend(queryset)

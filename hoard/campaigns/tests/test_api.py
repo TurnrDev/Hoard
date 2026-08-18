@@ -117,3 +117,5 @@ class CampaignApiTests(TestCase):
         response = client.get(f'/api/campaigns/{self.campaign.pk}/transactions/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['count'], 1)
+        entries = response.json()['results'][0]['entries']
+        self.assertEqual({entry['account_name'] for entry in entries}, {'Campaign inventory system', 'Player hero'})

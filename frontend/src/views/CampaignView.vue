@@ -57,6 +57,16 @@ const actions = [
   { title: 'Award shared XP', value: 'award-shared-xp' },
 ]
 
+function uniqueAccountNames(transaction: LedgerTransaction, direction: 'from' | 'to'): string {
+  const isFrom = direction === 'from'
+  return [...new Set(transaction.entries.filter((entry) => isFrom ? entry.amount < 0 : entry.amount > 0).map((entry) => entry.account_name))].join(', ')
+}
+
+function transactionAmount(transaction: LedgerTransaction): string {
+  const positiveEntries = transaction.entries.filter((entry) => entry.amount > 0)
+  return positiveEntries.map((entry) => `${entry.amount} ${entry.item_name ?? entry.denomination ?? 'XP'}`).join(' · ')
+}
+
 async function refresh(): Promise<void> {
   error.value = ''
   try {
@@ -121,7 +131,7 @@ async function reverse(): Promise<void> {
       <v-window v-model="tab" class="pt-4">
         <v-window-item value="characters"><v-row><v-col v-for="character in campaign.characters" :key="character.id" cols="12" md="6"><v-card><v-card-title>{{ character.name }} <v-chip size="small" class="ml-2">{{ character.race }} {{ character.class }}</v-chip></v-card-title><v-card-text><v-row dense><v-col cols="4"><strong>{{ character.experience }}</strong><br><span class="text-caption">XP</span></v-col><v-col cols="8"><strong>{{ character.money.gp }} gp</strong> · {{ character.money.sp }} sp · {{ character.money.cp }} cp<br><span class="text-caption">{{ character.money.gold_value }} gp total</span></v-col></v-row><v-divider class="my-3"/><div v-if="character.inventory.length"><v-chip v-for="entry in character.inventory" :key="entry.item_id" class="mr-2 mb-2">{{ entry.quantity }} × {{ entry.name }}</v-chip></div><span v-else class="text-medium-emphasis">No inventory recorded.</span></v-card-text></v-card></v-col></v-row></v-window-item>
         <v-window-item value="items"><v-text-field v-model="catalogueSearch" prepend-inner-icon="mdi-magnify" label="Search equipment" clearable/><div class="text-caption mb-3">{{ filteredCatalogue.length }} matching items</div><v-virtual-scroll :items="filteredCatalogue" :item-height="210" height="700"><template #default="{ item }"><v-card class="ma-2"><v-card-title>{{ item.name }}</v-card-title><v-card-subtitle>{{ itemSummary(item) || 'Campaign custom item' }}</v-card-subtitle><v-card-text><p class="catalogue-description">{{ item.description || 'No description.' }}</p><v-chip v-if="item.equipment.category" size="small" class="mr-1 mb-1">{{ item.equipment.category }}</v-chip><v-chip v-if="item.equipment.item_type" size="small" class="mr-1 mb-1">{{ item.equipment.item_type }}</v-chip><v-chip v-if="item.equipment.rarity" size="small" class="mr-1 mb-1">{{ item.equipment.rarity }}</v-chip><v-chip v-if="item.equipment.is_magic" size="small" class="mr-1 mb-1">magic</v-chip><v-chip v-if="item.equipment.requires_attunement" size="small" class="mr-1 mb-1">attunement</v-chip><div v-if="item.created_by_username" class="text-caption mt-2">Created by {{ item.created_by_username }}</div></v-card-text></v-card></template></v-virtual-scroll></v-window-item>
-        <v-window-item value="history"><v-table><thead><tr><th>When</th><th>Ledger</th><th>Description</th><th>Entries</th><th></th></tr></thead><tbody><tr v-for="transaction in transactions" :key="`${transaction.ledger}-${transaction.id}`"><td>{{ new Date(transaction.created_at).toLocaleString() }}</td><td><v-chip size="small">{{ transaction.ledger }}</v-chip></td><td>{{ transaction.description || '—' }} <span v-if="transaction.is_reversed" class="text-error">(reversed)</span></td><td><span v-for="entry in transaction.entries" :key="entry.account_id + String(entry.amount)" class="mr-2" :class="entry.amount > 0 ? 'ledger-amount-positive' : 'ledger-amount-negative'">{{ entry.amount > 0 ? '+' : '' }}{{ entry.amount }} {{ entry.item_name ?? entry.denomination ?? 'XP' }}</span></td><td><v-btn v-if="isGM && !transaction.is_reversed && !transaction.reversal_of_id" icon="mdi-undo" size="small" @click="transactionToReverse = transaction; description = ''; reverseDialog = true" /></td></tr></tbody></v-table></v-window-item>
+        <v-window-item value="history"><v-table><thead><tr><th>When</th><th>Ledger</th><th>From</th><th>To</th><th>Amount</th><th>Description</th><th></th></tr></thead><tbody><tr v-for="transaction in transactions" :key="`${transaction.ledger}-${transaction.id}`"><td>{{ new Date(transaction.created_at).toLocaleString() }}</td><td><v-chip size="small">{{ transaction.ledger }}</v-chip></td><td class="ledger-amount-negative">{{ uniqueAccountNames(transaction, 'from') }}</td><td class="ledger-amount-positive">{{ uniqueAccountNames(transaction, 'to') }}</td><td>{{ transactionAmount(transaction) }}</td><td>{{ transaction.description || '—' }} <span v-if="transaction.is_reversed" class="text-error">(reversed)</span></td><td><v-btn v-if="isGM && !transaction.is_reversed && !transaction.reversal_of_id" icon="mdi-undo" size="small" @click="transactionToReverse = transaction; description = ''; reverseDialog = true" /></td></tr></tbody></v-table></v-window-item>
       </v-window>
     </template><v-progress-circular v-else indeterminate color="primary" />
 
