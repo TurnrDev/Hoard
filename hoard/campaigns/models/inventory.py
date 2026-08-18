@@ -18,7 +18,7 @@ class InventoryItem(models.Model):
 
 class InventoryAccount(models.Model):
     campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE, related_name='inventory_accounts')
-    character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='inventory_account')
+    character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='inventory_ledger_account')
     is_system = models.BooleanField(default=False)
 
     class Meta:

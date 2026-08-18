@@ -6,7 +6,7 @@ from .ledger import ImmutableLedgerEntry, LedgerTransaction
 
 class MoneyAccount(models.Model):
     campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE, related_name='money_accounts')
-    character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='money_account')
+    character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='money_ledger_account')
     is_system = models.BooleanField(default=False)
 
     class Meta:

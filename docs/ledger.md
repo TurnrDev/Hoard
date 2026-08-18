@@ -27,16 +27,14 @@ Import models from `hoard.campaigns.models` and services from
 implementation is separated into focused modules.
 
 ```python
-from hoard.campaigns.models import InventoryAccount, MoneyAccount, MoneyEntry
+from hoard.campaigns.models import MoneyEntry
 from hoard.campaigns.services import (
-    character_account,
     post_inventory_transaction,
     post_money_transaction,
-    system_account,
 )
 
-inventory_system = system_account(InventoryAccount, campaign)
-character_inventory = character_account(InventoryAccount, character)
+inventory_system = campaign.inventory_system_account()
+character_inventory = character.inventory_account()
 post_inventory_transaction(
     from_account=inventory_system,
     to_account=character_inventory,
@@ -45,10 +43,9 @@ post_inventory_transaction(
     description="Found two torches",
 )
 
-money_system = system_account(MoneyAccount, campaign)
-character_money = character_account(MoneyAccount, character)
+money_system = campaign.money_system_account()
+character_money = character.money_account()
 post_money_transaction(
-    campaign,
     [
         (money_system, MoneyEntry.Denomination.GOLD, -5),
         (character_money, MoneyEntry.Denomination.GOLD, 5),
@@ -64,12 +61,10 @@ entries directly.
 ## Shared XP API
 
 ```python
-from hoard.campaigns.services import award_shared_experience
-
-per_character = award_shared_experience(campaign, 11, dry_run=True)
+per_character = campaign.award_shared_experience(11, dry_run=True)
 assert per_character == 2
 
-per_character = award_shared_experience(campaign, 11, description="Rat fight")
+per_character = campaign.award_shared_experience(11, description="Rat fight")
 assert per_character == 2
 ```
 

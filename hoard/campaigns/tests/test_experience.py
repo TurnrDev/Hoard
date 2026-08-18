@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from hoard.campaigns.models import Campaign, ExperienceTransaction
-from hoard.campaigns.services import award_shared_experience, reverse_experience_transaction
+from hoard.campaigns.services import reverse_experience_transaction
 
 from .helpers import make_character
 
@@ -15,12 +15,12 @@ class SharedExperienceTests(TestCase):
         recipients = [make_character(self.campaign, f'Hero {index}') for index in range(5)]
         for character in recipients:
             character.activate()
-        self.assertEqual(award_shared_experience(self.campaign, 11, dry_run=True), 2)
+        self.assertEqual(self.campaign.award_shared_experience(11, dry_run=True), 2)
         self.assertEqual(ExperienceTransaction.objects.count(), 0)
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.shared_experience, 0)
 
-        self.assertEqual(award_shared_experience(self.campaign, 11), 2)
+        self.assertEqual(self.campaign.award_shared_experience(11), 2)
         self.assertEqual([character.experience for character in recipients], [2] * 5)
         award = ExperienceTransaction.objects.get()
         self.assertEqual(award.discarded_amount, 1)
@@ -30,7 +30,7 @@ class SharedExperienceTests(TestCase):
         active.activate()
         inactive = make_character(self.campaign, 'Inactive')
         npc = make_character(self.campaign, 'NPC', active=True, player=False)
-        award_shared_experience(self.campaign, 10)
+        self.campaign.award_shared_experience(10)
         self.assertEqual(active.experience, 10)
         self.assertEqual(inactive.experience, 0)
         self.assertEqual(npc.experience, 0)
@@ -40,19 +40,19 @@ class SharedExperienceTests(TestCase):
 
     def test_invalid_awards_and_reversal_are_handled(self):
         with self.assertRaises(ValidationError):
-            award_shared_experience(self.campaign, 1)
+            self.campaign.award_shared_experience(1)
         character = make_character(self.campaign)
         character.activate()
         with self.assertRaises(ValidationError):
-            award_shared_experience(self.campaign, 0)
+            self.campaign.award_shared_experience(0)
         self.campaign.use_shared_exp = False
         self.campaign.save()
         with self.assertRaises(ValidationError):
-            award_shared_experience(self.campaign, 10)
+            self.campaign.award_shared_experience(10)
 
         self.campaign.use_shared_exp = True
         self.campaign.save()
-        award_shared_experience(self.campaign, 10)
+        self.campaign.award_shared_experience(10)
         award = ExperienceTransaction.objects.get()
         reverse_experience_transaction(award)
         self.campaign.refresh_from_db()

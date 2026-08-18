@@ -16,7 +16,7 @@ characters do not. A Player may have only one active character in a campaign.
 When a player character is activated, it is automatically brought to the
 campaign's current shared-XP value.
 
-Use `award_shared_experience(..., dry_run=True)` to validate an award and see
+Use `campaign.award_shared_experience(..., dry_run=True)` to validate an award and see
 the per-character XP value without posting ledger entries or changing campaign
 XP. A normal award returns the same per-character value after it posts.
 

@@ -31,18 +31,16 @@ def character_account(account_model, character):
     )[0]
 
 
-def _validate_account_campaign(account, campaign):
-    if account.campaign_id != campaign.id:
-        raise ValidationError('Every ledger account must belong to the transaction campaign.')
+def _validate_campaign_scope(campaign, *objects):
+    for obj in objects:
+        if obj.campaign_id != campaign.id:
+            raise ValidationError('Every supplied object must belong to the same campaign.')
 
 
 def post_inventory_transaction(*, from_account, to_account, item, quantity, description=''):
     """Transfer a positive quantity of one item between two campaign accounts."""
     campaign = from_account.campaign
-    _validate_account_campaign(from_account, campaign)
-    _validate_account_campaign(to_account, campaign)
-    if item.campaign_id != campaign.id:
-        raise ValidationError('The inventory item must belong to the transaction campaign.')
+    _validate_campaign_scope(campaign, to_account, item)
     if quantity <= 0:
         raise ValidationError('Inventory quantities must be positive.')
     if from_account.pk == to_account.pk:
@@ -56,15 +54,20 @@ def post_inventory_transaction(*, from_account, to_account, item, quantity, desc
     return posted
 
 
-def post_money_transaction(campaign, entries, *, description=''):
+def post_money_transaction(entries, *, description=''):
     """Post [(account, denomination, signed_amount), ...] when copper value balances."""
+    entries = list(entries)
+    if not entries:
+        raise ValidationError('Money transactions need at least one entry.')
+    campaign = entries[0][0].campaign
     total_value = 0
-    for account, denomination, amount in entries:
-        _validate_account_campaign(account, campaign)
+    for index, (account, denomination, amount) in enumerate(entries):
+        if index:
+            _validate_campaign_scope(campaign, account)
         if denomination not in COPPER_VALUES or not amount:
             raise ValidationError('Money entries need a denomination and non-zero amount.')
         total_value += COPPER_VALUES[denomination] * amount
-    if not entries or total_value != 0:
+    if total_value != 0:
         raise ValidationError('Money transactions must balance to zero in copper value.')
     with transaction.atomic():
         posted = MoneyTransaction.objects.create(campaign=campaign, description=description)

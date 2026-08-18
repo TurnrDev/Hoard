@@ -19,6 +19,29 @@ class Campaign(models.Model):
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
 
+    def inventory_system_account(self):
+        from .inventory import InventoryAccount
+        from ..services.ledger import system_account
+
+        return system_account(InventoryAccount, self)
+
+    def money_system_account(self):
+        from .money import MoneyAccount
+        from ..services.ledger import system_account
+
+        return system_account(MoneyAccount, self)
+
+    def experience_system_account(self):
+        from .experience import ExperienceAccount
+        from ..services.ledger import system_account
+
+        return system_account(ExperienceAccount, self)
+
+    def award_shared_experience(self, amount, description='', dry_run=False) -> int:
+        from ..services.experience import award_shared_experience
+
+        return award_shared_experience(self, amount, description=description, dry_run=dry_run)
+
     def __str__(self):
         return self.name
 
@@ -119,6 +142,24 @@ class Character(models.Model):
         from ..services.experience import activate_character
 
         return activate_character(self)
+
+    def inventory_account(self):
+        from .inventory import InventoryAccount
+        from ..services.ledger import character_account
+
+        return character_account(InventoryAccount, self)
+
+    def money_account(self):
+        from .money import MoneyAccount
+        from ..services.ledger import character_account
+
+        return character_account(MoneyAccount, self)
+
+    def experience_account(self):
+        from .experience import ExperienceAccount
+        from ..services.ledger import character_account
+
+        return character_account(ExperienceAccount, self)
 
     def __str__(self):
         return self.name
