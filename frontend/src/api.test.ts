@@ -46,7 +46,7 @@ describe("API client", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "/api/campaigns/8/inventory-transactions/",
+      "/api/contexts/8/inventory-transactions/",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

@@ -87,6 +87,62 @@ body {
   font-size: 0.875rem;
 }
 
+.skill-group {
+  padding: 2px 0 8px;
+}
+
+.skill-group + .skill-group {
+  margin-top: 20px;
+}
+
+.skill-group-title {
+  color: #d5a250;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-transform: uppercase;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.proficiency-bonus,
+.ability .proficiency-bonus {
+  color: #d5a250;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.proficiency-bonus--half {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.proficiency-bonus--expertise {
+  color: #f5bf5a;
+  text-shadow: 0 0 10px rgba(245, 191, 90, 0.24);
+}
+
+.expertise-sparkle {
+  display: inline-block;
+  margin-right: 2px;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.actions-fab {
+  bottom: max(24px, env(safe-area-inset-bottom));
+  position: fixed;
+  right: 24px;
+  z-index: 5;
+}
+
 .ledger-table {
   overflow-x: auto;
 }

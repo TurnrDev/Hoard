@@ -72,7 +72,7 @@ def award_shared_experience(
             raise ValidationError("Individual XP awards are not implemented.")
         recipients = list(
             Character.objects.select_for_update()
-            .filter(campaign=campaign, is_active=True, player__isnull=False)
+            .filter(campaign=campaign, is_active=True, context__isnull=False)
             .order_by("pk")
         )
         if not recipients:
@@ -110,9 +110,9 @@ def activate_character(character: Character) -> Character:
         campaign = Campaign.objects.select_for_update().get(pk=character.campaign_id)
         if character.is_active:
             return character
-        if character.player_id:
+        if character.context_id:
             existing = Character.objects.filter(
-                player_id=character.player_id,
+                context_id=character.context_id,
                 is_active=True,
             ).exclude(pk=character.pk)
             if existing.exists():

@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q, Sum
+from django.db.models import Sum
 
 if TYPE_CHECKING:
     from hoard.campaigns.models.experience import ExperienceAccount
@@ -23,6 +23,28 @@ if TYPE_CHECKING:
 
 
 DEFAULT_ITEM_SOURCES: list[str] = ["5e", "5e2024"]
+XP_LEVEL_THRESHOLDS = (
+    0,
+    300,
+    900,
+    2700,
+    6500,
+    14000,
+    23000,
+    34000,
+    48000,
+    64000,
+    85000,
+    100000,
+    120000,
+    140000,
+    165000,
+    195000,
+    225000,
+    265000,
+    305000,
+    355000,
+)
 
 
 def default_item_sources() -> list[str]:
@@ -68,7 +90,7 @@ class Campaign(models.Model):
         amount: int,
         description: str = "",
         dry_run: bool = False,
-        created_by: Player | None = None,
+        created_by: CampaignContext | None = None,
         return_transaction: bool = False,
     ):
         from ..services.experience import award_shared_experience
@@ -103,30 +125,36 @@ class Campaign(models.Model):
             )
 
 
-class Player(models.Model):
+class CampaignContext(models.Model):
     campaign_id: int
     user_id: int
 
     campaign = models.ForeignKey(
-        Campaign, on_delete=models.CASCADE, related_name="players"
+        Campaign, on_delete=models.CASCADE, related_name="contexts"
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="campaign_players",
+        related_name="campaign_contexts",
     )
-    is_game_master = models.BooleanField(default=False)
+
+    class Kind(models.TextChoices):
+        GM = "gm", "Game master"
+        PC = "pc", "Player character"
+
+    kind = models.CharField(max_length=2, choices=Kind.choices)
     is_active = models.BooleanField(default=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=("campaign", "user"), name="unique_player_per_campaign"
-            )
+                fields=("campaign", "user", "kind"),
+                name="unique_context_kind_per_user_per_campaign",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.user} in {self.campaign}"
+        return f"{self.user} as {self.get_kind_display()} in {self.campaign}"
 
 
 @dataclass(frozen=True)
@@ -150,17 +178,17 @@ class MoneyBalance:
 
 class Character(models.Model):
     campaign_id: int
-    player_id: int | None
+    context_id: int | None
 
     campaign = models.ForeignKey(
         Campaign, on_delete=models.CASCADE, related_name="characters"
     )
-    player = models.ForeignKey(
-        Player,
+    context = models.OneToOneField(
+        CampaignContext,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="characters",
+        related_name="character",
     )
     is_active = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
@@ -174,24 +202,86 @@ class Character(models.Model):
     intelligence = models.PositiveSmallIntegerField()
     wisdom = models.PositiveSmallIntegerField()
     charisma = models.PositiveSmallIntegerField()
+    base_hp = models.PositiveSmallIntegerField(default=1)
+    proficiency_bonus_adjustment = models.SmallIntegerField(default=0)
+    strength_modifier_adjustment = models.SmallIntegerField(default=0)
+    dexterity_modifier_adjustment = models.SmallIntegerField(default=0)
+    constitution_modifier_adjustment = models.SmallIntegerField(default=0)
+    intelligence_modifier_adjustment = models.SmallIntegerField(default=0)
+    wisdom_modifier_adjustment = models.SmallIntegerField(default=0)
+    charisma_modifier_adjustment = models.SmallIntegerField(default=0)
+    strength_save_proficient = models.BooleanField(default=False)
+    dexterity_save_proficient = models.BooleanField(default=False)
+    constitution_save_proficient = models.BooleanField(default=False)
+    intelligence_save_proficient = models.BooleanField(default=False)
+    wisdom_save_proficient = models.BooleanField(default=False)
+    charisma_save_proficient = models.BooleanField(default=False)
+    strength_save_adjustment = models.SmallIntegerField(default=0)
+    dexterity_save_adjustment = models.SmallIntegerField(default=0)
+    constitution_save_adjustment = models.SmallIntegerField(default=0)
+    intelligence_save_adjustment = models.SmallIntegerField(default=0)
+    wisdom_save_adjustment = models.SmallIntegerField(default=0)
+    charisma_save_adjustment = models.SmallIntegerField(default=0)
+    skill_proficiencies = models.JSONField(default=dict, blank=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=("campaign", "player"),
-                condition=Q(is_active=True, player__isnull=False),
-                name="one_active_character_per_player_per_campaign",
-            ),
-        ]
+        constraints = []
 
     def clean(self) -> None:
         super().clean()
-        if self.player_id and self.player.campaign_id != self.campaign_id:
+        if self.context_id and self.context.campaign_id != self.campaign_id:
             raise ValidationError(
-                {
-                    "player": "A player must belong to the same campaign as the character."
-                }
+                {"context": "A character context must belong to the same campaign."}
             )
+        if self.context_id and self.context.kind != CampaignContext.Kind.PC:
+            raise ValidationError({"context": "Only a PC context may own a character."})
+
+    @property
+    def is_player_character(self) -> bool:
+        return self.context_id is not None
+
+    @property
+    def proficiency_bonus(self) -> int:
+        return 2 + (self.level - 1) // 4 + self.proficiency_bonus_adjustment
+
+    @staticmethod
+    def level_for_experience(experience: int) -> int:
+        return max(
+            level
+            for level, threshold in enumerate(XP_LEVEL_THRESHOLDS, start=1)
+            if experience >= threshold
+        )
+
+    @property
+    def level(self) -> int:
+        return self.level_for_experience(self.experience)
+
+    @property
+    def max_hp(self) -> int:
+        return max(1, self.base_hp + self.ability_modifier("constitution") * self.level)
+
+    def ability_modifier(self, ability: str) -> int:
+        return (getattr(self, ability) - 10) // 2 + getattr(
+            self, f"{ability}_modifier_adjustment"
+        )
+
+    def saving_throw(self, ability: str) -> int:
+        return (
+            self.ability_modifier(ability)
+            + getattr(self, f"{ability}_save_adjustment")
+            + (
+                self.proficiency_bonus
+                if getattr(self, f"{ability}_save_proficient")
+                else 0
+            )
+        )
+
+    def skill_bonus(self, skill: str, ability: str) -> int:
+        proficiency = self.skill_proficiencies.get(skill, "none")
+        multiplier = {"none": 0, "half": 0.5, "proficient": 1, "expertise": 2}.get(
+            proficiency, 0
+        )
+        return self.ability_modifier(ability) + int(self.proficiency_bonus * multiplier)
 
     @property
     def experience(self) -> int:

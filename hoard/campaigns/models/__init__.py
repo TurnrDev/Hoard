@@ -1,4 +1,4 @@
-from .core import Campaign, Character, MoneyBalance, Player
+from .core import Campaign, CampaignContext, Character, MoneyBalance
 from .experience import ExperienceAccount, ExperienceEntry, ExperienceTransaction
 from .inventory import (
     InventoryAccount,
@@ -10,6 +10,7 @@ from .money import MoneyAccount, MoneyEntry, MoneyTransaction
 
 __all__ = [
     "Campaign",
+    "CampaignContext",
     "Character",
     "ExperienceAccount",
     "ExperienceEntry",
@@ -22,5 +23,4 @@ __all__ = [
     "MoneyBalance",
     "MoneyEntry",
     "MoneyTransaction",
-    "Player",
 ]

@@ -11,8 +11,8 @@ For example, an encounter worth 10 XP with five active player characters
 awards 2 XP to each character. An 11 XP encounter with the same group still
 awards 2 XP each and discards 1 XP.
 
-Only active characters linked to a Player receive shared XP. NPCs and inactive
-characters do not. A Player may have only one active character in a campaign.
+Only active characters linked to a PC campaign context receive shared XP. NPCs and inactive
+characters do not. A user may have only one active PC context in a campaign.
 When a player character is activated, it is automatically brought to the
 campaign's current shared-XP value.
 

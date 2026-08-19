@@ -73,7 +73,7 @@ would receive. They do not create entries or update the campaign. A real award
 returns the same per-character amount, records a balanced XP transaction, and
 updates the shared-XP baseline.
 
-Eligible recipients are active characters linked to a Player. NPCs and
+Eligible recipients are active characters linked to a PC campaign context. NPCs and
 inactive characters are excluded. The award is divided by recipient count,
 rounded down, and the remainder is discarded. A newly activated player
 character receives a baseline transaction that aligns it with the group.

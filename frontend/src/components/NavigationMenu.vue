@@ -2,38 +2,38 @@
 import { contextPath, type ActingContext } from "../context";
 
 const props = defineProps<{
-  campaignId: number;
+  contextId: number;
   activeContext?: ActingContext;
 }>();
 </script>
 
 <template>
-  <v-list v-if="campaignId" nav density="comfortable">
+  <v-list v-if="contextId" nav density="comfortable">
     <v-list-item
       prepend-icon="mdi-home-variant-outline"
       title="Home"
-      :to="activeContext ? contextPath(activeContext) : `/c/${campaignId}`"
+      :to="activeContext ? contextPath(activeContext) : `/c/${contextId}`"
     />
     <v-list-item
       prepend-icon="mdi-account-group-outline"
       title="Characters"
-      :to="`/c/${campaignId}/characters`"
+      :to="`/c/${contextId}/characters`"
     />
     <v-list-item
       prepend-icon="mdi-book-open-variant-outline"
       title="Compendium"
-      :to="`/c/${campaignId}/compendium`"
+      :to="`/c/${contextId}/compendium`"
     />
     <v-list-item
       prepend-icon="mdi-notebook-outline"
       title="Ledger"
-      :to="`/c/${campaignId}/ledger`"
+      :to="`/c/${contextId}/ledger`"
     />
     <v-list-item
       v-if="activeContext?.kind === 'gm'"
       prepend-icon="mdi-cog-outline"
       title="Manage"
-      :to="`/c/${campaignId}/manage`"
+      :to="`/c/${contextId}/manage`"
     />
   </v-list>
 </template>

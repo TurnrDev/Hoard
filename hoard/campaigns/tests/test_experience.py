@@ -33,7 +33,7 @@ class SharedExperienceTests(TestCase):
         active = make_character(self.campaign, "Active")
         active.activate()
         inactive = make_character(self.campaign, "Inactive")
-        npc = make_character(self.campaign, "NPC", active=True, player=False)
+        npc = make_character(self.campaign, "NPC", active=True, context=False)
         self.campaign.award_shared_experience(10)
         self.assertEqual(active.experience, 10)
         self.assertEqual(inactive.experience, 0)

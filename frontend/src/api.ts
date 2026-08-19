@@ -4,6 +4,14 @@ export type CampaignSummary = {
   name: string;
   is_game_master: boolean;
 };
+export type CampaignContext = {
+  id: number;
+  campaign_id: number;
+  campaign_name: string;
+  kind: "gm" | "pc";
+  character_id: number | null;
+  character_name: string | null;
+};
 export type CampaignMember = {
   id: number;
   username: string;
@@ -37,6 +45,7 @@ export type Item = {
 };
 export type Character = {
   id: number;
+  context_id: number | null;
   name: string;
   is_player_character: boolean;
   is_active: boolean;
@@ -50,6 +59,22 @@ export type Character = {
   intelligence: number;
   wisdom: number;
   charisma: number;
+  sheet: {
+    level: number;
+    base_hp: number;
+    max_hp: number;
+    proficiency_bonus_adjustment: number;
+    proficiency_bonus: number;
+    abilities: Record<
+      string,
+      { score: number; modifier: number; adjustment: number }
+    >;
+    saves: Record<
+      string,
+      { proficient: boolean; adjustment: number; bonus: number }
+    >;
+    skills: Record<string, { proficiency: string; bonus: number }>;
+  };
   experience: number;
   money: Record<string, number | string>;
   inventory: Array<{ item_id: number; name: string; quantity: number }>;
@@ -103,7 +128,9 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers: {
       Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !(options.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...(unsafe ? { "X-CSRFToken": token } : {}),
       ...options.headers,
     },
@@ -133,29 +160,45 @@ export const login = (username: string, password: string) =>
   });
 export const logout = () =>
   request<void>("/api/auth/session/", { method: "DELETE" });
-export const getCampaigns = () => request<CampaignSummary[]>("/api/campaigns/");
+export const getContexts = () => request<CampaignContext[]>("/api/contexts/");
+export const getCampaigns = async (): Promise<CampaignSummary[]> => {
+  const contexts = await getContexts();
+  const campaigns = new Map<number, CampaignSummary>();
+  for (const context of contexts) {
+    const previous = campaigns.get(context.campaign_id);
+    campaigns.set(context.campaign_id, {
+      id: context.campaign_id,
+      name: context.campaign_name,
+      is_game_master: Boolean(
+        previous?.is_game_master || context.kind === "gm",
+      ),
+    });
+  }
+  return [...campaigns.values()];
+};
 export const getCampaign = (id: number) =>
-  request<Campaign>(`/api/campaigns/${id}/`);
+  request<Campaign>(`/api/contexts/${id}/`);
 export const getItems = (id: number) =>
-  request<Item[]>(`/api/campaigns/${id}/items/`);
-export const getMembers = (id: number) =>
-  request<CampaignMember[]>(`/api/campaigns/${id}/members/`);
+  request<Item[]>(`/api/contexts/${id}/items/`);
 export const addMember = (id: number, username: string, isGameMaster = false) =>
-  request<CampaignMember>(`/api/campaigns/${id}/members/`, {
+  request<CampaignMember>(`/api/contexts/${id}/manage/contexts/`, {
     method: "POST",
-    body: JSON.stringify({ username, is_game_master: isGameMaster }),
+    body: JSON.stringify({ username, kind: isGameMaster ? "gm" : "pc" }),
   });
 export const updateMember = (
   campaignId: number,
   memberId: number,
   isGameMaster: boolean,
 ) =>
-  request<CampaignMember>(`/api/campaigns/${campaignId}/members/${memberId}/`, {
-    method: "PATCH",
-    body: JSON.stringify({ is_game_master: isGameMaster }),
-  });
+  request<CampaignMember>(
+    `/api/contexts/${campaignId}/manage/contexts/${memberId}/`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ is_game_master: isGameMaster }),
+    },
+  );
 export const removeMember = (campaignId: number, memberId: number) =>
-  request<void>(`/api/campaigns/${campaignId}/members/${memberId}/`, {
+  request<void>(`/api/contexts/${campaignId}/manage/contexts/${memberId}/`, {
     method: "DELETE",
   });
 export const createItem = (
@@ -164,7 +207,7 @@ export const createItem = (
   description: string,
   metadata: Partial<EquipmentMetadata> = {},
 ) =>
-  request<Item>(`/api/campaigns/${id}/items/`, {
+  request<Item>(`/api/contexts/${id}/items/`, {
     method: "POST",
     body: JSON.stringify({ name, description, metadata }),
   });
@@ -177,18 +220,22 @@ export const updateItem = (
     metadata?: Partial<EquipmentMetadata>;
   },
 ) =>
-  request<Item>(`/api/campaigns/${campaignId}/items/${itemId}/`, {
+  request<Item>(`/api/contexts/${campaignId}/items/${itemId}/`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 export const deleteItem = (campaignId: number, itemId: number) =>
-  request<void>(`/api/campaigns/${campaignId}/items/${itemId}/`, {
+  request<void>(`/api/contexts/${campaignId}/items/${itemId}/`, {
     method: "DELETE",
   });
 export const getCharacters = (campaignId: number) =>
-  request<Character[]>(`/api/campaigns/${campaignId}/characters/`);
-export const getMyCharacters = (campaignId: number) =>
-  request<Character[]>(`/api/campaigns/${campaignId}/characters/me/`);
+  request<Character[]>(`/api/contexts/${campaignId}/characters/`);
+export const getMyCharacters = (contextId: number) =>
+  getCharacters(contextId).then((characters) =>
+    characters.filter((character) => character.context_id === contextId),
+  );
+export const getMembers = (contextId: number) =>
+  request<CampaignMember[]>(`/api/contexts/${contextId}/manage/contexts/`);
 export const createCharacter = (
   campaignId: number,
   payload: {
@@ -201,40 +248,52 @@ export const createCharacter = (
     intelligence: number;
     wisdom: number;
     charisma: number;
-    player_id?: number | null;
+    is_npc?: boolean;
   },
 ) =>
-  request<Character>(`/api/campaigns/${campaignId}/characters/`, {
+  request<Character>(`/api/contexts/${campaignId}/characters/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 export const archiveCharacter = (campaignId: number, characterId: number) =>
+  request<Character>(`/api/contexts/${campaignId}/characters/${characterId}/`, {
+    method: "DELETE",
+  });
+export type CahPreview = {
+  token: string;
+  fields: Record<string, unknown>;
+  warnings: string[];
+};
+export const previewCahImport = (contextId: number, file: File) => {
+  const body = new FormData();
+  body.append("file", file);
+  return request<CahPreview>(
+    `/api/contexts/${contextId}/character-imports/cah/preview`,
+    { method: "POST", body },
+  );
+};
+export const commitCahImport = (
+  contextId: number,
+  token: string,
+  characterId?: number,
+) =>
   request<Character>(
-    `/api/campaigns/${campaignId}/characters/${characterId}/`,
-    { method: "DELETE" },
+    `/api/contexts/${contextId}/character-imports/cah/commit`,
+    {
+      method: "POST",
+      body: JSON.stringify({ token, character_id: characterId }),
+    },
   );
 export const updateCharacter = (
   campaignId: number,
   characterId: number,
-  payload: Partial<
-    Pick<
-      Character,
-      | "name"
-      | "race"
-      | "class"
-      | "is_active"
-      | "strength"
-      | "dexterity"
-      | "constitution"
-      | "intelligence"
-      | "wisdom"
-      | "charisma"
-    >
-  >,
+  payload: Record<string, unknown>,
 ) => {
-  const { class: characterClass, ...fields } = payload;
+  const { class: characterClass, ...fields } = payload as {
+    class?: string;
+  } & Record<string, unknown>;
   return request<Character>(
-    `/api/campaigns/${campaignId}/characters/${characterId}/`,
+    `/api/contexts/${campaignId}/characters/${characterId}/`,
     {
       method: "PATCH",
       body: JSON.stringify({ ...fields, character_class: characterClass }),
@@ -266,14 +325,14 @@ export const createInventoryTransaction = (
   payload: InventoryTransactionInput,
 ) =>
   request<LedgerTransaction>(
-    `/api/campaigns/${campaignId}/inventory-transactions/`,
+    `/api/contexts/${campaignId}/inventory-transactions/`,
     { method: "POST", body: JSON.stringify(payload) },
   );
 export const createMoneyTransfer = (
   campaignId: number,
   payload: MoneyTransferInput,
 ) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/money-transfers/`, {
+  request<LedgerTransaction>(`/api/contexts/${campaignId}/money-transfers/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -281,7 +340,7 @@ export const createMoneyExchange = (
   campaignId: number,
   payload: MoneyExchangeInput,
 ) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/money-exchanges/`, {
+  request<LedgerTransaction>(`/api/contexts/${campaignId}/money-exchanges/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -289,7 +348,7 @@ export const createSharedXpAward = (
   campaignId: number,
   payload: { amount: number; description?: string },
 ) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/shared-xp-awards/`, {
+  request<LedgerTransaction>(`/api/contexts/${campaignId}/shared-xp-awards/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -299,15 +358,13 @@ export const getTransactions = (campaignId: number, ledger = "all", page = 1) =>
     page: number;
     page_size: number;
     results: LedgerTransaction[];
-  }>(
-    `/api/campaigns/${campaignId}/transactions/?ledger=${ledger}&page=${page}`,
-  );
+  }>(`/api/contexts/${campaignId}/transactions/?ledger=${ledger}&page=${page}`);
 export const reverseTransaction = (
   campaignId: number,
   transaction: LedgerTransaction,
 ) => {
   return request(
-    `/api/campaigns/${campaignId}/transactions/${transaction.ledger}/${transaction.id}/`,
+    `/api/contexts/${campaignId}/transactions/${transaction.ledger}/${transaction.id}/`,
     { method: "DELETE" },
   );
 };

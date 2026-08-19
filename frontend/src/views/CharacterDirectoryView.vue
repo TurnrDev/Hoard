@@ -8,7 +8,6 @@ import {
   type Campaign,
   type Character,
 } from "../api";
-import { contextPath, type ActingContext } from "../context";
 
 const campaignId = Number(useRoute().params.id);
 const campaign = ref<Campaign>();
@@ -42,12 +41,7 @@ async function load(): Promise<void> {
 }
 
 function actingPath(character: Character): string {
-  if (!campaign.value) return "";
-  return contextPath({
-    kind: "character",
-    campaign: campaign.value,
-    character,
-  } satisfies ActingContext);
+  return character.context_id ? `/c/${character.context_id}` : "";
 }
 
 onMounted(load);

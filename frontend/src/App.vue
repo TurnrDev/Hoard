@@ -16,31 +16,15 @@ const drawer = ref(false);
 const isDesktop = ref(window.innerWidth >= 960);
 const busy = ref(false);
 const availableContexts = ref<ActingContext[]>([]);
-const campaignId = computed(() => Number(route.params.id));
-const activeContext = computed(() => {
-  const characterId = Number(route.params.characterId);
-  const inCampaign = availableContexts.value.filter(
-    (context) => context.campaign.id === campaignId.value,
-  );
-  if (route.path.endsWith("/gm"))
-    return inCampaign.find((context) => context.kind === "gm");
-  if (characterId)
-    return inCampaign.find(
-      (context) =>
-        context.kind === "character" && context.character.id === characterId,
-    );
-  const remembered = localStorage.getItem(`hoard:context:${campaignId.value}`);
-  return inCampaign.find((context) =>
-    context.kind === "gm"
-      ? remembered === "gm"
-      : remembered === `character:${context.character.id}`,
-  );
-});
+const contextId = computed(() => Number(route.params.id));
+const activeContext = computed(() =>
+  availableContexts.value.find((context) => context.id === contextId.value),
+);
 const title = computed(() => {
   if (!activeContext.value) return "Hoard";
   return activeContext.value.kind === "gm"
-    ? `${activeContext.value.campaign.name} · GM`
-    : `${activeContext.value.campaign.name} · ${activeContext.value.character.name}`;
+    ? `${activeContext.value.campaign_name} · GM`
+    : `${activeContext.value.campaign_name} · ${activeContext.value.character_name}`;
 });
 
 async function loadContexts(): Promise<void> {
@@ -119,8 +103,8 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
               "
               :title="
                 context.kind === 'gm'
-                  ? `${context.campaign.name} · GM`
-                  : `${context.campaign.name} · ${context.character.name}`
+                  ? `${context.campaign_name} · GM`
+                  : `${context.campaign_name} · ${context.character_name}`
               "
               @click="selectContext(context)"
             />
@@ -147,10 +131,7 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
       rail-width="64"
       class="app-drawer"
     >
-      <NavigationMenu
-        :campaign-id="campaignId"
-        :active-context="activeContext"
-      />
+      <NavigationMenu :context-id="contextId" :active-context="activeContext" />
     </v-navigation-drawer>
     <v-navigation-drawer
       v-if="$route.path !== '/login' && !isDesktop"
@@ -159,10 +140,7 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
       width="360"
       class="app-drawer mobile-drawer"
     >
-      <NavigationMenu
-        :campaign-id="campaignId"
-        :active-context="activeContext"
-      />
+      <NavigationMenu :context-id="contextId" :active-context="activeContext" />
     </v-navigation-drawer>
     <v-main><router-view @contexts-changed="loadContexts" /></v-main>
   </v-app>

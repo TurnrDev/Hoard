@@ -7,6 +7,7 @@ from django.http import HttpRequest
 
 from .models import (
     Campaign,
+    CampaignContext,
     Character,
     ExperienceAccount,
     ExperienceEntry,
@@ -18,7 +19,6 @@ from .models import (
     MoneyAccount,
     MoneyEntry,
     MoneyTransaction,
-    Player,
 )
 
 
@@ -42,10 +42,10 @@ class CampaignAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-@admin.register(Player)
-class PlayerAdmin(admin.ModelAdmin):
-    list_display = ("user", "campaign", "is_game_master")
-    list_filter = ("is_game_master", "campaign")
+@admin.register(CampaignContext)
+class CampaignContextAdmin(admin.ModelAdmin):
+    list_display = ("user", "campaign", "kind", "is_active")
+    list_filter = ("kind", "is_active", "campaign")
     search_fields = ("user__username", "campaign__name")
 
 
@@ -54,13 +54,13 @@ class CharacterAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "campaign",
-        "player",
+        "context",
         "is_active",
         "race",
         "character_class",
     )
     list_filter = ("campaign", "is_active")
-    search_fields = ("name", "player__user__username")
+    search_fields = ("name", "context__user__username")
 
     def save_model(
         self, request: HttpRequest, obj: Character, form: BaseModelForm, change: bool

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 
-from hoard.campaigns.models import Campaign, Character, Player
+from hoard.campaigns.models import Campaign, CampaignContext, Character
 
 
 def make_character(
@@ -10,19 +10,21 @@ def make_character(
     name: str = "Hero",
     *,
     active: bool = False,
-    player: Player | bool = True,
+    context: CampaignContext | bool = True,
 ) -> Character:
     membership = None
-    if isinstance(player, Player):
-        membership = player
-    elif player:
+    if isinstance(context, CampaignContext):
+        membership = context
+    elif context:
         user = get_user_model().objects.create_user(
-            username=f"{name}-{Player.objects.count()}"
+            username=f"{name}-{CampaignContext.objects.count()}"
         )
-        membership = Player.objects.create(campaign=campaign, user=user)
+        membership = CampaignContext.objects.create(
+            campaign=campaign, user=user, kind=CampaignContext.Kind.PC
+        )
     return Character.objects.create(
         campaign=campaign,
-        player=membership,
+        context=membership,
         name=name,
         race="Human",
         character_class="Fighter",

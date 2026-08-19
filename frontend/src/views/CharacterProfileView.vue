@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import {
   archiveCharacter,
+  commitCahImport,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
@@ -11,12 +12,13 @@ import {
   getCharacters,
   getItems,
   getMyCharacters,
+  previewCahImport,
   updateCharacter,
+  type CahPreview,
   type Campaign,
   type Character,
   type Item,
 } from "../api";
-import { rememberContext } from "../context";
 import type { PickerCandidate } from "../itemPicker";
 
 const route = useRoute();
@@ -40,9 +42,14 @@ const receivedDenomination = ref("sp");
 const receivedAmount = ref(10);
 const description = ref("");
 const editOpen = ref(false);
+const importOpen = ref(false);
+const importFile = ref<File>();
+const importPreview = ref<CahPreview>();
 const editName = ref("");
 const editRace = ref("");
 const editClass = ref("");
+const editBaseHp = ref(1);
+const editProficiencyAdjustment = ref(0);
 const editAbilities = ref({
   strength: 10,
   dexterity: 10,
@@ -76,18 +83,171 @@ const canAct = computed(
 const canEdit = computed(
   () => ownCharacter.value || campaign.value?.is_game_master,
 );
-const abilityScores = computed(() =>
+const abilityScores = computed<[string, number, number][]>(() =>
   character.value
     ? [
-        ["STR", character.value.strength],
-        ["DEX", character.value.dexterity],
-        ["CON", character.value.constitution],
-        ["INT", character.value.intelligence],
-        ["WIS", character.value.wisdom],
-        ["CHA", character.value.charisma],
+        [
+          "STR",
+          character.value.strength,
+          character.value.sheet.abilities.strength.modifier,
+        ],
+        [
+          "DEX",
+          character.value.dexterity,
+          character.value.sheet.abilities.dexterity.modifier,
+        ],
+        [
+          "CON",
+          character.value.constitution,
+          character.value.sheet.abilities.constitution.modifier,
+        ],
+        [
+          "INT",
+          character.value.intelligence,
+          character.value.sheet.abilities.intelligence.modifier,
+        ],
+        [
+          "WIS",
+          character.value.wisdom,
+          character.value.sheet.abilities.wisdom.modifier,
+        ],
+        [
+          "CHA",
+          character.value.charisma,
+          character.value.sheet.abilities.charisma.modifier,
+        ],
       ]
     : [],
 );
+const skillAbilities: Record<string, string> = {
+  acrobatics: "dexterity",
+  animal_handling: "wisdom",
+  arcana: "intelligence",
+  athletics: "strength",
+  deception: "charisma",
+  history: "intelligence",
+  insight: "wisdom",
+  intimidation: "charisma",
+  investigation: "intelligence",
+  medicine: "wisdom",
+  nature: "intelligence",
+  perception: "wisdom",
+  performance: "charisma",
+  persuasion: "charisma",
+  religion: "intelligence",
+  sleight_of_hand: "dexterity",
+  stealth: "dexterity",
+  survival: "wisdom",
+};
+const abilityGroups = computed(() => {
+  if (!character.value) return [];
+  return [
+    ["strength", "Strength", "STR"],
+    ["dexterity", "Dexterity", "DEX"],
+    ["constitution", "Constitution", "CON"],
+    ["intelligence", "Intelligence", "INT"],
+    ["wisdom", "Wisdom", "WIS"],
+    ["charisma", "Charisma", "CHA"],
+  ].map(([key, label, abbreviation]) => ({
+    key,
+    label,
+    abbreviation,
+    save: character.value!.sheet.saves[key],
+    skills: Object.entries(character.value!.sheet.skills)
+      .filter(([name]) => skillAbilities[name] === key)
+      .map(([name, skill]) => ({ name, ...skill })),
+  }));
+});
+const skillGroups = computed(() => {
+  const order = ["strength", "wisdom", "dexterity", "charisma", "intelligence"];
+  return abilityGroups.value
+    .filter((ability) => ability.skills.length)
+    .sort((left, right) => order.indexOf(left.key) - order.indexOf(right.key));
+});
+const skillColumns = computed(() => [
+  skillGroups.value.filter((ability) =>
+    ["strength", "dexterity", "intelligence"].includes(ability.key),
+  ),
+  skillGroups.value.filter((ability) =>
+    ["wisdom", "charisma"].includes(ability.key),
+  ),
+]);
+const displayName = (value: string) =>
+  value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
+const proficiencyLabel = (proficiency: string) =>
+  ({ half: "Half", proficient: "Proficient", expertise: "Expertise" })[
+    proficiency
+  ] ?? "";
+const proficiencyClass = (proficiency: string) =>
+  `proficiency-bonus proficiency-bonus--${proficiency}`;
+const importChanges = computed(() => {
+  if (!character.value || !importPreview.value) return [];
+  const current: Record<string, unknown> = {
+    name: character.value.name,
+    race: character.value.race,
+    base_hp: character.value.sheet.base_hp,
+    proficiency_bonus_adjustment:
+      character.value.sheet.proficiency_bonus_adjustment,
+    strength: character.value.strength,
+    dexterity: character.value.dexterity,
+    constitution: character.value.constitution,
+    intelligence: character.value.intelligence,
+    wisdom: character.value.wisdom,
+    charisma: character.value.charisma,
+  };
+  const labels: Record<string, string> = {
+    name: "Name",
+    race: "Race",
+    base_hp: "Base HP",
+    proficiency_bonus_adjustment: "Proficiency adjustment",
+    strength: "Strength",
+    dexterity: "Dexterity",
+    constitution: "Constitution",
+    intelligence: "Intelligence",
+    wisdom: "Wisdom",
+    charisma: "Charisma",
+  };
+  for (const ability of [
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma",
+  ]) {
+    const label = labels[ability];
+    current[`${ability}_modifier_adjustment`] =
+      character.value.sheet.abilities[ability]?.adjustment ?? 0;
+    current[`${ability}_save_proficient`] =
+      character.value.sheet.saves[ability]?.proficient ?? false;
+    current[`${ability}_save_adjustment`] =
+      character.value.sheet.saves[ability]?.adjustment ?? 0;
+    labels[`${ability}_modifier_adjustment`] = `${label} adjustment`;
+    labels[`${ability}_save_proficient`] = `${label} save proficiency`;
+    labels[`${ability}_save_adjustment`] = `${label} save adjustment`;
+  }
+  const changes = Object.entries(importPreview.value.fields).flatMap(
+    ([field, next]) => {
+      if (field === "skill_proficiencies") {
+        return Object.entries(next as Record<string, string>)
+          .filter(
+            ([skill, proficiency]) =>
+              character.value?.sheet.skills[skill]?.proficiency !== proficiency,
+          )
+          .map(([skill, proficiency]) => ({
+            label: skill.replaceAll("_", " "),
+            current:
+              character.value?.sheet.skills[skill]?.proficiency ?? "none",
+            next: proficiency,
+          }));
+      }
+      if (!(field in current) || current[field] === next) return [];
+      return [{ label: labels[field] ?? field, current: current[field], next }];
+    },
+  );
+  return changes;
+});
 
 async function load(): Promise<void> {
   try {
@@ -105,16 +265,6 @@ async function load(): Promise<void> {
     ownCharacter.value = own.some((candidate) => candidate.id === characterId);
     items.value = nextItems;
     if (!character.value) await router.replace(`/c/${campaignId}/characters`);
-    else if (
-      ownCharacter.value &&
-      character.value.is_active &&
-      !character.value.is_archived
-    )
-      rememberContext({
-        kind: "character",
-        campaign: nextCampaign,
-        character: character.value,
-      });
   } catch (exception) {
     error.value =
       exception instanceof Error
@@ -164,11 +314,20 @@ async function submit(): Promise<void> {
   }
 }
 
+function scrollToActions(): void {
+  document
+    .getElementById("character-actions")
+    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function openEdit(): void {
   if (!character.value) return;
   editName.value = character.value.name;
   editRace.value = character.value.race;
   editClass.value = character.value.class;
+  editBaseHp.value = character.value.sheet.base_hp;
+  editProficiencyAdjustment.value =
+    character.value.sheet.proficiency_bonus_adjustment;
   editAbilities.value = {
     strength: character.value.strength,
     dexterity: character.value.dexterity,
@@ -187,6 +346,8 @@ async function saveProfile(): Promise<void> {
       name: editName.value.trim(),
       race: editRace.value,
       class: editClass.value,
+      base_hp: editBaseHp.value,
+      proficiency_bonus_adjustment: editProficiencyAdjustment.value,
       ...editAbilities.value,
     });
     editOpen.value = false;
@@ -212,6 +373,37 @@ async function archive(): Promise<void> {
   }
 }
 
+async function previewImport(): Promise<void> {
+  if (!importFile.value) return;
+  try {
+    importPreview.value = await previewCahImport(campaignId, importFile.value);
+  } catch (exception) {
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to read CAH file.";
+  }
+}
+
+async function commitImport(): Promise<void> {
+  if (!character.value || !importPreview.value) return;
+  try {
+    await commitCahImport(
+      campaignId,
+      importPreview.value.token,
+      character.value.id,
+    );
+    importOpen.value = false;
+    importPreview.value = undefined;
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to import character.";
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -225,6 +417,9 @@ onMounted(load);
       </div>
       <div class="d-flex ga-2">
         <v-btn v-if="canEdit" @click="openEdit">Edit</v-btn>
+        <v-btn v-if="ownCharacter" variant="tonal" @click="importOpen = true"
+          >Import CAH</v-btn
+        >
         <v-btn
           :to="`/c/${campaignId}/characters`"
           prepend-icon="mdi-account-group-outline"
@@ -249,7 +444,7 @@ onMounted(load);
       >{{ notice }}</v-alert
     >
     <v-row
-      ><v-col cols="12" lg="7"
+      ><v-col cols="12" :lg="canAct ? 7 : 12"
         ><v-card
           ><v-card-text
             ><v-row
@@ -268,21 +463,110 @@ onMounted(load);
               {{ character.money.ep }} ep · {{ character.money.sp }} sp ·
               {{ character.money.cp }} cp
             </div>
+            <v-divider class="my-4" />
+            <v-row>
+              <v-col cols="6"
+                ><div class="text-overline">Max HP</div>
+                <div class="text-h5">{{ character.sheet.max_hp }}</div></v-col
+              >
+              <v-col cols="6"
+                ><div class="text-overline">Proficiency</div>
+                <div class="text-h5">
+                  +{{ character.sheet.proficiency_bonus }}
+                </div></v-col
+              >
+            </v-row>
             <v-divider class="my-4" /><v-row
               ><v-col
-                v-for="[label, score] in abilityScores"
+                v-for="[label, score, modifier] in abilityScores"
                 :key="label"
                 cols="4"
                 sm="2"
                 ><div class="ability">
-                  <strong>{{ score }}</strong
-                  ><span>{{ label }}</span>
+                  <strong>{{ signed(modifier) }}</strong
+                  ><span>{{ label }} · {{ score }}</span>
                 </div></v-col
               ></v-row
             ></v-card-text
           ></v-card
         >
         <v-card class="mt-4"
+          ><v-card-title>Saving throws</v-card-title
+          ><v-card-text
+            ><v-row dense
+              ><v-col
+                v-for="ability in abilityGroups"
+                :key="ability.key"
+                cols="4"
+                sm="2"
+                ><div class="ability">
+                  <v-tooltip
+                    v-if="ability.save.proficient"
+                    :text="proficiencyLabel('proficient')"
+                    location="top"
+                  >
+                    <template #activator="{ props }">
+                      <span
+                        v-bind="props"
+                        :class="proficiencyClass('proficient')"
+                      >
+                        {{ signed(ability.save.bonus) }}
+                      </span>
+                    </template>
+                  </v-tooltip>
+                  <strong v-else>{{ signed(ability.save.bonus) }}</strong>
+                  <span>{{ ability.abbreviation }} save</span>
+                </div></v-col
+              ></v-row
+            ></v-card-text
+          ></v-card
+        >
+        <v-card class="mt-4"
+          ><v-card-title>Skills</v-card-title
+          ><v-card-text
+            ><v-row dense
+              ><v-col
+                v-for="(column, columnIndex) in skillColumns"
+                :key="columnIndex"
+                cols="12"
+                sm="6"
+                ><div
+                  v-for="ability in column"
+                  :key="ability.key"
+                  class="skill-group"
+                >
+                  <div class="skill-group-title">{{ ability.label }}</div>
+                  <div
+                    v-for="skill in ability.skills"
+                    :key="skill.name"
+                    class="skill-row"
+                  >
+                    <v-tooltip
+                      v-if="skill.proficiency !== 'none'"
+                      :text="proficiencyLabel(skill.proficiency)"
+                      location="top"
+                    >
+                      <template #activator="{ props }">
+                        <span
+                          v-bind="props"
+                          :class="proficiencyClass(skill.proficiency)"
+                          ><span
+                            v-if="skill.proficiency === 'expertise'"
+                            class="expertise-sparkle"
+                            aria-hidden="true"
+                            >✦</span
+                          >{{ signed(skill.bonus) }}</span
+                        >
+                      </template>
+                    </v-tooltip>
+                    <strong v-else>{{ signed(skill.bonus) }}</strong>
+                    <span>{{ displayName(skill.name) }}</span>
+                  </div>
+                </div></v-col
+              ></v-row
+            ></v-card-text
+          ></v-card
+        ><v-card class="mt-4"
           ><v-card-title>Inventory</v-card-title
           ><v-card-text
             ><v-chip
@@ -298,7 +582,7 @@ onMounted(load);
           ></v-card
         ></v-col
       >
-      <v-col cols="12" lg="5" v-if="canAct"
+      <v-col id="character-actions" cols="12" lg="5" v-if="canAct"
         ><v-card
           ><v-card-title>Actions</v-card-title
           ><v-card-text
@@ -379,6 +663,19 @@ onMounted(load);
         ></v-col
       ></v-row
     >
+    <v-tooltip v-if="canAct" text="Jump to actions" location="top">
+      <template #activator="{ props }">
+        <v-btn
+          v-bind="props"
+          class="actions-fab"
+          color="primary"
+          icon="mdi-arrow-down"
+          size="large"
+          aria-label="Jump to actions"
+          @click="scrollToActions"
+        />
+      </template>
+    </v-tooltip>
     <v-dialog v-model="editOpen" max-width="720">
       <v-card title="Edit character">
         <v-card-text>
@@ -391,6 +688,15 @@ onMounted(load);
             /></v-col>
             <v-col cols="12" sm="4"
               ><v-text-field v-model="editClass" label="Class"
+            /></v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12" sm="4"
+              ><v-text-field
+                v-model.number="editBaseHp"
+                type="number"
+                min="1"
+                label="Base HP"
             /></v-col>
           </v-row>
           <v-row>
@@ -416,6 +722,58 @@ onMounted(load);
           <v-btn @click="editOpen = false">Cancel</v-btn>
           <v-btn color="primary" @click="saveProfile">Save</v-btn>
         </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog v-model="importOpen" max-width="560">
+      <v-card title="Import 5e Companion character">
+        <v-card-text>
+          <v-file-input
+            v-model="importFile"
+            accept=".cah,application/json"
+            label="CAH export"
+            @update:model-value="importPreview = undefined"
+          />
+          <v-btn :disabled="!importFile" @click="previewImport"
+            >Preview import</v-btn
+          >
+          <template v-if="importPreview">
+            <v-card variant="tonal" class="mt-4">
+              <v-card-title class="text-subtitle-1"
+                >Changes to apply</v-card-title
+              >
+              <v-list density="compact">
+                <v-list-item
+                  v-for="change in importChanges"
+                  :key="change.label"
+                  :title="change.label"
+                  :subtitle="`${change.current} → ${change.next}`"
+                />
+                <v-list-item
+                  v-if="!importChanges.length"
+                  title="No supported values would change."
+                />
+              </v-list>
+            </v-card>
+            <v-alert
+              v-if="importPreview.warnings.length"
+              type="warning"
+              class="mt-4"
+            >
+              <div v-for="warning in importPreview.warnings" :key="warning">
+                {{ warning }}
+              </div>
+            </v-alert>
+          </template>
+        </v-card-text>
+        <v-card-actions
+          ><v-spacer /><v-btn @click="importOpen = false">Cancel</v-btn
+          ><v-btn
+            color="primary"
+            :disabled="!importPreview"
+            @click="commitImport"
+            >Replace reference sheet</v-btn
+          ></v-card-actions
+        >
       </v-card>
     </v-dialog>
   </v-container>

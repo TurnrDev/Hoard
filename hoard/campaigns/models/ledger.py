@@ -12,7 +12,7 @@ class LedgerTransaction(models.Model):
 
     campaign = models.ForeignKey("campaigns.Campaign", on_delete=models.CASCADE)
     created_by = models.ForeignKey(
-        "campaigns.Player", null=True, blank=True, on_delete=models.SET_NULL
+        "campaigns.CampaignContext", null=True, blank=True, on_delete=models.SET_NULL
     )
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

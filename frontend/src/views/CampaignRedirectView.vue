@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { contextPath, defaultContext } from "../context";
+import { getContexts } from "../api";
 
 const route = useRoute();
 const router = useRouter();
 const error = ref("");
 
 onMounted(async () => {
-  const context = await defaultContext(Number(route.params.id));
-  if (context) await router.replace(contextPath(context));
-  else error.value = "You do not have an active role in this campaign.";
+  const context = (await getContexts()).find(
+    (candidate) => candidate.id === Number(route.params.id),
+  );
+  if (!context) {
+    error.value = "This context is no longer available.";
+    return;
+  }
+  await router.replace(
+    context.kind === "gm"
+      ? `/c/${context.id}/gm`
+      : `/c/${context.id}/characters/${context.character_id}`,
+  );
 });
 </script>
 

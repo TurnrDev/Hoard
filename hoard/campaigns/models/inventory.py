@@ -19,7 +19,7 @@ class InventoryItem(models.Model):
         related_name="inventory_items",
     )
     created_by = models.ForeignKey(
-        "campaigns.Player",
+        "campaigns.CampaignContext",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

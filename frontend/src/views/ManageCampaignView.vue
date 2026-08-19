@@ -62,7 +62,7 @@ async function createNpc(): Promise<void> {
       intelligence: 10,
       wisdom: 10,
       charisma: 10,
-      player_id: null,
+      is_npc: true,
     });
     characterName.value = "";
     await load();
