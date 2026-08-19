@@ -65,6 +65,41 @@ def _equipment_defaults(resource: dict[str, Any], resource_id: str, stats: dict[
     }
 
 
+def _upsert_equipment(
+    *, system: str, resource_id: str, identifier: str, defaults: dict[str, object]
+) -> tuple[InventoryItem, bool]:
+    """Upsert equipment and upgrade records made by the pre-category importer.
+
+    Earlier versions imported only generic items and left their category blank.
+    Updating those records in place preserves any immutable ledger entries that
+    refer to them. An unreferenced duplicate from an earlier rich import is
+    discarded before the legacy record is upgraded.
+    """
+    lookup = {
+        'source_repository': SOURCE_REPOSITORY,
+        'source_system': system,
+        'equipment_category': resource_id,
+        'source_identifier': identifier,
+    }
+    if resource_id == 'item':
+        legacy = InventoryItem.objects.filter(
+            source_repository=SOURCE_REPOSITORY,
+            source_system=system,
+            source_identifier=identifier,
+            equipment_category='',
+        ).first()
+        if legacy is not None:
+            current = InventoryItem.objects.filter(**lookup).first()
+            if current is None or not current.entries.exists():
+                if current is not None:
+                    current.delete()
+                for field, value in defaults.items():
+                    setattr(legacy, field, value)
+                legacy.save()
+                return legacy, False
+    return InventoryItem.objects.update_or_create(**lookup, defaults=defaults)
+
+
 class Command(BaseCommand):
     help = 'Import global 5e and 5e2024 item resources from rpg-companion-app-systems.'
 
@@ -101,11 +136,10 @@ class Command(BaseCommand):
                 if not isinstance(identifier, str) or not isinstance(name, str) or not name:
                     skipped += 1
                     continue
-                item, was_created = InventoryItem.objects.update_or_create(
-                    source_repository=SOURCE_REPOSITORY,
-                    source_system=system,
-                    equipment_category=resource_id,
-                    source_identifier=identifier,
+                item, was_created = _upsert_equipment(
+                    system=system,
+                    resource_id=resource_id,
+                    identifier=identifier,
                     defaults=_equipment_defaults(resource, resource_id, stats),
                 )
                 if was_created:

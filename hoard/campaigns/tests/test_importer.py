@@ -42,11 +42,19 @@ class RpgCompanionImportTests(TestCase):
             self._write_item(source, '5e2024', 'torch', 'Torch (2024)')
             self._write_item(source, '5e', 'torch', 'Torch weapon', resource_id='weapon')
             self._write_item(source, '5e2024', 'shield', 'Shield', resource_id='armor')
+            legacy = InventoryItem.objects.create(
+                campaign=None,
+                name='Old Torch',
+                source_repository='https://github.com/blastervla/rpg-companion-app-systems',
+                source_system='5e',
+                source_identifier='torch',
+            )
             call_command('import_rpg_companion_items', source=source)
             call_command('import_rpg_companion_items', source=source)
 
         self.assertEqual(InventoryItem.objects.count(), 4)
         item = InventoryItem.objects.get(source_system='5e', source_identifier='torch', equipment_category='item')
+        self.assertEqual(item.pk, legacy.pk)
         self.assertIsNone(item.campaign)
         self.assertTrue(item.is_imported)
         self.assertEqual(item.equipment_category, 'item')
