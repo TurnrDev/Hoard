@@ -127,16 +127,18 @@ onMounted(async () => {
 </script>
 
 <template>
-  <v-container fluid class="pa-md-8" style="max-width: 1300px">
-    <div class="d-flex align-center justify-space-between mb-6">
+  <v-container class="page-shell">
+    <header class="page-heading">
       <div>
-        <div class="text-overline text-secondary">Game master controls</div>
-        <h1 class="text-h3">{{ campaign?.name }}</h1>
+        <div class="text-overline text-secondary">Campaign dashboard</div>
+        <h1>{{ campaign?.name }}</h1>
       </div>
-      <v-btn :to="`/c/${campaignId}`" prepend-icon="mdi-arrow-left"
-        >Campaign</v-btn
+      <v-btn
+        :to="`/c/${campaignId}/characters`"
+        prepend-icon="mdi-account-group-outline"
+        >Roster</v-btn
       >
-    </div>
+    </header>
     <v-alert
       v-if="error"
       type="error"
@@ -152,9 +154,48 @@ onMounted(async () => {
       @click:close="notice = ''"
       >{{ notice }}</v-alert
     >
+    <v-row v-if="campaign" class="mb-2">
+      <v-col cols="6" md="3"
+        ><v-card
+          ><v-card-text
+            ><div class="text-overline">Party wealth</div>
+            <div class="text-h5">
+              {{ campaign.party_money.gold_value }} ¤
+            </div></v-card-text
+          ></v-card
+        ></v-col
+      >
+      <v-col cols="6" md="3"
+        ><v-card
+          ><v-card-text
+            ><div class="text-overline">Active PCs</div>
+            <div class="text-h5">
+              {{
+                campaign.characters.filter(
+                  (character) =>
+                    character.is_active && character.is_player_character,
+                ).length
+              }}
+            </div></v-card-text
+          ></v-card
+        ></v-col
+      >
+      <v-col cols="12" md="6"
+        ><v-card
+          ><v-card-text
+            ><div class="text-overline">Party coin</div>
+            {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp
+            · {{ campaign.party_money.ep }} ep ·
+            {{ campaign.party_money.sp }} sp ·
+            {{ campaign.party_money.cp }} cp</v-card-text
+          ></v-card
+        ></v-col
+      >
+    </v-row>
+    <div class="text-overline text-secondary mb-2">GM actions</div>
     <v-row>
       <v-col cols="12" md="6"
-        ><v-card class="pa-4 h-100" color="surface"
+        ><v-card class="pa-2 h-100" color="surface"
           ><v-card-title class="text-h5"
             ><v-icon color="primary" class="mr-2">mdi-star-four-points</v-icon
             >Give shared XP</v-card-title
@@ -197,7 +238,7 @@ onMounted(async () => {
         ></v-col
       >
       <v-col cols="12" md="6"
-        ><v-card class="pa-4 h-100" color="surface"
+        ><v-card class="pa-2 h-100" color="surface"
           ><v-card-title class="text-h5"
             ><v-icon color="primary" class="mr-2">mdi-gift</v-icon>Give
             item</v-card-title
@@ -238,7 +279,7 @@ onMounted(async () => {
         ></v-col
       >
       <v-col cols="12" md="6"
-        ><v-card class="pa-4 h-100" color="surface"
+        ><v-card class="pa-2 h-100" color="surface"
           ><v-card-title class="text-h5"
             ><v-icon color="error" class="mr-2"
               >mdi-package-variant-remove</v-icon
@@ -281,7 +322,7 @@ onMounted(async () => {
         ></v-col
       >
       <v-col cols="12" md="6"
-        ><v-card class="pa-4 h-100" color="surface"
+        ><v-card class="pa-2 h-100" color="surface"
           ><v-card-title class="text-h5"
             ><v-icon color="primary" class="mr-2">mdi-coins</v-icon>Give or take
             coins</v-card-title

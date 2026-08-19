@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from django.contrib import admin
 from django import forms
+from django.contrib import admin
 from django.forms.models import BaseModelForm
 from django.http import HttpRequest
 

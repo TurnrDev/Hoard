@@ -10,7 +10,6 @@ from django.core.management.base import BaseCommand, CommandError
 
 from hoard.campaigns.models import InventoryItem
 
-
 SOURCE_REPOSITORY = "https://github.com/blastervla/rpg-companion-app-systems"
 SYSTEMS = ("5e", "5e2024")
 EQUIPMENT_RESOURCE_IDS = ("item", "weapon", "armor")

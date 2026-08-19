@@ -5,19 +5,14 @@ import {
   addMember,
   archiveCharacter,
   createCharacter,
-  createItem,
-  deleteItem,
   getCharacters,
   getCampaign,
-  getItems,
   getMembers,
   removeMember,
   updateMember,
-  updateItem,
   type Campaign,
   type CampaignMember,
   type Character,
-  type Item,
 } from "../api";
 
 const route = useRoute();
@@ -25,13 +20,9 @@ const router = useRouter();
 const campaignId = Number(route.params.id);
 const campaign = ref<Campaign>();
 const members = ref<CampaignMember[]>([]);
-const items = ref<Item[]>([]);
 const characters = ref<Character[]>([]);
 const username = ref("");
 const makeGm = ref(false);
-const itemName = ref("");
-const itemDescription = ref("");
-const editingItem = ref<Item>();
 const characterName = ref("");
 const characterRace = ref("Human");
 const characterClass = ref("Fighter");
@@ -46,9 +37,8 @@ async function load(): Promise<void> {
       return;
     }
     campaign.value = next;
-    [members.value, items.value, characters.value] = await Promise.all([
+    [members.value, characters.value] = await Promise.all([
       getMembers(campaignId),
-      getItems(campaignId),
       getCharacters(campaignId),
     ]);
   } catch (exception) {
@@ -56,47 +46,6 @@ async function load(): Promise<void> {
       exception instanceof Error
         ? exception.message
         : "Unable to load campaign management.";
-  }
-}
-
-async function removeItem(item: Item): Promise<void> {
-  try {
-    await deleteItem(campaignId, item.id);
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to delete item.";
-  }
-}
-
-function editItem(item: Item): void {
-  editingItem.value = item;
-  itemName.value = item.name;
-  itemDescription.value = item.description;
-}
-
-async function saveItem(): Promise<void> {
-  if (!itemName.value.trim()) return;
-  try {
-    if (editingItem.value) {
-      await updateItem(campaignId, editingItem.value.id, {
-        name: itemName.value.trim(),
-        description: itemDescription.value,
-      });
-      editingItem.value = undefined;
-    } else {
-      await createItem(
-        campaignId,
-        itemName.value.trim(),
-        itemDescription.value,
-      );
-    }
-    itemName.value = "";
-    itemDescription.value = "";
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to save item.";
   }
 }
 
@@ -231,60 +180,16 @@ onMounted(load);
       </v-col>
       <v-col cols="12" md="5">
         <v-card>
-          <v-card-title>Item catalogue</v-card-title>
+          <v-card-title>Campaign tools</v-card-title>
           <v-card-text>
-            <v-form class="mb-4" @submit.prevent="saveItem">
-              <v-text-field
-                v-model="itemName"
-                :label="editingItem ? 'Item name' : 'Custom item name'"
-                hide-details
-                class="mb-2"
-              />
-              <v-textarea
-                v-model="itemDescription"
-                label="Description"
-                rows="2"
-                hide-details
-                class="mb-2"
-              />
-              <v-btn type="submit">{{
-                editingItem ? "Save item" : "Create item"
-              }}</v-btn>
-              <v-btn
-                v-if="editingItem"
-                class="ml-2"
-                variant="text"
-                @click="
-                  editingItem = undefined;
-                  itemName = '';
-                  itemDescription = '';
-                "
-                >Cancel</v-btn
-              >
-            </v-form>
-            <v-list density="compact">
-              <v-list-item
-                v-for="item in items"
-                :key="item.id"
-                :title="item.name"
-                :subtitle="item.is_imported ? 'Imported' : 'Campaign custom'"
-              >
-                <template #append>
-                  <v-btn
-                    v-if="!item.is_imported"
-                    icon="mdi-pencil"
-                    variant="text"
-                    @click="editItem(item)"
-                  />
-                  <v-btn
-                    v-if="!item.is_imported"
-                    icon="mdi-delete"
-                    variant="text"
-                    @click="removeItem(item)"
-                  />
-                </template>
-              </v-list-item>
-            </v-list>
+            <p class="mb-4">
+              Manage the campaign’s equipment in the dedicated compendium.
+            </p>
+            <v-btn
+              :to="`/c/${campaignId}/compendium`"
+              prepend-icon="mdi-book-open-variant"
+              >Open compendium</v-btn
+            >
           </v-card-text>
         </v-card>
       </v-col>

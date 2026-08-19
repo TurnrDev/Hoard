@@ -31,13 +31,11 @@ describe("API client", () => {
   });
 
   it("posts an inventory move to its concrete resource", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ id: 4, ledger: "inventory" }), {
-          status: 201,
-        }),
-      );
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 4, ledger: "inventory" }), {
+        status: 201,
+      }),
+    );
     vi.stubGlobal("fetch", fetch);
 
     await createInventoryTransaction(8, {

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from django.conf import settings
-from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render
 
 
 def frontend(request: HttpRequest) -> HttpResponse:
