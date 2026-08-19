@@ -145,13 +145,19 @@ export const addMember = (id: number, username: string, isGameMaster = false) =>
     method: "POST",
     body: JSON.stringify({ username, is_game_master: isGameMaster }),
   });
-export const updateMember = (campaignId: number, memberId: number, isGameMaster: boolean) =>
+export const updateMember = (
+  campaignId: number,
+  memberId: number,
+  isGameMaster: boolean,
+) =>
   request<CampaignMember>(`/api/campaigns/${campaignId}/members/${memberId}/`, {
     method: "PATCH",
     body: JSON.stringify({ is_game_master: isGameMaster }),
   });
 export const removeMember = (campaignId: number, memberId: number) =>
-  request<void>(`/api/campaigns/${campaignId}/members/${memberId}/`, { method: "DELETE" });
+  request<void>(`/api/campaigns/${campaignId}/members/${memberId}/`, {
+    method: "DELETE",
+  });
 export const createItem = (
   id: number,
   name: string,
@@ -165,10 +171,20 @@ export const createItem = (
 export const updateItem = (
   campaignId: number,
   itemId: number,
-  payload: { name?: string; description?: string; metadata?: Partial<EquipmentMetadata> },
-) => request<Item>(`/api/campaigns/${campaignId}/items/${itemId}/`, { method: "PATCH", body: JSON.stringify(payload) });
+  payload: {
+    name?: string;
+    description?: string;
+    metadata?: Partial<EquipmentMetadata>;
+  },
+) =>
+  request<Item>(`/api/campaigns/${campaignId}/items/${itemId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 export const deleteItem = (campaignId: number, itemId: number) =>
-  request<void>(`/api/campaigns/${campaignId}/items/${itemId}/`, { method: "DELETE" });
+  request<void>(`/api/campaigns/${campaignId}/items/${itemId}/`, {
+    method: "DELETE",
+  });
 export const getCharacters = (campaignId: number) =>
   request<Character[]>(`/api/campaigns/${campaignId}/characters/`);
 export const getMyCharacters = (campaignId: number) =>
@@ -176,37 +192,107 @@ export const getMyCharacters = (campaignId: number) =>
 export const createCharacter = (
   campaignId: number,
   payload: {
-    name: string; race: string; character_class: string;
-    strength: number; dexterity: number; constitution: number;
-    intelligence: number; wisdom: number; charisma: number;
+    name: string;
+    race: string;
+    character_class: string;
+    strength: number;
+    dexterity: number;
+    constitution: number;
+    intelligence: number;
+    wisdom: number;
+    charisma: number;
     player_id?: number | null;
   },
-) => request<Character>(`/api/campaigns/${campaignId}/characters/`, { method: "POST", body: JSON.stringify(payload) });
+) =>
+  request<Character>(`/api/campaigns/${campaignId}/characters/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 export const archiveCharacter = (campaignId: number, characterId: number) =>
-  request<Character>(`/api/campaigns/${campaignId}/characters/${characterId}/`, { method: "DELETE" });
+  request<Character>(
+    `/api/campaigns/${campaignId}/characters/${characterId}/`,
+    { method: "DELETE" },
+  );
 export const updateCharacter = (
   campaignId: number,
   characterId: number,
-  payload: Partial<Pick<Character, "name" | "race" | "class" | "is_active" | "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma">>,
+  payload: Partial<
+    Pick<
+      Character,
+      | "name"
+      | "race"
+      | "class"
+      | "is_active"
+      | "strength"
+      | "dexterity"
+      | "constitution"
+      | "intelligence"
+      | "wisdom"
+      | "charisma"
+    >
+  >,
 ) => {
   const { class: characterClass, ...fields } = payload;
-  return request<Character>(`/api/campaigns/${campaignId}/characters/${characterId}/`, {
-    method: "PATCH",
-    body: JSON.stringify({ ...fields, character_class: characterClass }),
-  });
+  return request<Character>(
+    `/api/campaigns/${campaignId}/characters/${characterId}/`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ...fields, character_class: characterClass }),
+    },
+  );
 };
-export type InventoryTransactionInput = { from_character_id: number | null; to_character_id: number | null; item_id: number; quantity: number; description?: string };
-export type MoneyTransferInput = { from_character_id: number | null; to_character_id: number | null; amounts: Record<string, number>; description?: string };
-export type MoneyExchangeInput = { character_id: number; given: Record<string, number>; received: Record<string, number>; description?: string };
+export type InventoryTransactionInput = {
+  from_character_id: number | null;
+  to_character_id: number | null;
+  item_id: number;
+  quantity: number;
+  description?: string;
+};
+export type MoneyTransferInput = {
+  from_character_id: number | null;
+  to_character_id: number | null;
+  amounts: Record<string, number>;
+  description?: string;
+};
+export type MoneyExchangeInput = {
+  character_id: number;
+  given: Record<string, number>;
+  received: Record<string, number>;
+  description?: string;
+};
 
-export const createInventoryTransaction = (campaignId: number, payload: InventoryTransactionInput) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/inventory-transactions/`, { method: "POST", body: JSON.stringify(payload) });
-export const createMoneyTransfer = (campaignId: number, payload: MoneyTransferInput) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/money-transfers/`, { method: "POST", body: JSON.stringify(payload) });
-export const createMoneyExchange = (campaignId: number, payload: MoneyExchangeInput) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/money-exchanges/`, { method: "POST", body: JSON.stringify(payload) });
-export const createSharedXpAward = (campaignId: number, payload: { amount: number; description?: string }) =>
-  request<LedgerTransaction>(`/api/campaigns/${campaignId}/shared-xp-awards/`, { method: "POST", body: JSON.stringify(payload) });
+export const createInventoryTransaction = (
+  campaignId: number,
+  payload: InventoryTransactionInput,
+) =>
+  request<LedgerTransaction>(
+    `/api/campaigns/${campaignId}/inventory-transactions/`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+export const createMoneyTransfer = (
+  campaignId: number,
+  payload: MoneyTransferInput,
+) =>
+  request<LedgerTransaction>(`/api/campaigns/${campaignId}/money-transfers/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+export const createMoneyExchange = (
+  campaignId: number,
+  payload: MoneyExchangeInput,
+) =>
+  request<LedgerTransaction>(`/api/campaigns/${campaignId}/money-exchanges/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+export const createSharedXpAward = (
+  campaignId: number,
+  payload: { amount: number; description?: string },
+) =>
+  request<LedgerTransaction>(`/api/campaigns/${campaignId}/shared-xp-awards/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 export const getTransactions = (campaignId: number, ledger = "all", page = 1) =>
   request<{
     count: number;

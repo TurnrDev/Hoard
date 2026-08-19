@@ -15,17 +15,22 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
-FRONTEND_DIST_DIR: Path = BASE_DIR / 'frontend' / 'dist'
+FRONTEND_DIST_DIR: Path = BASE_DIR / "frontend" / "dist"
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY: str = 'django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m'
+SECRET_KEY: str = "django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG: bool = os.environ.get('DJANGO_DEBUG', 'true').lower() in {'1', 'true', 'yes', 'on'}
+DEBUG: bool = os.environ.get("DJANGO_DEBUG", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 ALLOWED_HOSTS: list[str] = []
 
@@ -33,58 +38,58 @@ ALLOWED_HOSTS: list[str] = []
 # Application definition
 
 INSTALLED_APPS: list[str] = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.postgres',
-    'django.contrib.staticfiles',
-    'django_vite',
-    'hoard.campaigns',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.postgres",
+    "django.contrib.staticfiles",
+    "django_vite",
+    "hoard.campaigns",
 ]
 
 MIDDLEWARE: list[str] = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF: str = 'hoard.urls'
+ROOT_URLCONF: str = "hoard.urls"
 
 TEMPLATES: list[dict[str, object]] = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'hoard' / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "hoard" / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION: str = 'hoard.wsgi.application'
+WSGI_APPLICATION: str = "hoard.wsgi.application"
 
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
 DATABASES: dict[str, dict[str, str]] = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'hoard'),
-        'USER': os.environ.get('POSTGRES_USER', 'hoard'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'hoard'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "hoard"),
+        "USER": os.environ.get("POSTGRES_USER", "hoard"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "hoard"),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
 
@@ -94,16 +99,16 @@ DATABASES: dict[str, dict[str, str]] = {
 
 AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -111,9 +116,9 @@ AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE: str = 'en-us'
+LANGUAGE_CODE: str = "en-us"
 
-TIME_ZONE: str = 'UTC'
+TIME_ZONE: str = "UTC"
 
 USE_I18N: bool = True
 
@@ -123,15 +128,15 @@ USE_TZ: bool = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL: str = 'static/'
+STATIC_URL: str = "static/"
 STATICFILES_DIRS: list[Path] = [FRONTEND_DIST_DIR]
-STATIC_ROOT: Path = BASE_DIR / 'staticfiles'
+STATIC_ROOT: Path = BASE_DIR / "staticfiles"
 
 DJANGO_VITE: dict[str, dict[str, object]] = {
-    'default': {
-        'dev_mode': DEBUG,
-        'dev_server_port': 5173,
-        'manifest_path': FRONTEND_DIST_DIR / '.vite' / 'manifest.json',
+    "default": {
+        "dev_mode": DEBUG,
+        "dev_server_port": 5173,
+        "manifest_path": FRONTEND_DIST_DIR / ".vite" / "manifest.json",
     },
 }
 
@@ -139,7 +144,7 @@ DJANGO_VITE: dict[str, dict[str, object]] = {
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
 MAILERS: dict[str, dict[str, str]] = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+    "default": {
+        "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }

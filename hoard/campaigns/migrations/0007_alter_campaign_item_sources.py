@@ -7,15 +7,15 @@ import hoard.campaigns.models.core
 
 
 class Migration(migrations.Migration):
-    dependencies = [('campaigns', '0006_api_lifecycle_fields')]
+    dependencies = [("campaigns", "0006_api_lifecycle_fields")]
 
     operations = [
         migrations.AlterField(
-            model_name='campaign',
-            name='item_sources',
+            model_name="campaign",
+            name="item_sources",
             field=django.contrib.postgres.fields.ArrayField(
                 base_field=models.CharField(
-                    choices=[('5e', 'D&D 5e'), ('5e2024', 'D&D 5e (2024)')],
+                    choices=[("5e", "D&D 5e"), ("5e2024", "D&D 5e (2024)")],
                     max_length=10,
                 ),
                 default=hoard.campaigns.models.core.default_item_sources,

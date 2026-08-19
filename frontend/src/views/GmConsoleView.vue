@@ -84,9 +84,15 @@ async function previewXp(): Promise<void> {
     xpPreview.value = undefined;
     return;
   }
-  const recipients = campaign.value?.characters.filter((character) => character.is_active && character.is_player_character).length ?? 0;
-  xpPreview.value = recipients ? Math.floor(xpAmount.value / recipients) : undefined;
-  if (!recipients) previewError.value = "No active player characters can receive XP.";
+  const recipients =
+    campaign.value?.characters.filter(
+      (character) => character.is_active && character.is_player_character,
+    ).length ?? 0;
+  xpPreview.value = recipients
+    ? Math.floor(xpAmount.value / recipients)
+    : undefined;
+  if (!recipients)
+    previewError.value = "No active player characters can receive XP.";
 }
 
 watch(xpAmount, () => {
@@ -178,7 +184,10 @@ onMounted(async () => {
               size="large"
               @click="
                 postIntent(
-                  createSharedXpAward(campaignId, { amount: xpAmount, description }),
+                  createSharedXpAward(campaignId, {
+                    amount: xpAmount,
+                    description,
+                  }),
                   'Shared XP awarded.',
                 )
               "
@@ -213,7 +222,13 @@ onMounted(async () => {
               :disabled="!characterId || !itemId"
               @click="
                 postIntent(
-                  createInventoryTransaction(campaignId, { from_character_id: null, to_character_id: characterId ?? null, item_id: itemId ?? 0, quantity, description }),
+                  createInventoryTransaction(campaignId, {
+                    from_character_id: null,
+                    to_character_id: characterId ?? null,
+                    item_id: itemId ?? 0,
+                    quantity,
+                    description,
+                  }),
                   'Item granted.',
                 )
               "
@@ -250,7 +265,13 @@ onMounted(async () => {
               :disabled="!characterId || !takeItemId"
               @click="
                 postIntent(
-                  createInventoryTransaction(campaignId, { from_character_id: characterId ?? null, to_character_id: null, item_id: takeItemId ?? 0, quantity, description }),
+                  createInventoryTransaction(campaignId, {
+                    from_character_id: characterId ?? null,
+                    to_character_id: null,
+                    item_id: takeItemId ?? 0,
+                    quantity,
+                    description,
+                  }),
                   'Item returned to the system account.',
                 )
               "
@@ -287,7 +308,12 @@ onMounted(async () => {
                 :disabled="!characterId"
                 @click="
                   postIntent(
-                    createMoneyTransfer(campaignId, { from_character_id: null, to_character_id: characterId ?? null, amounts: { [coinDenomination]: coinAmount }, description }),
+                    createMoneyTransfer(campaignId, {
+                      from_character_id: null,
+                      to_character_id: characterId ?? null,
+                      amounts: { [coinDenomination]: coinAmount },
+                      description,
+                    }),
                     'Coins granted.',
                   )
                 "
@@ -299,7 +325,12 @@ onMounted(async () => {
                 :disabled="!characterId"
                 @click="
                   postIntent(
-                    createMoneyTransfer(campaignId, { from_character_id: characterId ?? null, to_character_id: null, amounts: { [coinDenomination]: coinAmount }, description }),
+                    createMoneyTransfer(campaignId, {
+                      from_character_id: characterId ?? null,
+                      to_character_id: null,
+                      amounts: { [coinDenomination]: coinAmount },
+                      description,
+                    }),
                     'Coins taken.',
                   )
                 "

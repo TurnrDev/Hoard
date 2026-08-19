@@ -5,57 +5,76 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('campaigns', '0002_alter_experienceaccount_character_and_more'),
+        ("campaigns", "0002_alter_experienceaccount_character_and_more"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='inventoryitem',
-            name='unique_inventory_item_name_per_campaign',
+            model_name="inventoryitem",
+            name="unique_inventory_item_name_per_campaign",
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='created_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_inventory_items', to='campaigns.player'),
+            model_name="inventoryitem",
+            name="created_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="created_inventory_items",
+                to="campaigns.player",
+            ),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='source_data',
+            model_name="inventoryitem",
+            name="source_data",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='source_identifier',
+            model_name="inventoryitem",
+            name="source_identifier",
             field=models.CharField(blank=True, max_length=200),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='source_repository',
+            model_name="inventoryitem",
+            name="source_repository",
             field=models.URLField(blank=True),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='source_system',
+            model_name="inventoryitem",
+            name="source_system",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='player',
-            name='is_game_master',
+            model_name="player",
+            name="is_game_master",
             field=models.BooleanField(default=False),
         ),
         migrations.AlterField(
-            model_name='inventoryitem',
-            name='campaign',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='inventory_items', to='campaigns.campaign'),
+            model_name="inventoryitem",
+            name="campaign",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="inventory_items",
+                to="campaigns.campaign",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='inventoryitem',
-            constraint=models.UniqueConstraint(condition=models.Q(('campaign__isnull', False)), fields=('campaign', 'name'), name='unique_inventory_item_name_per_campaign'),
+            model_name="inventoryitem",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("campaign__isnull", False)),
+                fields=("campaign", "name"),
+                name="unique_inventory_item_name_per_campaign",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='inventoryitem',
-            constraint=models.UniqueConstraint(condition=models.Q(('source_identifier__gt', '')), fields=('source_repository', 'source_system', 'source_identifier'), name='unique_imported_inventory_item_source'),
+            model_name="inventoryitem",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("source_identifier__gt", "")),
+                fields=("source_repository", "source_system", "source_identifier"),
+                name="unique_imported_inventory_item_source",
+            ),
         ),
     ]

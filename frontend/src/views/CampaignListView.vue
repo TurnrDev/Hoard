@@ -10,8 +10,9 @@ onMounted(async () => {
   try {
     campaigns.value = await getCampaigns();
     const saved = Number(localStorage.getItem("hoard:last-campaign"));
-    const target = campaigns.value.find((campaign) => campaign.id === saved)
-      ?? (campaigns.value.length === 1 ? campaigns.value[0] : undefined);
+    const target =
+      campaigns.value.find((campaign) => campaign.id === saved) ??
+      (campaigns.value.length === 1 ? campaigns.value[0] : undefined);
     if (target) await router.replace(`/c/${target.id}`);
   } catch (exception) {
     error.value = String(exception);

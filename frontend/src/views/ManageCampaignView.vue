@@ -52,7 +52,10 @@ async function load(): Promise<void> {
       getCharacters(campaignId),
     ]);
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to load campaign management.";
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to load campaign management.";
   }
 }
 
@@ -61,7 +64,8 @@ async function removeItem(item: Item): Promise<void> {
     await deleteItem(campaignId, item.id);
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to delete item.";
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to delete item.";
   }
 }
 
@@ -75,16 +79,24 @@ async function saveItem(): Promise<void> {
   if (!itemName.value.trim()) return;
   try {
     if (editingItem.value) {
-      await updateItem(campaignId, editingItem.value.id, { name: itemName.value.trim(), description: itemDescription.value });
+      await updateItem(campaignId, editingItem.value.id, {
+        name: itemName.value.trim(),
+        description: itemDescription.value,
+      });
       editingItem.value = undefined;
     } else {
-      await createItem(campaignId, itemName.value.trim(), itemDescription.value);
+      await createItem(
+        campaignId,
+        itemName.value.trim(),
+        itemDescription.value,
+      );
     }
     itemName.value = "";
     itemDescription.value = "";
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to save item.";
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to save item.";
   }
 }
 
@@ -92,15 +104,22 @@ async function createNpc(): Promise<void> {
   if (!characterName.value.trim()) return;
   try {
     await createCharacter(campaignId, {
-      name: characterName.value.trim(), race: characterRace.value,
-      character_class: characterClass.value, strength: 10, dexterity: 10,
-      constitution: 10, intelligence: 10, wisdom: 10, charisma: 10,
+      name: characterName.value.trim(),
+      race: characterRace.value,
+      character_class: characterClass.value,
+      strength: 10,
+      dexterity: 10,
+      constitution: 10,
+      intelligence: 10,
+      wisdom: 10,
+      charisma: 10,
       player_id: null,
     });
     characterName.value = "";
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to create NPC.";
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to create NPC.";
   }
 }
 
@@ -109,7 +128,10 @@ async function archive(character: Character): Promise<void> {
     await archiveCharacter(campaignId, character.id);
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to archive character.";
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to archive character.";
   }
 }
 
@@ -122,7 +144,8 @@ async function createMember(): Promise<void> {
     makeGm.value = false;
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to add member.";
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to add member.";
   } finally {
     busy.value = false;
   }
@@ -133,7 +156,10 @@ async function toggleGm(member: CampaignMember): Promise<void> {
     await updateMember(campaignId, member.id, !member.is_game_master);
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to update member.";
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to update member.";
   }
 }
 
@@ -142,7 +168,10 @@ async function deactivate(member: CampaignMember): Promise<void> {
     await removeMember(campaignId, member.id);
     await load();
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to remove member.";
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to remove member.";
   }
 }
 
@@ -153,9 +182,13 @@ onMounted(load);
   <v-container style="max-width: 1100px">
     <div class="d-flex align-center justify-space-between mb-6">
       <h1 class="text-h4">{{ campaign?.name }} management</h1>
-      <v-btn :to="`/c/${campaignId}`" prepend-icon="mdi-arrow-left">Campaign</v-btn>
+      <v-btn :to="`/c/${campaignId}`" prepend-icon="mdi-arrow-left"
+        >Campaign</v-btn
+      >
     </div>
-    <v-alert v-if="error" type="error" closable @click:close="error = ''">{{ error }}</v-alert>
+    <v-alert v-if="error" type="error" closable @click:close="error = ''">{{
+      error
+    }}</v-alert>
 
     <v-row>
       <v-col cols="12" md="7">
@@ -170,10 +203,26 @@ onMounted(load);
             <v-list>
               <v-list-item v-for="member in members" :key="member.id">
                 <v-list-item-title>{{ member.username }}</v-list-item-title>
-                <v-list-item-subtitle>{{ member.is_active ? (member.is_game_master ? 'Game master' : 'Player') : 'Inactive' }}</v-list-item-subtitle>
+                <v-list-item-subtitle>{{
+                  member.is_active
+                    ? member.is_game_master
+                      ? "Game master"
+                      : "Player"
+                    : "Inactive"
+                }}</v-list-item-subtitle>
                 <template #append>
-                  <v-btn icon="mdi-shield-account" variant="text" :disabled="!member.is_active" @click="toggleGm(member)" />
-                  <v-btn icon="mdi-account-remove" variant="text" :disabled="!member.is_active" @click="deactivate(member)" />
+                  <v-btn
+                    icon="mdi-shield-account"
+                    variant="text"
+                    :disabled="!member.is_active"
+                    @click="toggleGm(member)"
+                  />
+                  <v-btn
+                    icon="mdi-account-remove"
+                    variant="text"
+                    :disabled="!member.is_active"
+                    @click="deactivate(member)"
+                  />
                 </template>
               </v-list-item>
             </v-list>
@@ -185,16 +234,54 @@ onMounted(load);
           <v-card-title>Item catalogue</v-card-title>
           <v-card-text>
             <v-form class="mb-4" @submit.prevent="saveItem">
-              <v-text-field v-model="itemName" :label="editingItem ? 'Item name' : 'Custom item name'" hide-details class="mb-2" />
-              <v-textarea v-model="itemDescription" label="Description" rows="2" hide-details class="mb-2" />
-              <v-btn type="submit">{{ editingItem ? 'Save item' : 'Create item' }}</v-btn>
-              <v-btn v-if="editingItem" class="ml-2" variant="text" @click="editingItem = undefined; itemName = ''; itemDescription = ''">Cancel</v-btn>
+              <v-text-field
+                v-model="itemName"
+                :label="editingItem ? 'Item name' : 'Custom item name'"
+                hide-details
+                class="mb-2"
+              />
+              <v-textarea
+                v-model="itemDescription"
+                label="Description"
+                rows="2"
+                hide-details
+                class="mb-2"
+              />
+              <v-btn type="submit">{{
+                editingItem ? "Save item" : "Create item"
+              }}</v-btn>
+              <v-btn
+                v-if="editingItem"
+                class="ml-2"
+                variant="text"
+                @click="
+                  editingItem = undefined;
+                  itemName = '';
+                  itemDescription = '';
+                "
+                >Cancel</v-btn
+              >
             </v-form>
             <v-list density="compact">
-              <v-list-item v-for="item in items" :key="item.id" :title="item.name" :subtitle="item.is_imported ? 'Imported' : 'Campaign custom'">
+              <v-list-item
+                v-for="item in items"
+                :key="item.id"
+                :title="item.name"
+                :subtitle="item.is_imported ? 'Imported' : 'Campaign custom'"
+              >
                 <template #append>
-                  <v-btn v-if="!item.is_imported" icon="mdi-pencil" variant="text" @click="editItem(item)" />
-                  <v-btn v-if="!item.is_imported" icon="mdi-delete" variant="text" @click="removeItem(item)" />
+                  <v-btn
+                    v-if="!item.is_imported"
+                    icon="mdi-pencil"
+                    variant="text"
+                    @click="editItem(item)"
+                  />
+                  <v-btn
+                    v-if="!item.is_imported"
+                    icon="mdi-delete"
+                    variant="text"
+                    @click="removeItem(item)"
+                  />
                 </template>
               </v-list-item>
             </v-list>
@@ -205,15 +292,43 @@ onMounted(load);
         <v-card>
           <v-card-title>Characters</v-card-title>
           <v-card-text>
-            <v-form class="d-flex flex-wrap ga-2 mb-4" @submit.prevent="createNpc">
-              <v-text-field v-model="characterName" label="NPC name" hide-details />
+            <v-form
+              class="d-flex flex-wrap ga-2 mb-4"
+              @submit.prevent="createNpc"
+            >
+              <v-text-field
+                v-model="characterName"
+                label="NPC name"
+                hide-details
+              />
               <v-text-field v-model="characterRace" label="Race" hide-details />
-              <v-text-field v-model="characterClass" label="Class" hide-details />
+              <v-text-field
+                v-model="characterClass"
+                label="Class"
+                hide-details
+              />
               <v-btn type="submit">Create NPC</v-btn>
             </v-form>
             <v-list density="compact">
-              <v-list-item v-for="character in characters" :key="character.id" :title="character.name" :subtitle="character.is_archived ? 'Archived' : (character.is_active ? 'Active' : 'Inactive')">
-                <template #append><v-btn v-if="!character.is_archived" icon="mdi-archive" variant="text" @click="archive(character)" /></template>
+              <v-list-item
+                v-for="character in characters"
+                :key="character.id"
+                :title="character.name"
+                :subtitle="
+                  character.is_archived
+                    ? 'Archived'
+                    : character.is_active
+                      ? 'Active'
+                      : 'Inactive'
+                "
+              >
+                <template #append
+                  ><v-btn
+                    v-if="!character.is_archived"
+                    icon="mdi-archive"
+                    variant="text"
+                    @click="archive(character)"
+                /></template>
               </v-list-item>
             </v-list>
           </v-card-text>

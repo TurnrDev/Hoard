@@ -9,10 +9,12 @@ from .helpers import make_character
 
 class SharedExperienceTests(TestCase):
     def setUp(self) -> None:
-        self.campaign = Campaign.objects.create(name='Hoard')
+        self.campaign = Campaign.objects.create(name="Hoard")
 
     def test_dry_run_returns_share_without_side_effects(self) -> None:
-        recipients = [make_character(self.campaign, f'Hero {index}') for index in range(5)]
+        recipients = [
+            make_character(self.campaign, f"Hero {index}") for index in range(5)
+        ]
         for character in recipients:
             character.activate()
         self.assertEqual(self.campaign.award_shared_experience(11, dry_run=True), 2)
@@ -25,11 +27,13 @@ class SharedExperienceTests(TestCase):
         award = ExperienceTransaction.objects.get()
         self.assertEqual(award.discarded_amount, 1)
 
-    def test_active_player_characters_only_receive_xp_and_late_joiners_catch_up(self) -> None:
-        active = make_character(self.campaign, 'Active')
+    def test_active_player_characters_only_receive_xp_and_late_joiners_catch_up(
+        self,
+    ) -> None:
+        active = make_character(self.campaign, "Active")
         active.activate()
-        inactive = make_character(self.campaign, 'Inactive')
-        npc = make_character(self.campaign, 'NPC', active=True, player=False)
+        inactive = make_character(self.campaign, "Inactive")
+        npc = make_character(self.campaign, "NPC", active=True, player=False)
         self.campaign.award_shared_experience(10)
         self.assertEqual(active.experience, 10)
         self.assertEqual(inactive.experience, 0)

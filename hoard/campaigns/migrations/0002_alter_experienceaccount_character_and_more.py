@@ -5,25 +5,42 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('campaigns', '0001_initial'),
+        ("campaigns", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='experienceaccount',
-            name='character',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='experience_ledger_account', to='campaigns.character'),
+            model_name="experienceaccount",
+            name="character",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="experience_ledger_account",
+                to="campaigns.character",
+            ),
         ),
         migrations.AlterField(
-            model_name='inventoryaccount',
-            name='character',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='inventory_ledger_account', to='campaigns.character'),
+            model_name="inventoryaccount",
+            name="character",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="inventory_ledger_account",
+                to="campaigns.character",
+            ),
         ),
         migrations.AlterField(
-            model_name='moneyaccount',
-            name='character',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='money_ledger_account', to='campaigns.character'),
+            model_name="moneyaccount",
+            name="character",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="money_ledger_account",
+                to="campaigns.character",
+            ),
         ),
     ]

@@ -12,10 +12,18 @@ class InventoryItem(models.Model):
     created_by_id: int | None
 
     campaign = models.ForeignKey(
-        'campaigns.Campaign', null=True, blank=True, on_delete=models.CASCADE, related_name='inventory_items'
+        "campaigns.Campaign",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="inventory_items",
     )
     created_by = models.ForeignKey(
-        'campaigns.Player', null=True, blank=True, on_delete=models.SET_NULL, related_name='created_inventory_items'
+        "campaigns.Player",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_inventory_items",
     )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -25,9 +33,13 @@ class InventoryItem(models.Model):
     equipment_category = models.CharField(max_length=20, blank=True)
     item_type = models.CharField(max_length=100, blank=True)
     source_identifier = models.CharField(max_length=200, blank=True)
-    cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
     cost_currency = models.CharField(max_length=3, blank=True)
-    weight_amount = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    weight_amount = models.DecimalField(
+        max_digits=10, decimal_places=3, null=True, blank=True
+    )
     weight_unit = models.CharField(max_length=20, blank=True)
     rarity = models.CharField(max_length=50, blank=True)
     is_magic = models.BooleanField(null=True, blank=True)
@@ -37,14 +49,19 @@ class InventoryItem(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=('campaign', 'name'),
+                fields=("campaign", "name"),
                 condition=Q(campaign__isnull=False),
-                name='unique_inventory_item_name_per_campaign',
+                name="unique_inventory_item_name_per_campaign",
             ),
             models.UniqueConstraint(
-                fields=('source_repository', 'source_system', 'equipment_category', 'source_identifier'),
-                condition=Q(source_identifier__gt=''),
-                name='unique_imported_equipment_source',
+                fields=(
+                    "source_repository",
+                    "source_system",
+                    "equipment_category",
+                    "source_identifier",
+                ),
+                condition=Q(source_identifier__gt=""),
+                name="unique_imported_equipment_source",
             ),
         ]
 
@@ -53,14 +70,30 @@ class InventoryItem(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        if self.created_by_id and (self.campaign_id is None or self.created_by.campaign_id != self.campaign_id):
-            raise ValidationError({'created_by': 'Custom item creators must belong to the item campaign.'})
+        if self.created_by_id and (
+            self.campaign_id is None or self.created_by.campaign_id != self.campaign_id
+        ):
+            raise ValidationError(
+                {"created_by": "Custom item creators must belong to the item campaign."}
+            )
         if (self.cost_amount is None) == bool(self.cost_currency):
-            raise ValidationError({'cost_currency': 'Cost amount and currency must be supplied together.'})
-        if self.cost_currency and self.cost_currency not in {'cp', 'sp', 'ep', 'gp', 'pp'}:
-            raise ValidationError({'cost_currency': 'Currency must be cp, sp, ep, gp, or pp.'})
+            raise ValidationError(
+                {"cost_currency": "Cost amount and currency must be supplied together."}
+            )
+        if self.cost_currency and self.cost_currency not in {
+            "cp",
+            "sp",
+            "ep",
+            "gp",
+            "pp",
+        }:
+            raise ValidationError(
+                {"cost_currency": "Currency must be cp, sp, ep, gp, or pp."}
+            )
         if (self.weight_amount is None) == bool(self.weight_unit):
-            raise ValidationError({'weight_unit': 'Weight amount and unit must be supplied together.'})
+            raise ValidationError(
+                {"weight_unit": "Weight amount and unit must be supplied together."}
+            )
 
     @property
     def is_imported(self) -> bool:
@@ -71,16 +104,33 @@ class InventoryAccount(models.Model):
     campaign_id: int
     character_id: int | None
 
-    campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE, related_name='inventory_accounts')
-    character = models.OneToOneField('campaigns.Character', null=True, blank=True, on_delete=models.CASCADE, related_name='inventory_ledger_account')
+    campaign = models.ForeignKey(
+        "campaigns.Campaign",
+        on_delete=models.CASCADE,
+        related_name="inventory_accounts",
+    )
+    character = models.OneToOneField(
+        "campaigns.Character",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="inventory_ledger_account",
+    )
     is_system = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=('campaign',), condition=Q(is_system=True), name='one_system_inventory_account_per_campaign'),
+            models.UniqueConstraint(
+                fields=("campaign",),
+                condition=Q(is_system=True),
+                name="one_system_inventory_account_per_campaign",
+            ),
             models.CheckConstraint(
-                condition=(Q(is_system=True, character__isnull=True) | Q(is_system=False, character__isnull=False)),
-                name='inventory_account_system_or_character',
+                condition=(
+                    Q(is_system=True, character__isnull=True)
+                    | Q(is_system=False, character__isnull=False)
+                ),
+                name="inventory_account_system_or_character",
             ),
         ]
 
@@ -88,7 +138,9 @@ class InventoryAccount(models.Model):
 class InventoryTransaction(LedgerTransaction):
     reversal_of_id: int | None
 
-    reversal_of = models.OneToOneField('self', null=True, blank=True, on_delete=models.PROTECT, related_name='reversal')
+    reversal_of = models.OneToOneField(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversal"
+    )
 
 
 class InventoryEntry(ImmutableLedgerEntry):
@@ -96,9 +148,19 @@ class InventoryEntry(ImmutableLedgerEntry):
     account_id: int
     item_id: int
 
-    transaction = models.ForeignKey(InventoryTransaction, on_delete=models.PROTECT, related_name='entries')
-    account = models.ForeignKey(InventoryAccount, on_delete=models.PROTECT, related_name='entries')
-    item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='entries')
+    transaction = models.ForeignKey(
+        InventoryTransaction, on_delete=models.PROTECT, related_name="entries"
+    )
+    account = models.ForeignKey(
+        InventoryAccount, on_delete=models.PROTECT, related_name="entries"
+    )
+    item = models.ForeignKey(
+        InventoryItem, on_delete=models.PROTECT, related_name="entries"
+    )
 
     class Meta:
-        constraints = [models.CheckConstraint(condition=~Q(amount=0), name='inventory_entry_nonzero_amount')]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(amount=0), name="inventory_entry_nonzero_amount"
+            )
+        ]

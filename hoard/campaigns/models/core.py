@@ -13,12 +13,16 @@ from django.db.models import Q, Sum
 
 if TYPE_CHECKING:
     from hoard.campaigns.models.experience import ExperienceAccount
-    from hoard.campaigns.models.inventory import InventoryAccount, InventoryItem, InventoryTransaction
+    from hoard.campaigns.models.inventory import (
+        InventoryAccount,
+        InventoryItem,
+        InventoryTransaction,
+    )
     from hoard.campaigns.models.money import MoneyAccount, MoneyTransaction
     from hoard.campaigns.services.actions import CoinAmounts
 
 
-DEFAULT_ITEM_SOURCES: list[str] = ['5e', '5e2024']
+DEFAULT_ITEM_SOURCES: list[str] = ["5e", "5e2024"]
 
 
 def default_item_sources() -> list[str]:
@@ -32,7 +36,9 @@ class Campaign(models.Model):
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
     item_sources = ArrayField(
-        models.CharField(max_length=10, choices=(('5e', 'D&D 5e'), ('5e2024', 'D&D 5e (2024)'))),
+        models.CharField(
+            max_length=10, choices=(("5e", "D&D 5e"), ("5e2024", "D&D 5e (2024)"))
+        ),
         default=default_item_sources,
     )
 
@@ -57,39 +63,70 @@ class Campaign(models.Model):
 
         return system_account(ExperienceAccount, self)
 
-    def award_shared_experience(self, amount: int, description: str = '', dry_run: bool = False, created_by: Player | None = None, return_transaction: bool = False):
+    def award_shared_experience(
+        self,
+        amount: int,
+        description: str = "",
+        dry_run: bool = False,
+        created_by: Player | None = None,
+        return_transaction: bool = False,
+    ):
         from ..services.experience import award_shared_experience
 
-        return award_shared_experience(self, amount, description=description, dry_run=dry_run, created_by=created_by, return_transaction=return_transaction)
+        return award_shared_experience(
+            self,
+            amount,
+            description=description,
+            dry_run=dry_run,
+            created_by=created_by,
+            return_transaction=return_transaction,
+        )
 
     def __str__(self) -> str:
         return self.name
 
     def clean(self) -> None:
         super().clean()
-        allowed_sources = {'5e', '5e2024'}
+        allowed_sources = {"5e", "5e2024"}
         if (
             not isinstance(self.item_sources, list)
-            or any(not isinstance(source, str) or source not in allowed_sources for source in self.item_sources)
+            or any(
+                not isinstance(source, str) or source not in allowed_sources
+                for source in self.item_sources
+            )
             or len(self.item_sources) != len(set(self.item_sources))
         ):
-            raise ValidationError({'item_sources': 'Choose zero or more supported item sources: 5e, 5e2024.'})
+            raise ValidationError(
+                {
+                    "item_sources": "Choose zero or more supported item sources: 5e, 5e2024."
+                }
+            )
 
 
 class Player(models.Model):
     campaign_id: int
     user_id: int
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='players')
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='campaign_players')
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="players"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="campaign_players",
+    )
     is_game_master = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=('campaign', 'user'), name='unique_player_per_campaign')]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("campaign", "user"), name="unique_player_per_campaign"
+            )
+        ]
 
     def __str__(self) -> str:
-        return f'{self.user} in {self.campaign}'
+        return f"{self.user} in {self.campaign}"
 
 
 @dataclass(frozen=True)
@@ -115,8 +152,16 @@ class Character(models.Model):
     campaign_id: int
     player_id: int | None
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='characters')
-    player = models.ForeignKey(Player, null=True, blank=True, on_delete=models.SET_NULL, related_name='characters')
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="characters"
+    )
+    player = models.ForeignKey(
+        Player,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="characters",
+    )
     is_active = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
@@ -133,30 +178,43 @@ class Character(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=('campaign', 'player'),
+                fields=("campaign", "player"),
                 condition=Q(is_active=True, player__isnull=False),
-                name='one_active_character_per_player_per_campaign',
+                name="one_active_character_per_player_per_campaign",
             ),
         ]
 
     def clean(self) -> None:
         super().clean()
         if self.player_id and self.player.campaign_id != self.campaign_id:
-            raise ValidationError({'player': 'A player must belong to the same campaign as the character.'})
+            raise ValidationError(
+                {
+                    "player": "A player must belong to the same campaign as the character."
+                }
+            )
 
     @property
     def experience(self) -> int:
         from .experience import ExperienceEntry
 
-        return ExperienceEntry.objects.filter(account__character=self).aggregate(total=Sum('amount'))['total'] or 0
+        return (
+            ExperienceEntry.objects.filter(account__character=self).aggregate(
+                total=Sum("amount")
+            )["total"]
+            or 0
+        )
 
     @property
     def money(self) -> MoneyBalance:
         from .money import MoneyEntry
 
         totals = defaultdict(int)
-        for entry in MoneyEntry.objects.filter(account__character=self).values('denomination').annotate(total=Sum('amount')):
-            totals[entry['denomination']] = entry['total']
+        for entry in (
+            MoneyEntry.objects.filter(account__character=self)
+            .values("denomination")
+            .annotate(total=Sum("amount"))
+        ):
+            totals[entry["denomination"]] = entry["total"]
         return MoneyBalance(
             copper=totals[MoneyEntry.Denomination.COPPER],
             silver=totals[MoneyEntry.Denomination.SILVER],
@@ -171,46 +229,66 @@ class Character(models.Model):
 
         rows = (
             InventoryEntry.objects.filter(account__character=self)
-            .values('item_id')
-            .annotate(total=Sum('amount'))
+            .values("item_id")
+            .annotate(total=Sum("amount"))
             .filter(total__gt=0)
         )
-        items = InventoryItem.objects.in_bulk([row['item_id'] for row in rows])
-        return {items[row['item_id']]: row['total'] for row in rows}
+        items = InventoryItem.objects.in_bulk([row["item_id"] for row in rows])
+        return {items[row["item_id"]]: row["total"] for row in rows}
 
     def activate(self) -> Character:
         from ..services.experience import activate_character
 
         return activate_character(self)
 
-    def grant_loot(self, item: InventoryItem, quantity: int, description: str = '') -> InventoryTransaction:
+    def grant_loot(
+        self, item: InventoryItem, quantity: int, description: str = ""
+    ) -> InventoryTransaction:
         from ..services.actions import grant_loot
 
-        return grant_loot(recipient=self, item=item, quantity=quantity, description=description)
+        return grant_loot(
+            recipient=self, item=item, quantity=quantity, description=description
+        )
 
     def transfer_item(
-        self, recipient: Character, item: InventoryItem, quantity: int, description: str = ''
+        self,
+        recipient: Character,
+        item: InventoryItem,
+        quantity: int,
+        description: str = "",
     ) -> InventoryTransaction:
         from ..services.actions import transfer_item
 
-        return transfer_item(source=self, recipient=recipient, item=item, quantity=quantity, description=description)
+        return transfer_item(
+            source=self,
+            recipient=recipient,
+            item=item,
+            quantity=quantity,
+            description=description,
+        )
 
-    def grant_coins(self, coins: CoinAmounts, description: str = '') -> MoneyTransaction:
+    def grant_coins(
+        self, coins: CoinAmounts, description: str = ""
+    ) -> MoneyTransaction:
         from ..services.actions import grant_coins
 
         return grant_coins(recipient=self, coins=coins, description=description)
 
-    def spend_coins(self, coins: CoinAmounts, description: str = '') -> MoneyTransaction:
+    def spend_coins(
+        self, coins: CoinAmounts, description: str = ""
+    ) -> MoneyTransaction:
         from ..services.actions import spend_coins
 
         return spend_coins(spender=self, coins=coins, description=description)
 
     def exchange_coins(
-        self, given: CoinAmounts, received: CoinAmounts, description: str = ''
+        self, given: CoinAmounts, received: CoinAmounts, description: str = ""
     ) -> MoneyTransaction:
         from ..services.actions import exchange_coins
 
-        return exchange_coins(character=self, given=given, received=received, description=description)
+        return exchange_coins(
+            character=self, given=given, received=received, description=description
+        )
 
     def inventory_account(self) -> InventoryAccount:
         from ..services.ledger import character_account

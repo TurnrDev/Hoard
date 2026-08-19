@@ -5,18 +5,23 @@ import django.contrib.postgres.fields
 
 
 class Migration(migrations.Migration):
-    dependencies = [('campaigns', '0003_remove_inventoryitem_unique_inventory_item_name_per_campaign_and_more')]
+    dependencies = [
+        (
+            "campaigns",
+            "0003_remove_inventoryitem_unique_inventory_item_name_per_campaign_and_more",
+        )
+    ]
 
     operations = [
         migrations.AddField(
-            model_name='campaign',
-            name='item_sources',
+            model_name="campaign",
+            name="item_sources",
             field=django.contrib.postgres.fields.ArrayField(
                 base_field=models.CharField(
-                    choices=[('5e', 'D&D 5e'), ('5e2024', 'D&D 5e (2024)')],
+                    choices=[("5e", "D&D 5e"), ("5e2024", "D&D 5e (2024)")],
                     max_length=10,
                 ),
-                default=['5e', '5e2024'],
+                default=["5e", "5e2024"],
                 size=None,
             ),
         ),

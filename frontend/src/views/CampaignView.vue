@@ -121,10 +121,7 @@ async function submitItem(): Promise<void> {
 async function reverse(): Promise<void> {
   if (!transactionToReverse.value) return;
   try {
-    await reverseTransaction(
-      campaignId,
-      transactionToReverse.value,
-    );
+    await reverseTransaction(campaignId, transactionToReverse.value);
     reverseDialog.value = false;
     await refresh();
   } catch (exception) {
@@ -168,11 +165,18 @@ async function reverse(): Promise<void> {
             prepend-icon="mdi-controller"
             :to="`/c/${campaignId}/gm`"
             >GM controls</v-btn
-          ><v-btn prepend-icon="mdi-account" :to="`/c/${campaignId}/characters/me`"
+          ><v-btn
+            prepend-icon="mdi-account"
+            :to="`/c/${campaignId}/characters/me`"
             >My characters</v-btn
-          ><v-btn prepend-icon="mdi-swap-horizontal" :to="`/c/${campaignId}/actions`"
+          ><v-btn
+            prepend-icon="mdi-swap-horizontal"
+            :to="`/c/${campaignId}/actions`"
             >Character actions</v-btn
-          ><v-btn v-if="isGM" prepend-icon="mdi-cog" :to="`/c/${campaignId}/manage`"
+          ><v-btn
+            v-if="isGM"
+            prepend-icon="mdi-cog"
+            :to="`/c/${campaignId}/manage`"
             >Manage</v-btn
           ><v-btn
             prepend-icon="mdi-package-variant-plus"
@@ -216,7 +220,11 @@ async function reverse(): Promise<void> {
               ><div class="text-overline">Party money</div>
               <div class="text-h5">{{ campaign.party_money.gold_value }} ¤</div>
               <div class="text-caption">
-                {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp · {{ campaign.party_money.ep }} ep · {{ campaign.party_money.sp }} sp · {{ campaign.party_money.cp }} cp
+                {{ campaign.party_money.pp }} pp ·
+                {{ campaign.party_money.gp }} gp ·
+                {{ campaign.party_money.ep }} ep ·
+                {{ campaign.party_money.sp }} sp ·
+                {{ campaign.party_money.cp }} cp
               </div></v-card-text
             ></v-card
           ></v-col
@@ -248,7 +256,9 @@ async function reverse(): Promise<void> {
                       ><br /><span class="text-caption">XP</span></v-col
                     ><v-col cols="8"
                       ><strong>{{ character.money.pp }} pp</strong> ·
-                      {{ character.money.gp }} gp · {{ character.money.ep }} ep · {{ character.money.sp }} sp · {{ character.money.cp }} cp<br /><span
+                      {{ character.money.gp }} gp · {{ character.money.ep }} ep
+                      · {{ character.money.sp }} sp ·
+                      {{ character.money.cp }} cp<br /><span
                         class="text-caption"
                         >{{ character.money.gold_value }} gp total</span
                       ></v-col

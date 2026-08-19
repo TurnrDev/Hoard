@@ -31,9 +31,13 @@ describe("API client", () => {
   });
 
   it("posts an inventory move to its concrete resource", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 4, ledger: "inventory" }), { status: 201 }),
-    );
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 4, ledger: "inventory" }), {
+          status: 201,
+        }),
+      );
     vi.stubGlobal("fetch", fetch);
 
     await createInventoryTransaction(8, {
@@ -47,7 +51,12 @@ describe("API client", () => {
       "/api/campaigns/8/inventory-transactions/",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ from_character_id: 2, to_character_id: null, item_id: 3, quantity: 1 }),
+        body: JSON.stringify({
+          from_character_id: 2,
+          to_character_id: null,
+          item_id: 3,
+          quantity: 1,
+        }),
       }),
     );
   });

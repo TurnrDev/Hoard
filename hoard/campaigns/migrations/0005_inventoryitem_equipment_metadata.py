@@ -4,69 +4,78 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [('campaigns', '0004_campaign_item_source_settings')]
+    dependencies = [("campaigns", "0004_campaign_item_source_settings")]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='inventoryitem',
-            name='unique_imported_inventory_item_source',
+            model_name="inventoryitem",
+            name="unique_imported_inventory_item_source",
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='cost_amount',
-            field=models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True),
+            model_name="inventoryitem",
+            name="cost_amount",
+            field=models.DecimalField(
+                blank=True, decimal_places=2, max_digits=12, null=True
+            ),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='cost_currency',
+            model_name="inventoryitem",
+            name="cost_currency",
             field=models.CharField(blank=True, max_length=3),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='equipment_category',
+            model_name="inventoryitem",
+            name="equipment_category",
             field=models.CharField(blank=True, max_length=20),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='is_magic',
+            model_name="inventoryitem",
+            name="is_magic",
             field=models.BooleanField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='item_type',
+            model_name="inventoryitem",
+            name="item_type",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='rarity',
+            model_name="inventoryitem",
+            name="rarity",
             field=models.CharField(blank=True, max_length=50),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='requires_attunement',
+            model_name="inventoryitem",
+            name="requires_attunement",
             field=models.BooleanField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='source_book',
+            model_name="inventoryitem",
+            name="source_book",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='weight_amount',
-            field=models.DecimalField(blank=True, decimal_places=3, max_digits=10, null=True),
+            model_name="inventoryitem",
+            name="weight_amount",
+            field=models.DecimalField(
+                blank=True, decimal_places=3, max_digits=10, null=True
+            ),
         ),
         migrations.AddField(
-            model_name='inventoryitem',
-            name='weight_unit',
+            model_name="inventoryitem",
+            name="weight_unit",
             field=models.CharField(blank=True, max_length=20),
         ),
         migrations.AddConstraint(
-            model_name='inventoryitem',
+            model_name="inventoryitem",
             constraint=models.UniqueConstraint(
-                condition=models.Q(('source_identifier__gt', '')),
-                fields=('source_repository', 'source_system', 'equipment_category', 'source_identifier'),
-                name='unique_imported_equipment_source',
+                condition=models.Q(("source_identifier__gt", "")),
+                fields=(
+                    "source_repository",
+                    "source_system",
+                    "equipment_category",
+                    "source_identifier",
+                ),
+                name="unique_imported_equipment_source",
             ),
         ),
     ]

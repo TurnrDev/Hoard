@@ -20,14 +20,20 @@ def _post_experience_transaction(
     entries: list[ExperienceEntryInput],
     *,
     reason: ExperienceTransaction.Reason,
-    description: str = '',
+    description: str = "",
     requested_amount: int = 0,
     discarded_amount: int = 0,
     reversal_of: ExperienceTransaction | None = None,
     created_by=None,
 ) -> ExperienceTransaction:
-    if not entries or any(not amount for _, amount in entries) or sum(amount for _, amount in entries) != 0:
-        raise ValidationError('Experience transactions must contain non-zero entries that balance to zero.')
+    if (
+        not entries
+        or any(not amount for _, amount in entries)
+        or sum(amount for _, amount in entries) != 0
+    ):
+        raise ValidationError(
+            "Experience transactions must contain non-zero entries that balance to zero."
+        )
     campaign = entries[0][0].campaign
     _validate_campaign_scope(campaign, *(account for account, _ in entries[1:]))
     posted = ExperienceTransaction.objects.create(
@@ -39,44 +45,51 @@ def _post_experience_transaction(
         reversal_of=reversal_of,
         created_by=created_by,
     )
-    ExperienceEntry.objects.bulk_create([
-        ExperienceEntry(transaction=posted, account=account, amount=amount) for account, amount in entries
-    ])
+    ExperienceEntry.objects.bulk_create(
+        [
+            ExperienceEntry(transaction=posted, account=account, amount=amount)
+            for account, amount in entries
+        ]
+    )
     return posted
 
 
 def award_shared_experience(
     campaign: Campaign,
     amount: int,
-    description: str = '',
+    description: str = "",
     dry_run: bool = False,
     created_by=None,
     return_transaction: bool = False,
 ) -> int:
     """Award group XP and return the XP each eligible character would receive."""
     if amount <= 0:
-        raise ValidationError('XP awards must be positive.')
+        raise ValidationError("XP awards must be positive.")
 
     with transaction.atomic():
         campaign = Campaign.objects.select_for_update().get(pk=campaign.pk)
         if not campaign.use_shared_exp:
-            raise ValidationError('Individual XP awards are not implemented.')
+            raise ValidationError("Individual XP awards are not implemented.")
         recipients = list(
             Character.objects.select_for_update()
             .filter(campaign=campaign, is_active=True, player__isnull=False)
-            .order_by('pk')
+            .order_by("pk")
         )
         if not recipients:
-            raise ValidationError('Shared XP requires at least one active player character.')
+            raise ValidationError(
+                "Shared XP requires at least one active player character."
+            )
         per_character, remainder = divmod(amount, len(recipients))
         if not per_character:
-            raise ValidationError('This award would grant zero XP to every character.')
+            raise ValidationError("This award would grant zero XP to every character.")
         if dry_run:
             return per_character
 
         system = campaign.experience_system_account()
         entries = [(system, -(per_character * len(recipients)))]
-        entries.extend((character.experience_account(), per_character) for character in recipients)
+        entries.extend(
+            (character.experience_account(), per_character) for character in recipients
+        )
         posted = _post_experience_transaction(
             entries,
             reason=ExperienceTransaction.Reason.SHARED_AWARD,
@@ -86,7 +99,7 @@ def award_shared_experience(
             created_by=created_by,
         )
         campaign.shared_experience += per_character
-        campaign.save(update_fields=('shared_experience',))
+        campaign.save(update_fields=("shared_experience",))
         return (per_character, posted) if return_transaction else per_character
 
 
@@ -103,40 +116,51 @@ def activate_character(character: Character) -> Character:
                 is_active=True,
             ).exclude(pk=character.pk)
             if existing.exists():
-                raise ValidationError('A player can have only one active character in a campaign.')
+                raise ValidationError(
+                    "A player can have only one active character in a campaign."
+                )
             account = character.experience_account()
-            current_experience = ExperienceEntry.objects.filter(account=account).aggregate(total=Sum('amount'))['total'] or 0
+            current_experience = (
+                ExperienceEntry.objects.filter(account=account).aggregate(
+                    total=Sum("amount")
+                )["total"]
+                or 0
+            )
             adjustment = campaign.shared_experience - current_experience
             if adjustment:
                 system = campaign.experience_system_account()
                 _post_experience_transaction(
                     [(system, -adjustment), (account, adjustment)],
                     reason=ExperienceTransaction.Reason.BASELINE,
-                    description='Activated character baseline',
+                    description="Activated character baseline",
                 )
         character.is_active = True
-        character.save(update_fields=('is_active',))
+        character.save(update_fields=("is_active",))
         return character
 
 
 def reverse_experience_transaction(
     transaction_to_reverse: ExperienceTransaction,
     *,
-    description: str = '',
+    description: str = "",
 ) -> ExperienceTransaction:
     with transaction.atomic():
-        original = ExperienceTransaction.objects.select_for_update().get(pk=transaction_to_reverse.pk)
-        if hasattr(original, 'reversal'):
-            raise ValidationError('This transaction has already been reversed.')
+        original = ExperienceTransaction.objects.select_for_update().get(
+            pk=transaction_to_reverse.pk
+        )
+        if hasattr(original, "reversal"):
+            raise ValidationError("This transaction has already been reversed.")
         reversed_transaction = _post_experience_transaction(
             [(entry.account, -entry.amount) for entry in original.entries.all()],
             reason=ExperienceTransaction.Reason.REVERSAL,
-            description=description or f'Reversal of transaction {original.pk}',
+            description=description or f"Reversal of transaction {original.pk}",
             reversal_of=original,
         )
         if original.reason == ExperienceTransaction.Reason.SHARED_AWARD:
-            per_character = original.entries.filter(account__is_system=False).first().amount
+            per_character = (
+                original.entries.filter(account__is_system=False).first().amount
+            )
             campaign = Campaign.objects.select_for_update().get(pk=original.campaign_id)
             campaign.shared_experience -= per_character
-            campaign.save(update_fields=('shared_experience',))
+            campaign.save(update_fields=("shared_experience",))
         return reversed_transaction
