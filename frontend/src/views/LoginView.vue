@@ -31,7 +31,7 @@ async function submit(): Promise<void> {
       csrfReady.value = true;
     }
     await login(username.value, password.value);
-    await router.push("/campaigns");
+    await router.push("/");
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to sign in.";

@@ -24,6 +24,7 @@ def _post_experience_transaction(
     requested_amount: int = 0,
     discarded_amount: int = 0,
     reversal_of: ExperienceTransaction | None = None,
+    created_by=None,
 ) -> ExperienceTransaction:
     if not entries or any(not amount for _, amount in entries) or sum(amount for _, amount in entries) != 0:
         raise ValidationError('Experience transactions must contain non-zero entries that balance to zero.')
@@ -36,6 +37,7 @@ def _post_experience_transaction(
         requested_amount=requested_amount,
         discarded_amount=discarded_amount,
         reversal_of=reversal_of,
+        created_by=created_by,
     )
     ExperienceEntry.objects.bulk_create([
         ExperienceEntry(transaction=posted, account=account, amount=amount) for account, amount in entries
@@ -48,6 +50,8 @@ def award_shared_experience(
     amount: int,
     description: str = '',
     dry_run: bool = False,
+    created_by=None,
+    return_transaction: bool = False,
 ) -> int:
     """Award group XP and return the XP each eligible character would receive."""
     if amount <= 0:
@@ -73,16 +77,17 @@ def award_shared_experience(
         system = campaign.experience_system_account()
         entries = [(system, -(per_character * len(recipients)))]
         entries.extend((character.experience_account(), per_character) for character in recipients)
-        _post_experience_transaction(
+        posted = _post_experience_transaction(
             entries,
             reason=ExperienceTransaction.Reason.SHARED_AWARD,
             description=description,
             requested_amount=amount,
             discarded_amount=remainder,
+            created_by=created_by,
         )
         campaign.shared_experience += per_character
         campaign.save(update_fields=('shared_experience',))
-        return per_character
+        return (per_character, posted) if return_transaction else per_character
 
 
 def activate_character(character: Character) -> Character:

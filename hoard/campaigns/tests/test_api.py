@@ -1,10 +1,8 @@
 from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
-
-from django.test import TestCase
+from django.test import Client, TestCase
 
 from hoard.campaigns.models import Campaign, InventoryItem, Player
-from hoard.campaigns.services import grant_loot
+from hoard.campaigns.services import grant_coins, grant_loot
 
 from .helpers import make_character
 
@@ -21,7 +19,7 @@ class CampaignApiTests(TestCase):
         self.player_character = make_character(self.campaign, 'Player hero', player=self.player)
         self.item = InventoryItem.objects.create(campaign=None, name='Torch', source_identifier='torch', source_system='5e', source_repository='https://example.test')
 
-    def test_members_can_create_items_but_only_gms_can_grant_loot(self) -> None:
+    def test_members_can_create_items_and_transfer_loot_from_the_system(self) -> None:
         self.client.force_login(self.player_user)
         response = self.client.post(
             f'/api/campaigns/{self.campaign.pk}/items/', {'name': 'Homebrew rope', 'description': 'Very ropey.'}, content_type='application/json'
@@ -29,16 +27,16 @@ class CampaignApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()['created_by_id'], self.player.pk)
         response = self.client.post(
-            f'/api/campaigns/{self.campaign.pk}/actions/grant-loot/', {'recipient_id': self.player_character.pk, 'item_id': self.item.pk, 'quantity': 1}, content_type='application/json'
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/', {'from_character_id': None, 'to_character_id': self.player_character.pk, 'item_id': self.item.pk, 'quantity': 1}, content_type='application/json'
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 201)
 
         self.client.force_login(self.gm_user)
         response = self.client.post(
-            f'/api/campaigns/{self.campaign.pk}/actions/grant-loot/', {'recipient_id': self.player_character.pk, 'item_id': self.item.pk, 'quantity': 1}, content_type='application/json'
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/', {'from_character_id': None, 'to_character_id': self.player_character.pk, 'item_id': self.item.pk, 'quantity': 1}, content_type='application/json'
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(self.player_character.inventory[self.item], 1)
+        self.assertEqual(self.player_character.inventory[self.item], 2)
 
     def test_players_only_receive_their_own_character_state(self) -> None:
         self.client.force_login(self.player_user)
@@ -77,8 +75,8 @@ class CampaignApiTests(TestCase):
         self.client.force_login(self.gm_user)
 
         response = self.client.post(
-            f'/api/campaigns/{self.campaign.pk}/actions/grant-loot/',
-            {'recipient_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/',
+            {'from_character_id': None, 'to_character_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 201)
@@ -90,24 +88,24 @@ class CampaignApiTests(TestCase):
         self.assertNotIn(newer_item.pk, [item['id'] for item in response.json()])
 
         response = self.client.post(
-            f'/api/campaigns/{self.campaign.pk}/actions/grant-loot/',
-            {'recipient_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/',
+            {'from_character_id': None, 'to_character_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 404)
         response = self.client.post(
-            f'/api/campaigns/{self.campaign.pk}/actions/take-loot/',
-            {'source_id': self.player_character.pk, 'item_id': newer_item.pk, 'quantity': 1},
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/',
+            {'from_character_id': self.player_character.pk, 'to_character_id': None, 'item_id': newer_item.pk, 'quantity': 1},
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 201)
         self.assertNotIn(newer_item, self.player_character.inventory)
 
     def test_login_campaign_list_and_history_respect_membership(self) -> None:
-        client = APIClient(enforce_csrf_checks=True)
+        client = Client(enforce_csrf_checks=True)
         csrf_response = client.get('/api/auth/csrf/')
         token = csrf_response.json()['csrfToken']
-        response = client.post('/api/auth/login/', {'username': 'player', 'password': 'password'}, format='json', HTTP_X_CSRFTOKEN=token)
+        response = client.post('/api/auth/session/', {'username': 'player', 'password': 'password'}, content_type='application/json', HTTP_X_CSRFTOKEN=token)
         self.assertEqual(response.status_code, 200)
         response = client.get('/api/campaigns/')
         self.assertEqual(response.json(), [{'id': self.campaign.pk, 'name': 'Hoard', 'is_game_master': False}])
@@ -119,3 +117,56 @@ class CampaignApiTests(TestCase):
         self.assertEqual(response.json()['count'], 1)
         entries = response.json()['results'][0]['entries']
         self.assertEqual({entry['account_name'] for entry in entries}, {'Campaign inventory system', 'Player hero'})
+
+    def test_campaign_exposes_active_pc_balances_and_party_total(self) -> None:
+        self.player_character.is_active = True
+        self.player_character.save(update_fields=('is_active',))
+        grant_coins(recipient=self.player_character, coins={'gp': 7})
+        self.client.force_login(self.gm_user)
+
+        response = self.client.get(f'/api/campaigns/{self.campaign.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['party_money']['gp'], 7)
+        character = next(item for item in response.json()['characters'] if item['id'] == self.player_character.pk)
+        self.assertEqual(character['money']['gp'], 7)
+
+    def test_member_delete_revokes_access_and_archives_characters(self) -> None:
+        self.client.force_login(self.gm_user)
+        response = self.client.delete(f'/api/campaigns/{self.campaign.pk}/members/{self.player.pk}/')
+
+        self.assertEqual(response.status_code, 204)
+        self.player.refresh_from_db()
+        self.player_character.refresh_from_db()
+        self.assertFalse(self.player.is_active)
+        self.assertTrue(self.player_character.is_archived)
+
+    def test_delete_latest_transaction_returns_reversal_and_gones_original(self) -> None:
+        self.client.force_login(self.gm_user)
+        created = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/',
+            {'from_character_id': None, 'to_character_id': self.player_character.pk, 'item_id': self.item.pk, 'quantity': 1},
+            content_type='application/json',
+        )
+        self.assertEqual(created.status_code, 201)
+
+        deleted = self.client.delete(f'/api/campaigns/{self.campaign.pk}/transactions/inventory/{created.json()["id"]}/')
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(deleted.json()['reversal_of_id'], created.json()['id'])
+        self.assertEqual(self.client.get(f'/api/campaigns/{self.campaign.pk}/transactions/inventory/{created.json()["id"]}/').status_code, 410)
+
+    def test_transaction_resources_reject_unheld_inventory_and_money(self) -> None:
+        self.client.force_login(self.gm_user)
+        inventory = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/inventory-transactions/',
+            {'from_character_id': self.player_character.pk, 'to_character_id': self.gm_character.pk, 'item_id': self.item.pk, 'quantity': 1},
+            content_type='application/json',
+        )
+        money = self.client.post(
+            f'/api/campaigns/{self.campaign.pk}/money-transfers/',
+            {'from_character_id': self.player_character.pk, 'to_character_id': self.gm_character.pk, 'amounts': {'gp': 1}},
+            content_type='application/json',
+        )
+
+        self.assertEqual(inventory.status_code, 422)
+        self.assertEqual(money.status_code, 422)

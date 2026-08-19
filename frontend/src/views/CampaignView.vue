@@ -1,20 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import {
   createItem,
   getCampaign,
   getItems,
   getTransactions,
-  postAction,
   reverseTransaction,
   type Campaign,
   type EquipmentMetadata,
   type Item,
   type LedgerTransaction,
 } from "../api";
-import { itemSummary, type PickerCandidate } from "../itemPicker";
+import { itemSummary } from "../itemPicker";
 
 const route = useRoute();
 const campaignId = Number(route.params.id);
@@ -25,17 +23,6 @@ const error = ref("");
 const notice = ref("");
 const tab = ref("characters");
 const catalogueSearch = ref("");
-const actionDialog = ref(false);
-const action = ref("grant-loot");
-const selectedCharacter = ref<number>();
-const selectedRecipient = ref<number>();
-const selectedItem = ref<number>();
-const quantity = ref(1);
-const denomination = ref("gp");
-const coinAmount = ref(1);
-const receivedDenomination = ref("sp");
-const receivedCoinAmount = ref(10);
-const xpAmount = ref(10);
 const description = ref("");
 const itemDialog = ref(false);
 const itemName = ref("");
@@ -45,34 +32,6 @@ const reverseDialog = ref(false);
 const transactionToReverse = ref<LedgerTransaction>();
 
 const isGM = computed(() => campaign.value?.is_game_master ?? false);
-const characterOptions = computed(
-  () =>
-    campaign.value?.characters.map((character) => ({
-      title: character.name,
-      value: character.id,
-    })) ?? [],
-);
-const catalogueCandidates = computed<PickerCandidate[]>(() =>
-  items.value.map((item) => ({ item })),
-);
-const sourceInventoryCandidates = computed<PickerCandidate[]>(() => {
-  const character = campaign.value?.characters.find(
-    (candidate) => candidate.id === selectedCharacter.value,
-  );
-  return (
-    character?.inventory.flatMap((entry) => {
-      const item = items.value.find(
-        (candidate) => candidate.id === entry.item_id,
-      );
-      return item ? [{ item, quantity: entry.quantity }] : [];
-    }) ?? []
-  );
-});
-const actionCandidates = computed(() =>
-  action.value === "transfer-item"
-    ? sourceInventoryCandidates.value
-    : catalogueCandidates.value,
-);
 const filteredCatalogue = computed(() => {
   const query = catalogueSearch.value.trim().toLocaleLowerCase();
   if (!query) return items.value;
@@ -91,15 +50,6 @@ const filteredCatalogue = computed(() => {
       .includes(query),
   );
 });
-const actions = [
-  { title: "Grant loot", value: "grant-loot" },
-  { title: "Transfer item", value: "transfer-item" },
-  { title: "Grant coins", value: "grant-coins" },
-  { title: "Spend coins", value: "spend-coins" },
-  { title: "Exchange coins", value: "exchange-coins" },
-  { title: "Preview shared XP", value: "preview-shared-xp" },
-  { title: "Award shared XP", value: "award-shared-xp" },
-];
 
 function uniqueAccountNames(
   transaction: LedgerTransaction,
@@ -136,6 +86,7 @@ async function refresh(): Promise<void> {
       getTransactions(campaignId),
     ]);
     campaign.value = nextCampaign;
+    localStorage.setItem("hoard:last-campaign", String(campaignId));
     items.value = nextItems;
     transactions.value = history.results;
   } catch (exception) {
@@ -147,62 +98,6 @@ async function refresh(): Promise<void> {
 }
 
 onMounted(refresh);
-
-function openAction(): void {
-  selectedCharacter.value = campaign.value?.characters[0]?.id;
-  selectedRecipient.value = campaign.value?.characters[0]?.id;
-  selectedItem.value = undefined;
-  description.value = "";
-  actionDialog.value = true;
-}
-
-async function submitAction(): Promise<void> {
-  try {
-    const coins = { [denomination.value]: coinAmount.value };
-    let payload: object;
-    if (action.value === "grant-loot")
-      payload = {
-        recipient_id: selectedRecipient.value,
-        item_id: selectedItem.value,
-        quantity: quantity.value,
-        description: description.value,
-      };
-    else if (action.value === "transfer-item")
-      payload = {
-        source_id: selectedCharacter.value,
-        recipient_id: selectedRecipient.value,
-        item_id: selectedItem.value,
-        quantity: quantity.value,
-        description: description.value,
-      };
-    else if (action.value === "grant-coins" || action.value === "spend-coins")
-      payload = {
-        character_id: selectedCharacter.value,
-        coins,
-        description: description.value,
-      };
-    else if (action.value === "exchange-coins")
-      payload = {
-        character_id: selectedCharacter.value,
-        given: coins,
-        received: { [receivedDenomination.value]: receivedCoinAmount.value },
-        description: description.value,
-      };
-    else payload = { amount: xpAmount.value, description: description.value };
-    const result = (await postAction(campaignId, action.value, payload)) as {
-      per_character?: number;
-      dry_run?: boolean;
-    };
-    notice.value = result.per_character
-      ? `${result.dry_run ? "Preview:" : "Awarded"} ${result.per_character} XP per character.`
-      : "Transaction posted.";
-    actionDialog.value = false;
-    await refresh();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Action failed.";
-  }
-}
 
 async function submitItem(): Promise<void> {
   try {
@@ -229,7 +124,6 @@ async function reverse(): Promise<void> {
     await reverseTransaction(
       campaignId,
       transactionToReverse.value,
-      description.value,
     );
     reverseDialog.value = false;
     await refresh();
@@ -272,10 +166,14 @@ async function reverse(): Promise<void> {
             v-if="isGM"
             color="primary"
             prepend-icon="mdi-controller"
-            :to="`/campaigns/${campaignId}/gm`"
+            :to="`/c/${campaignId}/gm`"
             >GM controls</v-btn
-          ><v-btn v-if="isGM" prepend-icon="mdi-plus" @click="openAction"
-            >Post action</v-btn
+          ><v-btn prepend-icon="mdi-account" :to="`/c/${campaignId}/characters/me`"
+            >My characters</v-btn
+          ><v-btn prepend-icon="mdi-swap-horizontal" :to="`/c/${campaignId}/actions`"
+            >Character actions</v-btn
+          ><v-btn v-if="isGM" prepend-icon="mdi-cog" :to="`/c/${campaignId}/manage`"
+            >Manage</v-btn
           ><v-btn
             prepend-icon="mdi-package-variant-plus"
             @click="itemDialog = true"
@@ -284,7 +182,7 @@ async function reverse(): Promise<void> {
         </div>
       </div>
       <v-row class="mb-2"
-        ><v-col cols="12" md="4"
+        ><v-col cols="12" md="3"
           ><v-card
             ><v-card-text
               ><div class="text-overline">Shared XP</div>
@@ -294,7 +192,7 @@ async function reverse(): Promise<void> {
               </div></v-card-text
             ></v-card
           ></v-col
-        ><v-col cols="12" md="4"
+        ><v-col cols="12" md="3"
           ><v-card
             ><v-card-text
               ><div class="text-overline">Characters</div>
@@ -303,12 +201,22 @@ async function reverse(): Promise<void> {
               </div></v-card-text
             ></v-card
           ></v-col
-        ><v-col cols="12" md="4"
+        ><v-col cols="12" md="3"
           ><v-card
             ><v-card-text
               ><div class="text-overline">Role</div>
               <div class="text-h5">
                 {{ isGM ? "Game master" : "Player" }}
+              </div></v-card-text
+            ></v-card
+          ></v-col
+        ><v-col cols="12" md="3"
+          ><v-card
+            ><v-card-text
+              ><div class="text-overline">Party money</div>
+              <div class="text-h5">{{ campaign.party_money.gold_value }} ¤</div>
+              <div class="text-caption">
+                {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp · {{ campaign.party_money.ep }} ep · {{ campaign.party_money.sp }} sp · {{ campaign.party_money.cp }} cp
               </div></v-card-text
             ></v-card
           ></v-col
@@ -339,9 +247,8 @@ async function reverse(): Promise<void> {
                       ><strong>{{ character.experience }}</strong
                       ><br /><span class="text-caption">XP</span></v-col
                     ><v-col cols="8"
-                      ><strong>{{ character.money.gp }} gp</strong> ·
-                      {{ character.money.sp }} sp ·
-                      {{ character.money.cp }} cp<br /><span
+                      ><strong>{{ character.money.pp }} pp</strong> ·
+                      {{ character.money.gp }} gp · {{ character.money.ep }} ep · {{ character.money.sp }} sp · {{ character.money.cp }} cp<br /><span
                         class="text-caption"
                         >{{ character.money.gold_value }} gp total</span
                       ></v-col
@@ -549,82 +456,8 @@ async function reverse(): Promise<void> {
         ></v-card
       ></v-dialog
     >
-    <v-dialog v-model="actionDialog" max-width="700"
-      ><v-card title="Post campaign action"
-        ><v-card-text
-          ><v-select
-            v-model="action"
-            :items="actions"
-            label="Action" /><v-select
-            v-if="!action.includes('shared-xp')"
-            v-model="selectedCharacter"
-            :items="characterOptions"
-            label="Character" /><v-select
-            v-if="action === 'grant-loot' || action === 'transfer-item'"
-            v-model="selectedRecipient"
-            :items="characterOptions"
-            label="Recipient" /><ItemPickerDialog
-            v-if="action === 'grant-loot' || action === 'transfer-item'"
-            v-model="selectedItem"
-            :candidates="actionCandidates"
-            :label="
-              action === 'transfer-item'
-                ? 'Item held by source character'
-                : 'Item to grant'
-            "
-            :no-data-text="
-              action === 'transfer-item'
-                ? 'This character has no recorded items.'
-                : 'No campaign items match.'
-            " /><v-text-field
-            v-if="action === 'grant-loot' || action === 'transfer-item'"
-            v-model.number="quantity"
-            type="number"
-            min="1"
-            label="Quantity" /><template v-if="action.includes('coins')"
-            ><v-select
-              v-model="denomination"
-              :items="['cp', 'sp', 'ep', 'gp', 'pp']"
-              label="Given denomination" /><v-text-field
-              v-model.number="coinAmount"
-              type="number"
-              min="1"
-              label="Given amount" /><template
-              v-if="action === 'exchange-coins'"
-              ><v-select
-                v-model="receivedDenomination"
-                :items="['cp', 'sp', 'ep', 'gp', 'pp']"
-                label="Receive denomination" /><v-text-field
-                v-model.number="receivedCoinAmount"
-                type="number"
-                min="1"
-                label="Receive amount" /></template></template
-          ><v-text-field
-            v-if="action.includes('shared-xp')"
-            v-model.number="xpAmount"
-            type="number"
-            min="1"
-            label="Total XP" /><v-textarea
-            v-model="description"
-            label="Description" /></v-card-text
-        ><v-card-actions
-          ><v-spacer /><v-btn @click="actionDialog = false">Cancel</v-btn
-          ><v-btn
-            color="primary"
-            :disabled="
-              (action === 'grant-loot' || action === 'transfer-item') &&
-              !selectedItem
-            "
-            @click="submitAction"
-            >{{ action === "preview-shared-xp" ? "Preview" : "Post" }}</v-btn
-          ></v-card-actions
-        ></v-card
-      ></v-dialog
-    >
     <v-dialog v-model="reverseDialog" max-width="520"
       ><v-card title="Reverse transaction"
-        ><v-card-text
-          ><v-textarea v-model="description" label="Reason" /></v-card-text
         ><v-card-actions
           ><v-spacer /><v-btn @click="reverseDialog = false">Cancel</v-btn
           ><v-btn color="error" @click="reverse">Reverse</v-btn></v-card-actions

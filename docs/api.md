@@ -1,50 +1,66 @@
 # Campaign JSON API
 
-The API uses Django session authentication and normal CSRF protection. The
-frontend obtains a token from `GET /api/auth/csrf/`, then posts credentials to
-`POST /api/auth/login/`; `POST /api/auth/logout/` ends that session and
-`GET /api/auth/session/` returns the signed-in user. Every
-endpoint is scoped to a campaign membership at `/api/campaigns/<campaign_id>/`.
-Campaign game masters may post ledger actions; any campaign member may create a
-shared custom item.
+The JSON API is served by Django Ninja at `/api/`; interactive OpenAPI docs are
+available at `/api/docs`. It uses Django session cookies and CSRF protection.
+Obtain a token with `GET /api/auth/csrf/`, sign in with `POST /api/auth/session/`,
+inspect the current user with `GET /api/auth/session/`, and sign out with
+`DELETE /api/auth/session/`.
+
+All campaign endpoints live below `/api/campaigns/<campaign_id>/`. Ninja
+returns `401` for missing sessions, `403` for unauthorized members, `404` for
+missing resources, and `422` for invalid request schemas or domain input.
+
+## Resources
 
 | Endpoint | Access | Purpose |
 | --- | --- | --- |
-| `GET /` | member | Campaign state. GMs receive every character; players receive their own characters. |
-| `GET /api/campaigns/` | authenticated | Campaign memberships for the campaign picker. |
-| `GET /items/` | member | Campaign-local items plus global imported items enabled by the campaign's `item_sources` setting. |
-| `POST /items/` | member | Create `{ "name", "description", "metadata" }` custom campaign equipment. |
-| `POST /items/<item_id>/copy/` | GM | Make an editable campaign-local copy of a global item, optionally overriding `metadata`. |
-| `POST /actions/<action>/` | GM | Post a domain action. |
-| `POST /transactions/<ledger>/<id>/reverse/` | GM | Reverse an inventory, money, or experience transaction. |
-| `GET /transactions/` | member | Paginated ledger history; GMs receive all history and players receive entries involving their characters. |
+| `GET /api/campaigns/` | authenticated | Active campaign memberships. |
+| `GET /` | member | Campaign state, active-PC balances, and party total. |
+| `GET`/`POST /members/` | member / GM | List members or add a user by username. |
+| `PATCH`/`DELETE /members/<id>/` | GM | Change GM role or deactivate membership and archive its characters. |
+| `GET`/`POST /characters/` | member | Visible characters and self-owned character creation. |
+| `GET /characters/me/` | member | All of the caller's characters, including inactive or archived records. |
+| `GET`/`PATCH`/`DELETE /characters/<id>/` | owner / GM | Read, update, or archive a character. |
+| `GET`/`POST /items/` | member | List catalogue items or create a campaign-local item. |
+| `GET`/`PATCH`/`DELETE /items/<id>/` | member / GM | Read an item; GMs update or delete local items. |
+| `POST /inventory-transactions/` | GM/member | Move one item between characters or the system. |
+| `POST /money-transfers/` | GM/member | Move positive coin amounts between characters or the system. |
+| `POST /money-exchanges/` | GM/member | Exchange equal copper value for one character. |
+| `POST /shared-xp-awards/` | GM | Create a shared-XP award. |
+| `GET /transactions/` | member | Paginated, role-scoped ledger history. |
+| `GET`/`DELETE /transactions/<ledger>/<id>/` | member / initiator or GM | Read a transaction or create its compensating reversal. |
 
-Available actions and payloads:
+Inventory transaction payloads use `from_character_id` and `to_character_id`;
+`null` represents the campaign system account. Money transfers use the same
+parties plus a positive denomination map. A member may only send money from
+their own character, but may return it to the system; members can exchange
+only their own coins. GMs may post all supported ledger changes.
 
-- `grant-loot`: `{ "recipient_id", "item_id", "quantity", "description" }`
-- `take-loot`: `{ "source_id", "item_id", "quantity", "description" }`
-- `transfer-item`: `{ "source_id", "recipient_id", "item_id", "quantity", "description" }`
-- `grant-coins` and `spend-coins`: `{ "character_id", "coins": {"gp": 5}, "description" }`
-- `exchange-coins`: `{ "character_id", "given": {"gp": 1}, "received": {"sp": 10}, "description" }`
-- `preview-shared-xp` and `award-shared-xp`: `{ "amount", "description" }`
+Transactions are immutable. DELETE is available only for the latest record in
+the matching campaign ledger and creates a final compensating transaction. It
+returns that reversal with `200`; the original remains in collection history
+but its detail URL returns `410 Gone`.
 
-Coin maps accept `cp`, `sp`, `ep`, `gp`, and `pp`; values must be positive
-integers. Exchanges must have equal copper value. Posted actions return their
-transaction metadata, while XP actions return `{ "per_character", "dry_run" }`.
-Invalid input produces DRF’s structured `400` response; missing campaign
-membership is `404`, and a non-GM mutation is `403`.
+## Money visibility
 
-Item `metadata` is optional and has the following shape. Null or omitted facts
-mean unknown: `{ "category", "source_book", "item_type", "cost_amount",
-"cost_currency", "weight_amount", "weight_unit", "rarity", "is_magic",
-"requires_attunement" }`. Costs use `cp`, `sp`, `ep`, `gp`, or `pp`; an amount
-and currency must be provided together, as must a weight amount and unit.
+Campaign state includes `party_money`, a denomination map and gold-equivalent
+value summed across active player characters only. Each visible active PC also
+includes their own `money` balance. NPCs, inactive/archived PCs, and campaign
+system accounts are excluded from the party total.
 
-## Item source settings
+## Client controls
 
-Each campaign stores `item_sources` as a list of enabled imported catalogue
-systems, currently `5e` and `5e2024`. Configure it from the campaign’s Django
-admin page with the source checkboxes. The item API and item pickers only show
-global items from enabled sources; campaign custom items are always available.
-Disabling a source never removes items already held by a character, and those
-items may still be returned to the system account.
+The campaign screen is read-focused: it shows the party total, every visible
+character balance, inventory, and immutable ledger history. It has no generic
+transaction/action picker. GM controls provide separate Give item, Take item,
+Give/Take coins, and shared-XP forms. Character actions provide separate Move
+item, Send money, and Exchange money forms for a member's own active
+characters; each form calls its matching concrete resource endpoint.
+
+## Item metadata
+
+Item `metadata` is optional and has this shape: `{ "category", "source_book",
+"item_type", "cost_amount", "cost_currency", "weight_amount", "weight_unit",
+"rarity", "is_magic", "requires_attunement" }`. Costs use `cp`, `sp`, `ep`,
+`gp`, or `pp`; amount and currency must be supplied together, as must weight
+amount and unit.

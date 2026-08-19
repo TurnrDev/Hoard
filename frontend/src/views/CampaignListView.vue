@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { getCampaigns, type CampaignSummary } from "../api";
 
 const campaigns = ref<CampaignSummary[]>([]);
 const error = ref("");
+const router = useRouter();
 onMounted(async () => {
   try {
     campaigns.value = await getCampaigns();
+    const saved = Number(localStorage.getItem("hoard:last-campaign"));
+    const target = campaigns.value.find((campaign) => campaign.id === saved)
+      ?? (campaigns.value.length === 1 ? campaigns.value[0] : undefined);
+    if (target) await router.replace(`/c/${target.id}`);
   } catch (exception) {
     error.value = String(exception);
   }
@@ -19,7 +25,7 @@ onMounted(async () => {
     <v-alert v-if="error" type="error">{{ error }}</v-alert>
     <v-row>
       <v-col v-for="campaign in campaigns" :key="campaign.id" cols="12" md="6">
-        <v-card :to="`/campaigns/${campaign.id}`" hover>
+        <v-card :to="`/c/${campaign.id}`" hover>
           <v-card-title>{{ campaign.name }}</v-card-title>
           <v-card-subtitle>{{
             campaign.is_game_master ? "Game master" : "Player"

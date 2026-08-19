@@ -41,7 +41,6 @@ INSTALLED_APPS: list[str] = [
     'django.contrib.postgres',
     'django.contrib.staticfiles',
     'django_vite',
-    'rest_framework',
     'hoard.campaigns',
 ]
 
@@ -135,12 +134,6 @@ DJANGO_VITE: dict[str, dict[str, object]] = {
         'manifest_path': FRONTEND_DIST_DIR / '.vite' / 'manifest.json',
     },
 }
-
-REST_FRAMEWORK: dict[str, object] = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework.authentication.SessionAuthentication',),
-    'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
-}
-
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

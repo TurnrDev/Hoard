@@ -21,6 +21,10 @@ if TYPE_CHECKING:
 DEFAULT_ITEM_SOURCES: list[str] = ['5e', '5e2024']
 
 
+def default_item_sources() -> list[str]:
+    return list(DEFAULT_ITEM_SOURCES)
+
+
 class Campaign(models.Model):
     item_sources: list[str]
 
@@ -29,7 +33,7 @@ class Campaign(models.Model):
     shared_experience = models.PositiveIntegerField(default=0)
     item_sources = ArrayField(
         models.CharField(max_length=10, choices=(('5e', 'D&D 5e'), ('5e2024', 'D&D 5e (2024)'))),
-        default=DEFAULT_ITEM_SOURCES,
+        default=default_item_sources,
     )
 
     def allows_item_source(self, source_system: str) -> bool:
@@ -53,10 +57,10 @@ class Campaign(models.Model):
 
         return system_account(ExperienceAccount, self)
 
-    def award_shared_experience(self, amount: int, description: str = '', dry_run: bool = False) -> int:
+    def award_shared_experience(self, amount: int, description: str = '', dry_run: bool = False, created_by: Player | None = None, return_transaction: bool = False):
         from ..services.experience import award_shared_experience
 
-        return award_shared_experience(self, amount, description=description, dry_run=dry_run)
+        return award_shared_experience(self, amount, description=description, dry_run=dry_run, created_by=created_by, return_transaction=return_transaction)
 
     def __str__(self) -> str:
         return self.name
@@ -79,6 +83,7 @@ class Player(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='players')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='campaign_players')
     is_game_master = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('campaign', 'user'), name='unique_player_per_campaign')]
@@ -113,6 +118,8 @@ class Character(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='characters')
     player = models.ForeignKey(Player, null=True, blank=True, on_delete=models.SET_NULL, related_name='characters')
     is_active = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+    archived_at = models.DateTimeField(null=True, blank=True)
     name = models.CharField(max_length=200)
     race = models.CharField(max_length=100)
     character_class = models.CharField(max_length=100)

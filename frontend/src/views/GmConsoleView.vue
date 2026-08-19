@@ -5,7 +5,9 @@ import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import {
   getCampaign,
   getItems,
-  postAction,
+  createInventoryTransaction,
+  createMoneyTransfer,
+  createSharedXpAward,
   type Campaign,
   type Item,
 } from "../api";
@@ -62,7 +64,7 @@ async function load(): Promise<void> {
       getItems(campaignId),
     ]);
     if (!nextCampaign.is_game_master) {
-      await router.replace(`/campaigns/${campaignId}`);
+      await router.replace(`/c/${campaignId}`);
       return;
     }
     campaign.value = nextCampaign;
@@ -82,18 +84,9 @@ async function previewXp(): Promise<void> {
     xpPreview.value = undefined;
     return;
   }
-  try {
-    const result = (await postAction(campaignId, "preview-shared-xp", {
-      amount: xpAmount.value,
-    })) as { per_character: number };
-    xpPreview.value = result.per_character;
-  } catch (exception) {
-    xpPreview.value = undefined;
-    previewError.value =
-      exception instanceof Error
-        ? exception.message
-        : "Cannot preview this award.";
-  }
+  const recipients = campaign.value?.characters.filter((character) => character.is_active && character.is_player_character).length ?? 0;
+  xpPreview.value = recipients ? Math.floor(xpAmount.value / recipients) : undefined;
+  if (!recipients) previewError.value = "No active player characters can receive XP.";
 }
 
 watch(xpAmount, () => {
@@ -105,20 +98,16 @@ watch(inventoryCandidates, (candidates) => {
     takeItemId.value = undefined;
 });
 
-async function post(
-  action: string,
-  payload: object,
+async function postIntent(
+  request: Promise<unknown>,
   success: string,
 ): Promise<void> {
   try {
-    await postAction(campaignId, action, {
-      ...payload,
-      description: description.value,
-    });
+    await request;
     notice.value = success;
     description.value = "";
     await load();
-    if (action === "award-shared-xp") await previewXp();
+    await previewXp();
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Action failed.";
@@ -138,7 +127,7 @@ onMounted(async () => {
         <div class="text-overline text-secondary">Game master controls</div>
         <h1 class="text-h3">{{ campaign?.name }}</h1>
       </div>
-      <v-btn :to="`/campaigns/${campaignId}`" prepend-icon="mdi-arrow-left"
+      <v-btn :to="`/c/${campaignId}`" prepend-icon="mdi-arrow-left"
         >Campaign</v-btn
       >
     </div>
@@ -188,9 +177,8 @@ onMounted(async () => {
               color="primary"
               size="large"
               @click="
-                post(
-                  'award-shared-xp',
-                  { amount: xpAmount },
+                postIntent(
+                  createSharedXpAward(campaignId, { amount: xpAmount, description }),
                   'Shared XP awarded.',
                 )
               "
@@ -222,11 +210,10 @@ onMounted(async () => {
               block
               color="primary"
               size="large"
-              :disabled="!itemId"
+              :disabled="!characterId || !itemId"
               @click="
-                post(
-                  'grant-loot',
-                  { recipient_id: characterId, item_id: itemId, quantity },
+                postIntent(
+                  createInventoryTransaction(campaignId, { from_character_id: null, to_character_id: characterId ?? null, item_id: itemId ?? 0, quantity, description }),
                   'Item granted.',
                 )
               "
@@ -260,11 +247,10 @@ onMounted(async () => {
               block
               color="error"
               size="large"
-              :disabled="!takeItemId"
+              :disabled="!characterId || !takeItemId"
               @click="
-                post(
-                  'take-loot',
-                  { source_id: characterId, item_id: takeItemId, quantity },
+                postIntent(
+                  createInventoryTransaction(campaignId, { from_character_id: characterId ?? null, to_character_id: null, item_id: takeItemId ?? 0, quantity, description }),
                   'Item returned to the system account.',
                 )
               "
@@ -298,13 +284,10 @@ onMounted(async () => {
                 class="flex-grow-1"
                 color="primary"
                 size="large"
+                :disabled="!characterId"
                 @click="
-                  post(
-                    'grant-coins',
-                    {
-                      character_id: characterId,
-                      coins: { [coinDenomination]: coinAmount },
-                    },
+                  postIntent(
+                    createMoneyTransfer(campaignId, { from_character_id: null, to_character_id: characterId ?? null, amounts: { [coinDenomination]: coinAmount }, description }),
                     'Coins granted.',
                   )
                 "
@@ -313,13 +296,10 @@ onMounted(async () => {
                 class="flex-grow-1"
                 color="error"
                 size="large"
+                :disabled="!characterId"
                 @click="
-                  post(
-                    'spend-coins',
-                    {
-                      character_id: characterId,
-                      coins: { [coinDenomination]: coinAmount },
-                    },
+                  postIntent(
+                    createMoneyTransfer(campaignId, { from_character_id: characterId ?? null, to_character_id: null, amounts: { [coinDenomination]: coinAmount }, description }),
                     'Coins taken.',
                   )
                 "
