@@ -59,6 +59,10 @@ const editAbilities = ref({
   charisma: 10,
 });
 const denominations = ["cp", "sp", "ep", "gp", "pp"];
+const xpThresholds = [
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000,
+  120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
+];
 const inventoryCandidates = computed<PickerCandidate[]>(
   () =>
     character.value?.inventory.flatMap((entry) => {
@@ -175,6 +179,20 @@ const skillColumns = computed(() => [
 const displayName = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
+const formatXp = (value: number) => `${value.toLocaleString()} XP`;
+const experienceProgress = computed(() => {
+  const level = character.value?.sheet.level ?? 1;
+  const current = character.value?.experience ?? 0;
+  const minimum = xpThresholds[level - 1] ?? 0;
+  const maximum = xpThresholds[level];
+  const progress = maximum
+    ? Math.min(
+        100,
+        Math.max(0, ((current - minimum) / (maximum - minimum)) * 100),
+      )
+    : 100;
+  return { current, level, maximum, minimum, progress };
+});
 const proficiencyLabel = (proficiency: string) =>
   ({ half: "Half", proficient: "Proficient", expertise: "Expertise" })[
     proficiency
@@ -448,10 +466,27 @@ onMounted(load);
         ><v-card
           ><v-card-text
             ><v-row
-              ><v-col cols="6"
-                ><div class="text-overline">Experience</div>
-                <div class="text-h4">{{ character.experience }}</div></v-col
-              ><v-col cols="6"
+              ><v-col cols="12" sm="7"
+                ><div class="text-overline">
+                  Level {{ experienceProgress.level }}
+                </div>
+                <v-progress-linear
+                  class="mt-2"
+                  color="primary"
+                  :model-value="experienceProgress.progress"
+                  height="8"
+                  rounded
+                  :aria-label="`Level ${experienceProgress.level} experience progress`"
+                />
+                <div class="xp-progress-labels">
+                  <span>{{ formatXp(experienceProgress.minimum) }}</span>
+                  <strong>{{ formatXp(experienceProgress.current) }}</strong>
+                  <span v-if="experienceProgress.maximum">{{
+                    formatXp(experienceProgress.maximum)
+                  }}</span
+                  ><span v-else>Maximum level</span>
+                </div></v-col
+              ><v-col cols="12" sm="5"
                 ><div class="text-overline">Total wealth</div>
                 <div class="text-h4">
                   {{ character.money.gold_value }} ¤
