@@ -17,7 +17,14 @@ dependencies = [
 [dependency-groups]
 dev = [
     "django-stubs>=6.1.0",
+    "ruff>=0.15.0",
 ]
 
 [tool.django-stubs]
 django_settings_module = "hoard.settings"
+
+[tool.ruff]
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
