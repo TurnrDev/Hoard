@@ -262,7 +262,6 @@ body {
   overflow-x: auto;
 }
 
-.profile-overview > .v-col,
 .profile-stat-row > .v-col {
   padding: 6px;
 }
@@ -270,6 +269,7 @@ body {
 .profile-card,
 .inventory-card,
 .activity-card,
+.ability-save-card,
 .action-card {
   border: 1px solid rgba(255, 255, 255, 0.07);
 }

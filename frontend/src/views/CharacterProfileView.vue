@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import ItemPickerDialog from "../components/ItemPickerDialog.vue";
-import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import {
   archiveCharacter,
   commitCahImport,
@@ -12,8 +10,8 @@ import {
   getCampaign,
   getCharacters,
   getItems,
-  getTransactions,
   getMyCharacters,
+  getTransactions,
   previewCahImport,
   updateCharacter,
   type CahPreview,
@@ -22,8 +20,10 @@ import {
   type Item,
   type LedgerTransaction,
 } from "../api";
-import type { PickerCandidate } from "../itemPicker";
 import { exchangedCoinAmount } from "../coinExchange";
+import CoinAmountPicker from "../components/CoinAmountPicker.vue";
+import ItemPickerDialog from "../components/ItemPickerDialog.vue";
+import type { PickerCandidate } from "../itemPicker";
 import { formatGoldValue } from "../money";
 
 const route = useRoute();
@@ -584,7 +584,10 @@ onMounted(load);
     >
       {{ notice }}
     </v-alert>
-    <v-row class="profile-overview">
+    <v-row
+      dense
+      class="profile-overview"
+    >
       <v-col
         cols="12"
         md="5"
