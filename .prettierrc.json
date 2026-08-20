@@ -1,0 +1,7 @@
+{
+  "singleQuote": false,
+  "singleAttributePerLine": true,
+  "bracketSameLine": false,
+  "htmlWhitespaceSensitivity": "ignore",
+  "printWidth": 88
+}

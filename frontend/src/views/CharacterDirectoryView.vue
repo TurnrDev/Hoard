@@ -35,9 +35,7 @@ async function load(): Promise<void> {
     );
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to load characters.";
+      exception instanceof Error ? exception.message : "Unable to load characters.";
   }
 }
 
@@ -55,13 +53,21 @@ onMounted(load);
         <div class="text-overline text-secondary">Campaign roster</div>
         <h1>Characters</h1>
       </div>
-      <v-btn :to="`/c/${campaignId}`" prepend-icon="mdi-home-variant-outline"
-        >Home</v-btn
+      <v-btn
+        :to="`/c/${campaignId}`"
+        prepend-icon="mdi-home-variant-outline"
       >
+        Home
+      </v-btn>
     </header>
-    <v-alert v-if="error" type="error" closable @click:close="error = ''">{{
-      error
-    }}</v-alert>
+    <v-alert
+      v-if="error"
+      type="error"
+      closable
+      @click:close="error = ''"
+    >
+      {{ error }}
+    </v-alert>
     <v-row>
       <v-col
         v-for="character in playerCharacters"
@@ -72,26 +78,29 @@ onMounted(load);
       >
         <v-card class="h-100 character-card">
           <v-card-title>{{ character.name }}</v-card-title>
-          <v-card-subtitle
-            >{{ character.race }} · {{ character.class }}</v-card-subtitle
-          >
+          <v-card-subtitle>
+            {{ character.race }} · {{ character.class }}
+          </v-card-subtitle>
           <v-card-text>
-            <div class="text-h6">{{ formatGoldValue(character.money.gold_value) }} ¤</div>
+            <div class="text-h6">
+              {{ formatGoldValue(character.money.gold_value) }} ¤
+            </div>
             <div class="text-caption">
-              {{ character.experience }} XP ·
-              {{ character.inventory.length }} inventory entries
+              {{ character.experience }} XP · {{ character.inventory.length }} inventory
+              entries
             </div>
           </v-card-text>
           <v-card-actions>
-            <v-btn :to="`/c/${campaignId}/characters/${character.id}`"
-              >View profile</v-btn
-            >
+            <v-btn :to="`/c/${campaignId}/characters/${character.id}`">
+              View profile
+            </v-btn>
             <v-btn
               v-if="ownIds.has(character.id)"
               color="primary"
               :to="actingPath(character)"
-              >Open</v-btn
             >
+              Open
+            </v-btn>
           </v-card-actions>
         </v-card>
       </v-col>

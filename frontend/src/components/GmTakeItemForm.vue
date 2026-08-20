@@ -34,9 +34,9 @@ const selectedItem = computed(() =>
   props.items.find((item) => item.id === itemId.value),
 );
 watch(candidates, (values) => {
-  if (!values.some((value) => value.item.id === itemId.value))
-    itemId.value = undefined;
+  if (!values.some((value) => value.item.id === itemId.value)) itemId.value = undefined;
 });
+
 async function submit() {
   try {
     error.value = "";
@@ -59,42 +59,62 @@ async function submit() {
       exception instanceof Error ? exception.message : "Unable to take item.";
   }
 }
+
 onMounted(async () => {
   characters.value = await getCharacters(props.contextId);
 });
 </script>
 <template>
-  <v-card class="pa-2 h-100" color="surface"
-    ><v-card-title class="text-h5"
-      ><v-icon color="error" class="mr-2">mdi-package-variant-remove</v-icon
-      >Take item</v-card-title
-    ><v-card-text
-      ><GmCharacterSelect
+  <v-card
+    class="pa-2 h-100"
+    color="surface"
+  >
+    <v-card-title class="text-h5">
+      <v-icon
+        color="error"
+        class="mr-2"
+      >
+        mdi-package-variant-remove
+      </v-icon>
+      Take item
+    </v-card-title>
+    <v-card-text>
+      <GmCharacterSelect
         :characters="characters"
         @selected="characterId = $event"
-      /><ItemPickerDialog
+      />
+      <ItemPickerDialog
         v-model="itemId"
         :candidates="candidates"
         label="Item in inventory"
         no-data-text="This character has no recorded items."
-      /><v-text-field
+      />
+      <v-text-field
         v-model.number="quantity"
         type="number"
         min="1"
         label="Quantity"
-      /><v-textarea v-model="description" label="Reason" /><v-snackbar
+      />
+      <v-textarea
+        v-model="description"
+        label="Reason"
+      />
+      <v-snackbar
         :model-value="Boolean(error)"
         color="error"
         @update:model-value="(visible) => !visible && (error = '')"
-        >{{ error }}</v-snackbar
-      ><v-btn
+      >
+        {{ error }}
+      </v-snackbar>
+      <v-btn
         block
         color="error"
         size="large"
         :disabled="!characterId || !itemId"
         @click="submit"
-        >Take item</v-btn
-      ></v-card-text
-    ></v-card
-  >
+      >
+        Take item
+      </v-btn>
+    </v-card-text>
+  </v-card>
 </template>

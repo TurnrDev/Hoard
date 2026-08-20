@@ -78,9 +78,7 @@ async function archive(character: Character): Promise<void> {
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to archive character.";
+      exception instanceof Error ? exception.message : "Unable to archive character.";
   }
 }
 
@@ -106,9 +104,7 @@ async function toggleGm(member: CampaignMember): Promise<void> {
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to update member.";
+      exception instanceof Error ? exception.message : "Unable to update member.";
   }
 }
 
@@ -118,9 +114,7 @@ async function deactivate(member: CampaignMember): Promise<void> {
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to remove member.";
+      exception instanceof Error ? exception.message : "Unable to remove member.";
   }
 }
 
@@ -131,34 +125,66 @@ onMounted(load);
   <v-container style="max-width: 1100px">
     <div class="d-flex align-center justify-space-between mb-6">
       <h1 class="text-h4">{{ campaign?.name }} management</h1>
-      <v-btn :to="`/c/${campaignId}`" prepend-icon="mdi-arrow-left"
-        >Campaign</v-btn
+      <v-btn
+        :to="`/c/${campaignId}`"
+        prepend-icon="mdi-arrow-left"
       >
+        Campaign
+      </v-btn>
     </div>
-    <v-alert v-if="error" type="error" closable @click:close="error = ''">{{
-      error
-    }}</v-alert>
+    <v-alert
+      v-if="error"
+      type="error"
+      closable
+      @click:close="error = ''"
+    >
+      {{ error }}
+    </v-alert>
 
     <v-row>
-      <v-col cols="12" md="7">
+      <v-col
+        cols="12"
+        md="7"
+      >
         <v-card>
           <v-card-title>Members</v-card-title>
           <v-card-text>
-            <v-form class="d-flex ga-2 mb-4" @submit.prevent="createMember">
-              <v-text-field v-model="username" label="Username" hide-details />
-              <v-checkbox v-model="makeGm" label="GM" hide-details />
-              <v-btn type="submit" :loading="busy">Add</v-btn>
+            <v-form
+              class="d-flex ga-2 mb-4"
+              @submit.prevent="createMember"
+            >
+              <v-text-field
+                v-model="username"
+                label="Username"
+                hide-details
+              />
+              <v-checkbox
+                v-model="makeGm"
+                label="GM"
+                hide-details
+              />
+              <v-btn
+                type="submit"
+                :loading="busy"
+              >
+                Add
+              </v-btn>
             </v-form>
             <v-list>
-              <v-list-item v-for="member in members" :key="member.id">
+              <v-list-item
+                v-for="member in members"
+                :key="member.id"
+              >
                 <v-list-item-title>{{ member.username }}</v-list-item-title>
-                <v-list-item-subtitle>{{
-                  member.is_active
-                    ? member.is_game_master
-                      ? "Game master"
-                      : "Player"
-                    : "Inactive"
-                }}</v-list-item-subtitle>
+                <v-list-item-subtitle>
+                  {{
+                    member.is_active
+                      ? member.is_game_master
+                        ? "Game master"
+                        : "Player"
+                      : "Inactive"
+                  }}
+                </v-list-item-subtitle>
                 <template #append>
                   <v-btn
                     icon="mdi-shield-account"
@@ -178,7 +204,10 @@ onMounted(load);
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="12" md="5">
+      <v-col
+        cols="12"
+        md="5"
+      >
         <v-card>
           <v-card-title>Campaign tools</v-card-title>
           <v-card-text>
@@ -188,8 +217,9 @@ onMounted(load);
             <v-btn
               :to="`/c/${campaignId}/compendium`"
               prepend-icon="mdi-book-open-variant"
-              >Open compendium</v-btn
             >
+              Open compendium
+            </v-btn>
           </v-card-text>
         </v-card>
       </v-col>
@@ -206,7 +236,11 @@ onMounted(load);
                 label="NPC name"
                 hide-details
               />
-              <v-text-field v-model="characterRace" label="Race" hide-details />
+              <v-text-field
+                v-model="characterRace"
+                label="Race"
+                hide-details
+              />
               <v-text-field
                 v-model="characterClass"
                 label="Class"
@@ -227,13 +261,14 @@ onMounted(load);
                       : 'Inactive'
                 "
               >
-                <template #append
-                  ><v-btn
+                <template #append>
+                  <v-btn
                     v-if="!character.is_archived"
                     icon="mdi-archive"
                     variant="text"
                     @click="archive(character)"
-                /></template>
+                  />
+                </template>
               </v-list-item>
             </v-list>
           </v-card-text>

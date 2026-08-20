@@ -3,12 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { logout } from "./api";
 import NavigationMenu from "./components/NavigationMenu.vue";
-import {
-  contextPath,
-  contexts,
-  rememberContext,
-  type ActingContext,
-} from "./context";
+import { contextPath, contexts, rememberContext, type ActingContext } from "./context";
 
 const route = useRoute();
 const router = useRouter();
@@ -68,19 +63,26 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
 
 <template>
   <v-app>
-    <v-app-bar density="comfortable" class="app-bar">
+    <v-app-bar
+      density="comfortable"
+      class="app-bar"
+    >
       <v-app-bar-nav-icon
         v-if="$route.path !== '/login' && !isDesktop"
         aria-label="Open navigation"
         @click="drawer = !drawer"
       />
-      <v-app-bar-title class="font-weight-black text-primary"
-        >HOARD</v-app-bar-title
+      <v-app-bar-title class="font-weight-black text-primary">HOARD</v-app-bar-title>
+      <span
+        v-if="activeContext"
+        class="app-context d-none d-sm-inline"
       >
-      <span v-if="activeContext" class="app-context d-none d-sm-inline">{{
-        title
-      }}</span>
-      <v-menu v-if="$route.path !== '/login'" location="bottom end">
+        {{ title }}
+      </span>
+      <v-menu
+        v-if="$route.path !== '/login'"
+        location="bottom end"
+      >
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
@@ -110,15 +112,17 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
             />
           </v-list>
           <v-divider />
-          <v-card-actions
-            ><v-spacer /><v-btn
+          <v-card-actions>
+            <v-spacer />
+            <v-btn
               :loading="busy"
               prepend-icon="mdi-logout"
               variant="text"
               @click="signOut"
-              >Sign out</v-btn
-            ></v-card-actions
-          >
+            >
+              Sign out
+            </v-btn>
+          </v-card-actions>
         </v-card>
       </v-menu>
     </v-app-bar>
@@ -131,7 +135,10 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
       rail-width="64"
       class="app-drawer"
     >
-      <NavigationMenu :context-id="contextId" :active-context="activeContext" />
+      <NavigationMenu
+        :context-id="contextId"
+        :active-context="activeContext"
+      />
     </v-navigation-drawer>
     <v-navigation-drawer
       v-if="$route.path !== '/login' && !isDesktop"
@@ -140,7 +147,10 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
       width="360"
       class="app-drawer mobile-drawer"
     >
-      <NavigationMenu :context-id="contextId" :active-context="activeContext" />
+      <NavigationMenu
+        :context-id="contextId"
+        :active-context="activeContext"
+      />
     </v-navigation-drawer>
     <v-main><router-view @contexts-changed="loadContexts" /></v-main>
   </v-app>

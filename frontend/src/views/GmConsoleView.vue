@@ -22,6 +22,7 @@ const characters = ref<Character[]>([]);
 const items = ref<Item[]>([]);
 const error = ref("");
 const notice = ref("");
+
 async function load(): Promise<void> {
   try {
     const [nextCampaign, nextCharacters, nextItems] = await Promise.all([
@@ -38,20 +39,20 @@ async function load(): Promise<void> {
     items.value = nextItems;
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to load GM controls.";
+      exception instanceof Error ? exception.message : "Unable to load GM controls.";
   }
 }
+
 async function completed(message: string): Promise<void> {
   notice.value = message;
   await load();
 }
+
 onMounted(load);
 </script>
 <template>
-  <v-container class="page-shell"
-    ><header class="page-heading">
+  <v-container class="page-shell">
+    <header class="page-heading">
       <div>
         <div class="text-overline text-secondary">Campaign dashboard</div>
         <h1>{{ campaign?.name }}</h1>
@@ -59,75 +60,113 @@ onMounted(load);
       <v-btn
         :to="`/c/${contextId}/characters`"
         prepend-icon="mdi-account-group-outline"
-        >Roster</v-btn
       >
+        Roster
+      </v-btn>
     </header>
     <v-snackbar
       :model-value="Boolean(error)"
       color="error"
       @update:model-value="(visible) => !visible && (error = '')"
-      >{{ error }}</v-snackbar
-    ><v-snackbar
+    >
+      {{ error }}
+    </v-snackbar>
+    <v-snackbar
       :model-value="Boolean(notice)"
       color="success"
       @update:model-value="(visible) => !visible && (notice = '')"
-      >{{ notice }}</v-snackbar
-    ><v-row v-if="campaign" class="mb-2"
-      ><v-col cols="6" md="3"
-        ><v-card
-          ><v-card-text
-            ><div class="text-overline">Party wealth</div>
+    >
+      {{ notice }}
+    </v-snackbar>
+    <v-row
+      v-if="campaign"
+      class="mb-2"
+    >
+      <v-col
+        cols="6"
+        md="3"
+      >
+        <v-card>
+          <v-card-text>
+            <div class="text-overline">Party wealth</div>
             <div class="text-h5">
               {{ formatGoldValue(campaign.party_money.gold_value) }} ¤
-            </div></v-card-text
-          ></v-card
-        ></v-col
-      ><v-col cols="6" md="3"
-        ><v-card
-          ><v-card-text
-            ><div class="text-overline">Active PCs</div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col
+        cols="6"
+        md="3"
+      >
+        <v-card>
+          <v-card-text>
+            <div class="text-overline">Active PCs</div>
             <div class="text-h5">
               {{
                 characters.filter(
-                  (character) =>
-                    character.is_active && character.is_player_character,
+                  (character) => character.is_active && character.is_player_character,
                 ).length
               }}
-            </div></v-card-text
-          ></v-card
-        ></v-col
-      ><v-col cols="12" md="6"
-        ><v-card
-          ><v-card-text
-            ><div class="text-overline">Party coin</div>
-            {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp
-            · {{ campaign.party_money.ep }} ep ·
-            {{ campaign.party_money.sp }} sp ·
-            {{ campaign.party_money.cp }} cp</v-card-text
-          ></v-card
-        ></v-col
-      ></v-row
-    >
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col
+        cols="12"
+        md="6"
+      >
+        <v-card>
+          <v-card-text>
+            <div class="text-overline">Party coin</div>
+            {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp ·
+            {{ campaign.party_money.ep }} ep · {{ campaign.party_money.sp }} sp ·
+            {{ campaign.party_money.cp }} cp
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
     <div class="text-overline text-secondary mb-2">GM actions</div>
-    <v-row
-      ><v-col cols="12" md="6"
-        ><GmSharedXpForm
+    <v-row>
+      <v-col
+        cols="12"
+        md="6"
+      >
+        <GmSharedXpForm
           :context-id="contextId"
           :characters="characters"
-          @completed="completed" /></v-col
-      ><v-col cols="12" md="6"
-        ><GmGiveItemForm
+          @completed="completed"
+        />
+      </v-col>
+      <v-col
+        cols="12"
+        md="6"
+      >
+        <GmGiveItemForm
           :context-id="contextId"
           :items="items"
-          @completed="completed" /></v-col
-      ><v-col cols="12" md="6"
-        ><GmTakeItemForm
+          @completed="completed"
+        />
+      </v-col>
+      <v-col
+        cols="12"
+        md="6"
+      >
+        <GmTakeItemForm
           :context-id="contextId"
           :items="items"
-          @completed="completed" /></v-col
-      ><v-col cols="12" md="6"
-        ><GmCoinForm
+          @completed="completed"
+        />
+      </v-col>
+      <v-col
+        cols="12"
+        md="6"
+      >
+        <GmCoinForm
           :context-id="contextId"
-          @completed="completed" /></v-col></v-row
-  ></v-container>
+          @completed="completed"
+        />
+      </v-col>
+    </v-row>
+  </v-container>
 </template>

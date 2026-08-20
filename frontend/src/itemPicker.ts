@@ -41,9 +41,7 @@ export const defaultPickerFilters = (): PickerFilters => ({
 
 export function costInGold(item: Item): number | null {
   const amount =
-    item.equipment.cost_amount === null
-      ? null
-      : Number(item.equipment.cost_amount);
+    item.equipment.cost_amount === null ? null : Number(item.equipment.cost_amount);
   const multiplier = item.equipment.cost_currency
     ? currencyGoldValues[item.equipment.cost_currency]
     : undefined;
@@ -52,10 +50,7 @@ export function costInGold(item: Item): number | null {
     : amount * multiplier;
 }
 
-export function itemMatchesFilters(
-  item: Item,
-  filters: PickerFilters,
-): boolean {
+export function itemMatchesFilters(item: Item, filters: PickerFilters): boolean {
   const searchable = [
     item.name,
     item.description,
@@ -67,23 +62,15 @@ export function itemMatchesFilters(
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .toLocaleLowerCase();
-  if (
-    filters.search &&
-    !searchable.includes(filters.search.toLocaleLowerCase())
-  )
+  if (filters.search && !searchable.includes(filters.search.toLocaleLowerCase()))
     return false;
   if (filters.system && item.source_system !== filters.system) return false;
   if (filters.sourceBook && item.equipment.source_book !== filters.sourceBook)
     return false;
-  if (filters.category && item.equipment.category !== filters.category)
-    return false;
-  if (filters.itemType && item.equipment.item_type !== filters.itemType)
-    return false;
+  if (filters.category && item.equipment.category !== filters.category) return false;
+  if (filters.itemType && item.equipment.item_type !== filters.itemType) return false;
   if (filters.rarity && item.equipment.rarity !== filters.rarity) return false;
-  if (
-    filters.magic !== "any" &&
-    item.equipment.is_magic !== (filters.magic === "yes")
-  )
+  if (filters.magic !== "any" && item.equipment.is_magic !== (filters.magic === "yes"))
     return false;
   if (
     filters.attunement !== "any" &&
@@ -97,14 +84,10 @@ export function itemMatchesFilters(
   )
     return false;
   const weight =
-    item.equipment.weight_amount === null
-      ? null
-      : Number(item.equipment.weight_amount);
+    item.equipment.weight_amount === null ? null : Number(item.equipment.weight_amount);
   if (
-    (filters.minWeight !== null &&
-      (weight === null || weight < filters.minWeight)) ||
-    (filters.maxWeight !== null &&
-      (weight === null || weight > filters.maxWeight))
+    (filters.minWeight !== null && (weight === null || weight < filters.minWeight)) ||
+    (filters.maxWeight !== null && (weight === null || weight > filters.maxWeight))
   )
     return false;
   return true;

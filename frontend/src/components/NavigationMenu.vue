@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { contextPath, type ActingContext } from "../context";
 
-const props = defineProps<{
+defineProps<{
   contextId: number;
   activeContext?: ActingContext;
 }>();
 </script>
 
 <template>
-  <v-list v-if="contextId" nav density="comfortable">
+  <v-list
+    v-if="contextId"
+    nav
+    density="comfortable"
+  >
     <v-list-item
       prepend-icon="mdi-home-variant-outline"
       title="Home"

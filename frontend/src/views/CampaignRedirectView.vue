@@ -25,7 +25,16 @@ onMounted(async () => {
 
 <template>
   <v-container class="page-shell page-centered">
-    <v-progress-circular v-if="!error" indeterminate color="primary" />
-    <v-alert v-else type="warning">{{ error }}</v-alert>
+    <v-progress-circular
+      v-if="!error"
+      indeterminate
+      color="primary"
+    />
+    <v-alert
+      v-else
+      type="warning"
+    >
+      {{ error }}
+    </v-alert>
   </v-container>
 </template>

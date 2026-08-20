@@ -14,6 +14,7 @@ const campaign = ref<Campaign>();
 const transactions = ref<LedgerTransaction[]>([]);
 const error = ref("");
 const reversing = ref<LedgerTransaction>();
+
 function names(transaction: LedgerTransaction, positive: boolean): string {
   return [
     ...new Set(
@@ -23,15 +24,14 @@ function names(transaction: LedgerTransaction, positive: boolean): string {
     ),
   ].join(", ");
 }
+
 function amount(transaction: LedgerTransaction): string {
   return transaction.entries
     .filter((entry) => entry.amount > 0)
-    .map(
-      (entry) =>
-        `${entry.amount} ${entry.item_name ?? entry.denomination ?? "XP"}`,
-    )
+    .map((entry) => `${entry.amount} ${entry.item_name ?? entry.denomination ?? "XP"}`)
     .join(" · ");
 }
+
 async function load(): Promise<void> {
   try {
     const [next, history] = await Promise.all([
@@ -45,6 +45,7 @@ async function load(): Promise<void> {
       exception instanceof Error ? exception.message : "Unable to load ledger.";
   }
 }
+
 async function reverse(): Promise<void> {
   if (!reversing.value) return;
   try {
@@ -53,17 +54,16 @@ async function reverse(): Promise<void> {
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to reverse transaction.";
+      exception instanceof Error ? exception.message : "Unable to reverse transaction.";
   }
 }
+
 onMounted(load);
 </script>
 
 <template>
-  <v-container class="page-shell"
-    ><header class="page-heading">
+  <v-container class="page-shell">
+    <header class="page-heading">
       <div>
         <div class="text-overline text-secondary">Immutable audit history</div>
         <h1>Ledger</h1>
@@ -75,10 +75,12 @@ onMounted(load);
       closable
       class="mb-4"
       @click:close="error = ''"
-      >{{ error }}</v-alert
-    ><v-card
-      ><v-table class="ledger-table"
-        ><thead>
+    >
+      {{ error }}
+    </v-alert>
+    <v-card>
+      <v-table class="ledger-table">
+        <thead>
           <tr>
             <th>When</th>
             <th>From</th>
@@ -99,9 +101,12 @@ onMounted(load);
             <td>{{ amount(transaction) }}</td>
             <td>
               {{ transaction.description || "—" }}
-              <span v-if="transaction.is_reversed" class="text-error"
-                >(reversed)</span
+              <span
+                v-if="transaction.is_reversed"
+                class="text-error"
               >
+                (reversed)
+              </span>
             </td>
             <td>
               <v-btn
@@ -116,8 +121,11 @@ onMounted(load);
                 @click="reversing = transaction"
               />
             </td>
-          </tr></tbody></v-table></v-card
-    ><v-dialog
+          </tr>
+        </tbody>
+      </v-table>
+    </v-card>
+    <v-dialog
       :model-value="Boolean(reversing)"
       max-width="480"
       @update:model-value="
@@ -125,15 +133,22 @@ onMounted(load);
           if (!open) reversing = undefined;
         }
       "
-      ><v-card title="Reverse transaction"
-        ><v-card-text
-          >This creates the final compensating entry. The original remains in
-          history.</v-card-text
-        ><v-card-actions
-          ><v-spacer /><v-btn @click="reversing = undefined">Cancel</v-btn
-          ><v-btn color="error" @click="reverse">Reverse</v-btn></v-card-actions
-        ></v-card
-      ></v-dialog
-    ></v-container
-  >
+    >
+      <v-card title="Reverse transaction">
+        <v-card-text>
+          This creates the final compensating entry. The original remains in history.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="reversing = undefined">Cancel</v-btn>
+          <v-btn
+            color="error"
+            @click="reverse"
+          >
+            Reverse
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-container>
 </template>

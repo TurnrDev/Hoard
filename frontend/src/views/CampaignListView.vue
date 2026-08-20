@@ -23,19 +23,35 @@ onMounted(async () => {
 <template>
   <v-container>
     <h1 class="text-h4 mb-6">Your contexts</h1>
-    <v-alert v-if="error" type="error">{{ error }}</v-alert>
+    <v-alert
+      v-if="error"
+      type="error"
+    >
+      {{ error }}
+    </v-alert>
     <v-row>
-      <v-col v-for="context in contexts" :key="context.id" cols="12" md="6">
-        <v-card :to="`/c/${context.id}`" hover>
+      <v-col
+        v-for="context in contexts"
+        :key="context.id"
+        cols="12"
+        md="6"
+      >
+        <v-card
+          :to="`/c/${context.id}`"
+          hover
+        >
           <v-card-title>{{ context.campaign_name }}</v-card-title>
-          <v-card-subtitle>{{
-            context.kind === "gm" ? "Game master" : context.character_name
-          }}</v-card-subtitle>
+          <v-card-subtitle>
+            {{ context.kind === "gm" ? "Game master" : context.character_name }}
+          </v-card-subtitle>
         </v-card>
       </v-col>
     </v-row>
-    <v-alert v-if="!error && !contexts.length" type="info"
-      >You are not yet a member of a campaign.</v-alert
+    <v-alert
+      v-if="!error && !contexts.length"
+      type="info"
     >
+      You are not yet a member of a campaign.
+    </v-alert>
   </v-container>
 </template>

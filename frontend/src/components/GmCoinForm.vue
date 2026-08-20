@@ -13,6 +13,7 @@ const characters = ref<Character[]>([]);
 const selectedCharacter = computed(() =>
   characters.value.find((character) => character.id === characterId.value),
 );
+
 async function submit(give: boolean) {
   try {
     error.value = "";
@@ -35,34 +36,52 @@ async function submit(give: boolean) {
       exception instanceof Error ? exception.message : "Unable to move coins.";
   }
 }
+
 onMounted(async () => {
   characters.value = await getCharacters(props.contextId);
 });
 </script>
 <template>
-  <v-card class="pa-2 h-100" color="surface"
-    ><v-card-title class="text-h5"
-      ><v-icon color="primary" class="mr-2">mdi-coins</v-icon>Give or take
-      coins</v-card-title
-    ><v-card-text
-      ><GmCharacterSelect
+  <v-card
+    class="pa-2 h-100"
+    color="surface"
+  >
+    <v-card-title class="text-h5">
+      <v-icon
+        color="primary"
+        class="mr-2"
+      >
+        mdi-coins
+      </v-icon>
+      Give or take coins
+    </v-card-title>
+    <v-card-text>
+      <GmCharacterSelect
         :characters="characters"
         @selected="characterId = $event"
-      /><v-select
+      />
+      <v-select
         v-model="denomination"
         :items="['cp', 'sp', 'ep', 'gp', 'pp']"
         label="Denomination"
-      /><v-text-field
+      />
+      <v-text-field
         v-model.number="amount"
         type="number"
         min="1"
         label="Amount"
-      /><v-textarea v-model="description" label="Reason" /><v-snackbar
+      />
+      <v-textarea
+        v-model="description"
+        label="Reason"
+      />
+      <v-snackbar
         :model-value="Boolean(error)"
         color="error"
         @update:model-value="(visible) => !visible && (error = '')"
-        >{{ error }}</v-snackbar
       >
+        {{ error }}
+      </v-snackbar>
       <div class="d-flex ga-3">
         <v-btn
           class="flex-grow-1"
@@ -70,16 +89,19 @@ onMounted(async () => {
           size="large"
           :disabled="!characterId"
           @click="submit(true)"
-          >Give coins</v-btn
-        ><v-btn
+        >
+          Give coins
+        </v-btn>
+        <v-btn
           class="flex-grow-1"
           color="error"
           size="large"
           :disabled="!characterId"
           @click="submit(false)"
-          >Take coins</v-btn
         >
-      </div></v-card-text
-    ></v-card
-  >
+          Take coins
+        </v-btn>
+      </div>
+    </v-card-text>
+  </v-card>
 </template>

@@ -37,7 +37,11 @@ const notice = ref("");
 const grantItemId = ref<number>();
 const grantQuantity = ref(1);
 const itemAction = ref<"use" | "destroy" | "transfer">();
-const selectedInventoryItem = ref<{ item_id: number; name: string; quantity: number }>();
+const selectedInventoryItem = ref<{
+  item_id: number;
+  name: string;
+  quantity: number;
+}>();
 const itemActionQuantity = ref(1);
 const itemActionDestination = ref<number>();
 const itemActionDescription = ref("");
@@ -67,8 +71,8 @@ const editAbilities = ref({
 });
 const denominations = ["cp", "sp", "ep", "gp", "pp"];
 const xpThresholds = [
-  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000,
-  120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000,
+  140000, 165000, 195000, 225000, 265000, 305000, 355000,
 ];
 const allItemCandidates = computed<PickerCandidate[]>(() =>
   items.value.map((item) => ({ item })),
@@ -95,13 +99,9 @@ const selectedInventoryQuantity = computed(
 );
 const canAct = computed(
   () =>
-    ownCharacter.value &&
-    character.value?.is_active &&
-    !character.value.is_archived,
+    ownCharacter.value && character.value?.is_active && !character.value.is_archived,
 );
-const canEdit = computed(
-  () => ownCharacter.value || campaign.value?.is_game_master,
-);
+const canEdit = computed(() => ownCharacter.value || campaign.value?.is_game_master);
 const skillAbilities: Record<string, string> = {
   acrobatics: "dexterity",
   animal_handling: "wisdom",
@@ -160,9 +160,7 @@ const skillColumns = computed(() => [
   skillGroups.value.filter((ability) =>
     ["strength", "dexterity", "intelligence"].includes(ability.key),
   ),
-  skillGroups.value.filter((ability) =>
-    ["wisdom", "charisma"].includes(ability.key),
-  ),
+  skillGroups.value.filter((ability) => ["wisdom", "charisma"].includes(ability.key)),
 ]);
 const displayName = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -174,17 +172,13 @@ const experienceProgress = computed(() => {
   const minimum = xpThresholds[level - 1] ?? 0;
   const maximum = xpThresholds[level];
   const progress = maximum
-    ? Math.min(
-        100,
-        Math.max(0, ((current - minimum) / (maximum - minimum)) * 100),
-      )
+    ? Math.min(100, Math.max(0, ((current - minimum) / (maximum - minimum)) * 100))
     : 100;
   return { current, level, maximum, minimum, progress };
 });
 const proficiencyLabel = (proficiency: string) =>
-  ({ half: "Half", proficient: "Proficient", expertise: "Expertise" })[
-    proficiency
-  ] ?? "";
+  ({ half: "Half", proficient: "Proficient", expertise: "Expertise" })[proficiency] ??
+  "";
 const proficiencyClass = (proficiency: string) =>
   `proficiency-bonus proficiency-bonus--${proficiency}`;
 const importChanges = computed(() => {
@@ -193,8 +187,7 @@ const importChanges = computed(() => {
     name: character.value.name,
     race: character.value.race,
     base_hp: character.value.sheet.base_hp,
-    proficiency_bonus_adjustment:
-      character.value.sheet.proficiency_bonus_adjustment,
+    proficiency_bonus_adjustment: character.value.sheet.proficiency_bonus_adjustment,
     strength: character.value.strength,
     dexterity: character.value.dexterity,
     constitution: character.value.constitution,
@@ -243,8 +236,7 @@ const importChanges = computed(() => {
           )
           .map(([skill, proficiency]) => ({
             label: skill.replaceAll("_", " "),
-            current:
-              character.value?.sheet.skills[skill]?.proficiency ?? "none",
+            current: character.value?.sheet.skills[skill]?.proficiency ?? "none",
             next: proficiency,
           }));
       }
@@ -360,7 +352,7 @@ async function submitMoneyAction(): Promise<void> {
       await createMoneyTransfer(campaignId, {
         from_character_id: character.value.id,
         to_character_id:
-          moneyAction.value === "transfer" ? moneyDestination.value ?? null : null,
+          moneyAction.value === "transfer" ? (moneyDestination.value ?? null) : null,
         amounts: { [denomination.value]: amount.value },
         description: moneyDescription.value,
       });
@@ -387,8 +379,7 @@ function openEdit(): void {
   editRace.value = character.value.race;
   editClass.value = character.value.class;
   editBaseHp.value = character.value.sheet.base_hp;
-  editProficiencyAdjustment.value =
-    character.value.sheet.proficiency_bonus_adjustment;
+  editProficiencyAdjustment.value = character.value.sheet.proficiency_bonus_adjustment;
   editAbilities.value = {
     strength: character.value.strength,
     dexterity: character.value.dexterity,
@@ -415,9 +406,7 @@ async function saveProfile(): Promise<void> {
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to update character.";
+      exception instanceof Error ? exception.message : "Unable to update character.";
   }
 }
 
@@ -428,9 +417,7 @@ async function archive(): Promise<void> {
     await router.replace(`/c/${campaignId}/characters`);
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to archive character.";
+      exception instanceof Error ? exception.message : "Unable to archive character.";
   }
 }
 
@@ -440,28 +427,20 @@ async function previewImport(): Promise<void> {
     importPreview.value = await previewCahImport(campaignId, importFile.value);
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to read CAH file.";
+      exception instanceof Error ? exception.message : "Unable to read CAH file.";
   }
 }
 
 async function commitImport(): Promise<void> {
   if (!character.value || !importPreview.value) return;
   try {
-    await commitCahImport(
-      campaignId,
-      importPreview.value.token,
-      character.value.id,
-    );
+    await commitCahImport(campaignId, importPreview.value.token, character.value.id);
     importOpen.value = false;
     importPreview.value = undefined;
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to import character.";
+      exception instanceof Error ? exception.message : "Unable to import character.";
   }
 }
 
@@ -469,7 +448,10 @@ onMounted(load);
 </script>
 
 <template>
-  <v-container class="page-shell" v-if="character">
+  <v-container
+    class="page-shell"
+    v-if="character"
+  >
     <header class="page-heading">
       <div>
         <div class="text-overline text-secondary">Character profile</div>
@@ -477,15 +459,25 @@ onMounted(load);
         <p>{{ character.race }} · {{ character.class }}</p>
       </div>
       <div class="d-flex ga-2">
-        <v-btn v-if="canEdit" @click="openEdit">Edit</v-btn>
-        <v-btn v-if="ownCharacter" variant="tonal" @click="importOpen = true"
-          >Import CAH</v-btn
+        <v-btn
+          v-if="canEdit"
+          @click="openEdit"
         >
+          Edit
+        </v-btn>
+        <v-btn
+          v-if="ownCharacter"
+          variant="tonal"
+          @click="importOpen = true"
+        >
+          Import CAH
+        </v-btn>
         <v-btn
           :to="`/c/${campaignId}/characters`"
           prepend-icon="mdi-account-group-outline"
-          >Roster</v-btn
         >
+          Roster
+        </v-btn>
       </div>
     </header>
     <v-alert
@@ -494,25 +486,25 @@ onMounted(load);
       closable
       class="mb-4"
       @click:close="error = ''"
-      >{{ error }}</v-alert
     >
+      {{ error }}
+    </v-alert>
     <v-alert
       v-if="notice"
       type="success"
       closable
       class="mb-4"
       @click:close="notice = ''"
-      >{{ notice }}</v-alert
     >
-    <v-row
-      ><v-col cols="12"
-        ><v-card
-          ><v-card-text
-            ><v-row
-              ><v-col cols="12"
-                ><div class="text-overline">
-                  Level {{ experienceProgress.level }}
-                </div>
+      {{ notice }}
+    </v-alert>
+    <v-row>
+      <v-col cols="12">
+        <v-card>
+          <v-card-text>
+            <v-row>
+              <v-col cols="12">
+                <div class="text-overline">Level {{ experienceProgress.level }}</div>
                 <v-progress-linear
                   class="mt-2"
                   color="primary"
@@ -524,65 +516,138 @@ onMounted(load);
                 <div class="xp-progress-labels">
                   <span>{{ formatXp(experienceProgress.minimum) }}</span>
                   <strong>{{ formatXp(experienceProgress.current) }}</strong>
-                  <span v-if="experienceProgress.maximum">{{
-                    formatXp(experienceProgress.maximum)
-                  }}</span
-                  ><span v-else>Maximum level</span>
-                </div></v-col></v-row
-            ><v-divider class="my-4" />
-            <v-row align="center" class="money-summary">
-              <v-col cols="12" sm="8"><div class="text-overline">Coin pouch</div><div class="money-line">{{ character.money.pp }} pp · {{ character.money.gp }} gp · {{ character.money.ep }} ep · {{ character.money.sp }} sp · {{ character.money.cp }} cp</div></v-col>
-              <v-col cols="12" sm="4" class="money-wealth"><div class="text-overline">Total wealth</div><div class="text-h4">{{ formatGoldValue(character.money.gold_value) }} ¤</div></v-col>
+                  <span v-if="experienceProgress.maximum">
+                    {{ formatXp(experienceProgress.maximum) }}
+                  </span>
+                  <span v-else>Maximum level</span>
+                </div>
+              </v-col>
             </v-row>
-            <div v-if="canAct" class="money-controls mt-4">
+            <v-divider class="my-4" />
+            <v-row
+              align="center"
+              class="money-summary"
+            >
+              <v-col
+                cols="12"
+                sm="8"
+              >
+                <div class="text-overline">Coin pouch</div>
+                <div class="money-line">
+                  {{ character.money.pp }} pp · {{ character.money.gp }} gp ·
+                  {{ character.money.ep }} ep · {{ character.money.sp }} sp ·
+                  {{ character.money.cp }} cp
+                </div>
+              </v-col>
+              <v-col
+                cols="12"
+                sm="4"
+                class="money-wealth"
+              >
+                <div class="text-overline">Total wealth</div>
+                <div class="text-h4">
+                  {{ formatGoldValue(character.money.gold_value) }} ¤
+                </div>
+              </v-col>
+            </v-row>
+            <div
+              v-if="canAct"
+              class="money-controls mt-4"
+            >
               <v-menu>
-                <template #activator="{ props }"><v-btn v-bind="props" variant="tonal" prepend-icon="mdi-cash-multiple">Money</v-btn></template>
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    variant="tonal"
+                    prepend-icon="mdi-cash-multiple"
+                  >
+                    Money
+                  </v-btn>
+                </template>
                 <v-list density="compact">
-                  <v-list-item title="Spend coins" prepend-icon="mdi-cash-minus" @click="openMoneyDialog('spend')" />
-                  <v-list-item title="Transfer coins" prepend-icon="mdi-cash-fast" @click="openMoneyDialog('transfer')" />
-                  <v-list-item title="Exchange coins" prepend-icon="mdi-swap-horizontal" @click="openMoneyDialog('exchange')" />
+                  <v-list-item
+                    title="Spend coins"
+                    prepend-icon="mdi-cash-minus"
+                    @click="openMoneyDialog('spend')"
+                  />
+                  <v-list-item
+                    title="Transfer coins"
+                    prepend-icon="mdi-cash-fast"
+                    @click="openMoneyDialog('transfer')"
+                  />
+                  <v-list-item
+                    title="Exchange coins"
+                    prepend-icon="mdi-swap-horizontal"
+                    @click="openMoneyDialog('exchange')"
+                  />
                 </v-list>
               </v-menu>
             </div>
             <v-divider class="my-4" />
             <v-row>
-              <v-col cols="6"
-                ><div class="text-overline">Max HP</div>
-                <div class="text-h5">{{ character.sheet.max_hp }}</div></v-col
-              >
-              <v-col cols="6"
-                ><div class="text-overline">Proficiency</div>
-                <div class="text-h5">
-                  +{{ character.sheet.proficiency_bonus }}
-                </div></v-col
-              >
+              <v-col cols="6">
+                <div class="text-overline">Max HP</div>
+                <div class="text-h5">{{ character.sheet.max_hp }}</div>
+              </v-col>
+              <v-col cols="6">
+                <div class="text-overline">Proficiency</div>
+                <div class="text-h5">+{{ character.sheet.proficiency_bonus }}</div>
+              </v-col>
             </v-row>
-            </v-card-text
-          ></v-card
-        >
-        <v-card class="mt-4 ability-save-card"
-          ><v-card-text
-            ><v-row dense
-              ><v-col v-for="ability in abilityGroups" :key="ability.key" class="ability-save-cell" cols="12" sm="6" md="2"
-                ><div class="ability-save"
-                  ><div class="ability-save-heading"><span class="ability-save-name">{{ ability.abbreviation }}</span><strong>{{ signed(ability.modifier) }}</strong><span class="ability-save-score">{{ ability.score }}</span></div
-                  ><v-divider class="my-3" /><div class="ability-save-row"><span>SAVE</span><v-tooltip v-if="ability.save.proficient" :text="proficiencyLabel('proficient')" location="top"><template #activator="{ props }"><strong v-bind="props" :class="proficiencyClass('proficient')">{{ signed(ability.save.bonus) }}</strong></template></v-tooltip><strong v-else>{{ signed(ability.save.bonus) }}</strong></div
-                ></div
-              ></v-col
-            ></v-row
-          ></v-card-text
-        ></v-card
-        >
-        <v-card class="mt-4"
-          ><v-card-title>Skills</v-card-title
-          ><v-card-text
-            ><v-row dense
-              ><v-col
+          </v-card-text>
+        </v-card>
+        <v-card class="mt-4 ability-save-card">
+          <v-card-text>
+            <v-row dense>
+              <v-col
+                v-for="ability in abilityGroups"
+                :key="ability.key"
+                class="ability-save-cell"
+                cols="12"
+                sm="6"
+                md="2"
+              >
+                <div class="ability-save">
+                  <div class="ability-save-heading">
+                    <span class="ability-save-name">{{ ability.abbreviation }}</span>
+                    <strong>{{ signed(ability.modifier) }}</strong>
+                    <span class="ability-save-score">{{ ability.score }}</span>
+                  </div>
+                  <v-divider class="my-3" />
+                  <div class="ability-save-row">
+                    <span>SAVE</span>
+                    <v-tooltip
+                      v-if="ability.save.proficient"
+                      :text="proficiencyLabel('proficient')"
+                      location="top"
+                    >
+                      <template #activator="{ props }">
+                        <strong
+                          v-bind="props"
+                          :class="proficiencyClass('proficient')"
+                        >
+                          {{ signed(ability.save.bonus) }}
+                        </strong>
+                      </template>
+                    </v-tooltip>
+                    <strong v-else>{{ signed(ability.save.bonus) }}</strong>
+                  </div>
+                </div>
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+        <v-card class="mt-4">
+          <v-card-title>Skills</v-card-title>
+          <v-card-text>
+            <v-row dense>
+              <v-col
                 v-for="(column, columnIndex) in skillColumns"
                 :key="columnIndex"
                 cols="12"
                 sm="6"
-                ><div
+              >
+                <div
                   v-for="ability in column"
                   :key="ability.key"
                   class="skill-group"
@@ -602,95 +667,351 @@ onMounted(load);
                         <span
                           v-bind="props"
                           :class="proficiencyClass(skill.proficiency)"
-                          ><span
+                        >
+                          <span
                             v-if="skill.proficiency === 'expertise'"
                             class="expertise-sparkle"
                             aria-hidden="true"
-                            >✦</span
-                          >{{ signed(skill.bonus) }}</span
-                        >
+                          >
+                            ✦
+                          </span>
+                          {{ signed(skill.bonus) }}
+                        </span>
                       </template>
                     </v-tooltip>
                     <strong v-else>{{ signed(skill.bonus) }}</strong>
                     <span>{{ displayName(skill.name) }}</span>
                   </div>
-                </div></v-col
-              ></v-row
-            ></v-card-text
-          ></v-card
-        ><v-card class="mt-4"
-          ><v-card-title class="d-flex align-center"
-            >Inventory<v-spacer /><ItemPickerDialog
+                </div>
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+        <v-card class="mt-4">
+          <v-card-title class="d-flex align-center">
+            Inventory
+            <v-spacer />
+            <ItemPickerDialog
               v-if="canAct"
               v-model="grantItemId"
               :candidates="allItemCandidates"
               label="Give yourself an item"
               no-data-text="No campaign items available."
-            /></v-card-title
-          ><v-card-text
-            ><div v-if="canAct" class="d-flex align-center ga-3 mb-4"><v-text-field v-model.number="grantQuantity" type="number" min="1" label="Quantity" hide-details /><v-btn color="primary" :disabled="!grantItemId || grantQuantity < 1" @click="grantItem">Give yourself</v-btn></div><v-table v-if="character.inventory.length" density="comfortable"
-              ><thead><tr><th>Item</th><th>Quantity</th><th class="text-right">Controls</th></tr></thead
-              ><tbody><tr v-for="entry in character.inventory" :key="entry.item_id"
-                ><td>{{ entry.name }}</td><td>{{ entry.quantity }}</td><td class="text-right"
-                  ><template v-if="canAct"
-                    ><v-btn size="small" variant="text" @click="openItemAction('use', entry)">Use</v-btn><v-btn size="small" variant="text" @click="openItemAction('destroy', entry)">Destroy</v-btn><v-btn size="small" color="primary" variant="text" @click="openItemAction('transfer', entry)">Transfer</v-btn
-                  ></template
-                ></td
-              ></tr></tbody
-            ></v-table><span v-else class="text-medium-emphasis">No inventory recorded.</span
-          ></v-card-text
-        ></v-card
-      ></v-col
-    ></v-row
+            />
+          </v-card-title>
+          <v-card-text>
+            <div
+              v-if="canAct"
+              class="d-flex align-center ga-3 mb-4"
+            >
+              <v-text-field
+                v-model.number="grantQuantity"
+                type="number"
+                min="1"
+                label="Quantity"
+                hide-details
+              />
+              <v-btn
+                color="primary"
+                :disabled="!grantItemId || grantQuantity < 1"
+                @click="grantItem"
+              >
+                Give yourself
+              </v-btn>
+            </div>
+            <v-table
+              v-if="character.inventory.length"
+              density="comfortable"
+            >
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                  <th class="text-right">Controls</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="entry in character.inventory"
+                  :key="entry.item_id"
+                >
+                  <td>{{ entry.name }}</td>
+                  <td>{{ entry.quantity }}</td>
+                  <td class="text-right">
+                    <template v-if="canAct">
+                      <v-btn
+                        size="small"
+                        variant="text"
+                        @click="openItemAction('use', entry)"
+                      >
+                        Use
+                      </v-btn>
+                      <v-btn
+                        size="small"
+                        variant="text"
+                        @click="openItemAction('destroy', entry)"
+                      >
+                        Destroy
+                      </v-btn>
+                      <v-btn
+                        size="small"
+                        color="primary"
+                        variant="text"
+                        @click="openItemAction('transfer', entry)"
+                      >
+                        Transfer
+                      </v-btn>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+            <span
+              v-else
+              class="text-medium-emphasis"
+            >
+              No inventory recorded.
+            </span>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+    <v-dialog
+      v-model="moneyDialog"
+      max-width="620"
     >
-    <v-dialog v-model="moneyDialog" max-width="620">
-      <v-card :title="moneyAction === 'spend' ? 'Spend coins' : moneyAction === 'transfer' ? 'Transfer coins' : 'Exchange coins'">
+      <v-card
+        :title="
+          moneyAction === 'spend'
+            ? 'Spend coins'
+            : moneyAction === 'transfer'
+              ? 'Transfer coins'
+              : 'Exchange coins'
+        "
+      >
         <v-card-text>
           <template v-if="moneyAction === 'spend'">
-            <v-row><v-col><v-select v-model="denomination" :items="denominations" label="Denomination" /></v-col><v-col><v-text-field v-model.number="amount" type="number" min="1" label="Amount" /></v-col></v-row>
-            <div class="text-caption text-medium-emphasis mb-3">Coins will be transferred to the campaign system.</div>
+            <v-row>
+              <v-col>
+                <v-select
+                  v-model="denomination"
+                  :items="denominations"
+                  label="Denomination"
+                />
+              </v-col>
+              <v-col>
+                <v-text-field
+                  v-model.number="amount"
+                  type="number"
+                  min="1"
+                  label="Amount"
+                />
+              </v-col>
+            </v-row>
+            <div class="text-caption text-medium-emphasis mb-3">
+              Coins will be transferred to the campaign system.
+            </div>
           </template>
           <template v-else-if="moneyAction === 'transfer'">
-            <v-select v-model="moneyDestination" :items="destinationOptions" label="Transfer to" />
-            <v-row><v-col><v-select v-model="denomination" :items="denominations" label="Denomination" /></v-col><v-col><v-text-field v-model.number="amount" type="number" min="1" label="Amount" /></v-col></v-row>
+            <v-select
+              v-model="moneyDestination"
+              :items="destinationOptions"
+              label="Transfer to"
+            />
+            <v-row>
+              <v-col>
+                <v-select
+                  v-model="denomination"
+                  :items="denominations"
+                  label="Denomination"
+                />
+              </v-col>
+              <v-col>
+                <v-text-field
+                  v-model.number="amount"
+                  type="number"
+                  min="1"
+                  label="Amount"
+                />
+              </v-col>
+            </v-row>
           </template>
           <template v-else>
-            <v-row><v-col><v-select v-model="denomination" :items="denominations" label="Source denomination" /><v-text-field v-model.number="amount" type="number" min="1" label="Source coins" /></v-col><v-col><v-select v-model="exchangeTargetDenomination" :items="denominations" label="Target denomination" /><v-text-field :model-value="exchangeAmount ?? ''" readonly label="Target coins" /></v-col></v-row>
-            <v-alert v-if="!exchangeAmount" type="warning" variant="tonal" density="compact">Choose different denominations and an exactly convertible quantity.</v-alert>
+            <v-row>
+              <v-col>
+                <v-select
+                  v-model="denomination"
+                  :items="denominations"
+                  label="Source denomination"
+                />
+                <v-text-field
+                  v-model.number="amount"
+                  type="number"
+                  min="1"
+                  label="Source coins"
+                />
+              </v-col>
+              <v-col>
+                <v-select
+                  v-model="exchangeTargetDenomination"
+                  :items="denominations"
+                  label="Target denomination"
+                />
+                <v-text-field
+                  :model-value="exchangeAmount ?? ''"
+                  readonly
+                  label="Target coins"
+                />
+              </v-col>
+            </v-row>
+            <v-alert
+              v-if="!exchangeAmount"
+              type="warning"
+              variant="tonal"
+              density="compact"
+            >
+              Choose different denominations and an exactly convertible quantity.
+            </v-alert>
           </template>
-          <v-textarea v-if="moneyAction !== 'exchange'" v-model="moneyDescription" label="Note (optional)" rows="2" />
+          <v-textarea
+            v-if="moneyAction !== 'exchange'"
+            v-model="moneyDescription"
+            label="Note (optional)"
+            rows="2"
+          />
         </v-card-text>
-        <v-card-actions><v-spacer /><v-btn @click="moneyDialog = false">Cancel</v-btn><v-btn color="primary" :disabled="moneyAction === 'transfer' ? !moneyDestination : moneyAction === 'exchange' ? !exchangeAmount : !amount || amount < 1" @click="submitMoneyAction">{{ moneyAction === 'spend' ? 'Spend coins' : moneyAction === 'transfer' ? 'Transfer coins' : 'Exchange coins' }}</v-btn></v-card-actions>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="moneyDialog = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :disabled="
+              moneyAction === 'transfer'
+                ? !moneyDestination
+                : moneyAction === 'exchange'
+                  ? !exchangeAmount
+                  : !amount || amount < 1
+            "
+            @click="submitMoneyAction"
+          >
+            {{
+              moneyAction === "spend"
+                ? "Spend coins"
+                : moneyAction === "transfer"
+                  ? "Transfer coins"
+                  : "Exchange coins"
+            }}
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-dialog :model-value="Boolean(itemAction)" max-width="560" @update:model-value="(value) => !value && closeItemAction()"
-      ><v-card :title="itemAction === 'use' ? 'Use item' : itemAction === 'destroy' ? 'Destroy item' : 'Transfer item'"
-        ><v-card-text v-if="selectedInventoryItem"><div class="mb-4">{{ selectedInventoryItem.name }} · {{ selectedInventoryItem.quantity }} held</div><v-select v-if="itemAction === 'transfer'" v-model="itemActionDestination" :items="destinationOptions" label="Transfer to" /><v-text-field v-model.number="itemActionQuantity" type="number" min="1" :max="selectedInventoryItem.quantity" label="Quantity" /><v-textarea v-model="itemActionDescription" label="Note (optional)" rows="2" /></v-card-text
-        ><v-card-actions><v-spacer /><v-btn @click="closeItemAction">Cancel</v-btn><v-btn color="primary" :disabled="itemActionQuantity < 1 || itemActionQuantity > selectedInventoryQuantity || (itemAction === 'transfer' && !itemActionDestination)" @click="submitItemAction">{{ itemAction === 'use' ? 'Use item' : itemAction === 'destroy' ? 'Destroy item' : 'Transfer item' }}</v-btn></v-card-actions
-      ></v-card
-    ></v-dialog>
-    <v-dialog v-model="editOpen" max-width="720">
+    <v-dialog
+      :model-value="Boolean(itemAction)"
+      max-width="560"
+      @update:model-value="(value) => !value && closeItemAction()"
+    >
+      <v-card
+        :title="
+          itemAction === 'use'
+            ? 'Use item'
+            : itemAction === 'destroy'
+              ? 'Destroy item'
+              : 'Transfer item'
+        "
+      >
+        <v-card-text v-if="selectedInventoryItem">
+          <div class="mb-4">
+            {{ selectedInventoryItem.name }} · {{ selectedInventoryItem.quantity }} held
+          </div>
+          <v-select
+            v-if="itemAction === 'transfer'"
+            v-model="itemActionDestination"
+            :items="destinationOptions"
+            label="Transfer to"
+          />
+          <v-text-field
+            v-model.number="itemActionQuantity"
+            type="number"
+            min="1"
+            :max="selectedInventoryItem.quantity"
+            label="Quantity"
+          />
+          <v-textarea
+            v-model="itemActionDescription"
+            label="Note (optional)"
+            rows="2"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="closeItemAction">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :disabled="
+              itemActionQuantity < 1 ||
+              itemActionQuantity > selectedInventoryQuantity ||
+              (itemAction === 'transfer' && !itemActionDestination)
+            "
+            @click="submitItemAction"
+          >
+            {{
+              itemAction === "use"
+                ? "Use item"
+                : itemAction === "destroy"
+                  ? "Destroy item"
+                  : "Transfer item"
+            }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog
+      v-model="editOpen"
+      max-width="720"
+    >
       <v-card title="Edit character">
         <v-card-text>
           <v-row>
-            <v-col cols="12" sm="4"
-              ><v-text-field v-model="editName" label="Name"
-            /></v-col>
-            <v-col cols="12" sm="4"
-              ><v-text-field v-model="editRace" label="Race"
-            /></v-col>
-            <v-col cols="12" sm="4"
-              ><v-text-field v-model="editClass" label="Class"
-            /></v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model="editName"
+                label="Name"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model="editRace"
+                label="Race"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model="editClass"
+                label="Class"
+              />
+            </v-col>
           </v-row>
           <v-row>
-            <v-col cols="12" sm="4"
-              ><v-text-field
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
                 v-model.number="editBaseHp"
                 type="number"
                 min="1"
                 label="Base HP"
-            /></v-col>
+              />
+            </v-col>
           </v-row>
           <v-row>
             <v-col
@@ -710,14 +1031,28 @@ onMounted(load);
           </v-row>
         </v-card-text>
         <v-card-actions>
-          <v-btn color="error" variant="text" @click="archive">Archive</v-btn>
+          <v-btn
+            color="error"
+            variant="text"
+            @click="archive"
+          >
+            Archive
+          </v-btn>
           <v-spacer />
           <v-btn @click="editOpen = false">Cancel</v-btn>
-          <v-btn color="primary" @click="saveProfile">Save</v-btn>
+          <v-btn
+            color="primary"
+            @click="saveProfile"
+          >
+            Save
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-dialog v-model="importOpen" max-width="560">
+    <v-dialog
+      v-model="importOpen"
+      max-width="560"
+    >
       <v-card title="Import 5e Companion character">
         <v-card-text>
           <v-file-input
@@ -726,14 +1061,18 @@ onMounted(load);
             label="CAH export"
             @update:model-value="importPreview = undefined"
           />
-          <v-btn :disabled="!importFile" @click="previewImport"
-            >Preview import</v-btn
+          <v-btn
+            :disabled="!importFile"
+            @click="previewImport"
           >
+            Preview import
+          </v-btn>
           <template v-if="importPreview">
-            <v-card variant="tonal" class="mt-4">
-              <v-card-title class="text-subtitle-1"
-                >Changes to apply</v-card-title
-              >
+            <v-card
+              variant="tonal"
+              class="mt-4"
+            >
+              <v-card-title class="text-subtitle-1">Changes to apply</v-card-title>
               <v-list density="compact">
                 <v-list-item
                   v-for="change in importChanges"
@@ -752,21 +1091,26 @@ onMounted(load);
               type="warning"
               class="mt-4"
             >
-              <div v-for="warning in importPreview.warnings" :key="warning">
+              <div
+                v-for="warning in importPreview.warnings"
+                :key="warning"
+              >
                 {{ warning }}
               </div>
             </v-alert>
           </template>
         </v-card-text>
-        <v-card-actions
-          ><v-spacer /><v-btn @click="importOpen = false">Cancel</v-btn
-          ><v-btn
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="importOpen = false">Cancel</v-btn>
+          <v-btn
             color="primary"
             :disabled="!importPreview"
             @click="commitImport"
-            >Replace reference sheet</v-btn
-          ></v-card-actions
-        >
+          >
+            Replace reference sheet
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
   </v-container>

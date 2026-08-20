@@ -16,9 +16,7 @@ onMounted(async () => {
     csrfReady.value = true;
   } catch (exception) {
     error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to initialise sign-in.";
+      exception instanceof Error ? exception.message : "Unable to initialise sign-in.";
   }
 });
 
@@ -33,8 +31,7 @@ async function submit(): Promise<void> {
     await login(username.value, password.value);
     await router.push("/");
   } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to sign in.";
+    error.value = exception instanceof Error ? exception.message : "Unable to sign in.";
   } finally {
     loading.value = false;
   }
@@ -42,14 +39,24 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <v-container class="fill-height" style="max-width: 440px">
-    <v-card class="pa-6" elevation="8">
-      <v-card-title class="text-h4 text-primary font-weight-black"
-        >Hoard</v-card-title
-      >
+  <v-container
+    class="fill-height"
+    style="max-width: 440px"
+  >
+    <v-card
+      class="pa-6"
+      elevation="8"
+    >
+      <v-card-title class="text-h4 text-primary font-weight-black">Hoard</v-card-title>
       <v-card-subtitle>Campaign ledger and table tools</v-card-subtitle>
       <v-card-text class="pt-6">
-        <v-alert v-if="error" type="error" class="mb-4">{{ error }}</v-alert>
+        <v-alert
+          v-if="error"
+          type="error"
+          class="mb-4"
+        >
+          {{ error }}
+        </v-alert>
         <v-form @submit.prevent="submit">
           <v-text-field
             v-model="username"
@@ -70,8 +77,9 @@ async function submit(): Promise<void> {
             type="submit"
             :loading="loading"
             :disabled="!csrfReady"
-            >Sign in</v-btn
           >
+            Sign in
+          </v-btn>
         </v-form>
       </v-card-text>
     </v-card>

@@ -66,9 +66,11 @@ describe("API client", () => {
   });
 
   it("posts money transfers and exchanges to their concrete resources", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 4, ledger: "money" }), { status: 201 }),
-    );
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 4, ledger: "money" }), { status: 201 }),
+      );
     vi.stubGlobal("fetch", fetch);
 
     await createMoneyTransfer(8, {

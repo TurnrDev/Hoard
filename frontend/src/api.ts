@@ -65,14 +65,8 @@ export type Character = {
     max_hp: number;
     proficiency_bonus_adjustment: number;
     proficiency_bonus: number;
-    abilities: Record<
-      string,
-      { score: number; modifier: number; adjustment: number }
-    >;
-    saves: Record<
-      string,
-      { proficient: boolean; adjustment: number; bonus: number }
-    >;
+    abilities: Record<string, { score: number; modifier: number; adjustment: number }>;
+    saves: Record<string, { proficient: boolean; adjustment: number; bonus: number }>;
     skills: Record<string, { proficiency: string; bonus: number }>;
   };
   experience: number;
@@ -120,9 +114,7 @@ function getCookie(name: string): string {
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = getCookie("csrftoken") || csrfToken;
-  const unsafe = !["GET", "HEAD", "OPTIONS", "TRACE"].includes(
-    options.method ?? "GET",
-  );
+  const unsafe = !["GET", "HEAD", "OPTIONS", "TRACE"].includes(options.method ?? "GET");
   const response = await fetch(url, {
     credentials: "same-origin",
     ...options,
@@ -136,16 +128,12 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ detail: response.statusText }));
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(
       typeof error.detail === "string" ? error.detail : JSON.stringify(error),
     );
   }
-  return response.status === 204
-    ? (undefined as T)
-    : (response.json() as Promise<T>);
+  return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
 
 export async function initialiseCsrf(): Promise<void> {
@@ -158,8 +146,7 @@ export const login = (username: string, password: string) =>
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
-export const logout = () =>
-  request<void>("/api/auth/session/", { method: "DELETE" });
+export const logout = () => request<void>("/api/auth/session/", { method: "DELETE" });
 export const getContexts = () => request<CampaignContext[]>("/api/contexts/");
 export const getCampaigns = async (): Promise<CampaignSummary[]> => {
   const contexts = await getContexts();
@@ -169,17 +156,13 @@ export const getCampaigns = async (): Promise<CampaignSummary[]> => {
     campaigns.set(context.campaign_id, {
       id: context.campaign_id,
       name: context.campaign_name,
-      is_game_master: Boolean(
-        previous?.is_game_master || context.kind === "gm",
-      ),
+      is_game_master: Boolean(previous?.is_game_master || context.kind === "gm"),
     });
   }
   return [...campaigns.values()];
 };
-export const getCampaign = (id: number) =>
-  request<Campaign>(`/api/contexts/${id}/`);
-export const getItems = (id: number) =>
-  request<Item[]>(`/api/contexts/${id}/items/`);
+export const getCampaign = (id: number) => request<Campaign>(`/api/contexts/${id}/`);
+export const getItems = (id: number) => request<Item[]>(`/api/contexts/${id}/items/`);
 export const addMember = (id: number, username: string, isGameMaster = false) =>
   request<CampaignMember>(`/api/contexts/${id}/manage/contexts/`, {
     method: "POST",
@@ -190,13 +173,10 @@ export const updateMember = (
   memberId: number,
   isGameMaster: boolean,
 ) =>
-  request<CampaignMember>(
-    `/api/contexts/${campaignId}/manage/contexts/${memberId}/`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ is_game_master: isGameMaster }),
-    },
-  );
+  request<CampaignMember>(`/api/contexts/${campaignId}/manage/contexts/${memberId}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_game_master: isGameMaster }),
+  });
 export const removeMember = (campaignId: number, memberId: number) =>
   request<void>(`/api/contexts/${campaignId}/manage/contexts/${memberId}/`, {
     method: "DELETE",
@@ -277,13 +257,10 @@ export const commitCahImport = (
   token: string,
   characterId?: number,
 ) =>
-  request<Character>(
-    `/api/contexts/${contextId}/character-imports/cah/commit`,
-    {
-      method: "POST",
-      body: JSON.stringify({ token, character_id: characterId }),
-    },
-  );
+  request<Character>(`/api/contexts/${contextId}/character-imports/cah/commit`, {
+    method: "POST",
+    body: JSON.stringify({ token, character_id: characterId }),
+  });
 export const updateCharacter = (
   campaignId: number,
   characterId: number,
@@ -292,13 +269,10 @@ export const updateCharacter = (
   const { class: characterClass, ...fields } = payload as {
     class?: string;
   } & Record<string, unknown>;
-  return request<Character>(
-    `/api/contexts/${campaignId}/characters/${characterId}/`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ ...fields, character_class: characterClass }),
-    },
-  );
+  return request<Character>(`/api/contexts/${campaignId}/characters/${characterId}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...fields, character_class: characterClass }),
+  });
 };
 export type InventoryTransactionInput = {
   from_character_id: number | null;
@@ -324,22 +298,16 @@ export const createInventoryTransaction = (
   campaignId: number,
   payload: InventoryTransactionInput,
 ) =>
-  request<LedgerTransaction>(
-    `/api/contexts/${campaignId}/inventory-transactions/`,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
-export const createMoneyTransfer = (
-  campaignId: number,
-  payload: MoneyTransferInput,
-) =>
+  request<LedgerTransaction>(`/api/contexts/${campaignId}/inventory-transactions/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+export const createMoneyTransfer = (campaignId: number, payload: MoneyTransferInput) =>
   request<LedgerTransaction>(`/api/contexts/${campaignId}/money-transfers/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
-export const createMoneyExchange = (
-  campaignId: number,
-  payload: MoneyExchangeInput,
-) =>
+export const createMoneyExchange = (campaignId: number, payload: MoneyExchangeInput) =>
   request<LedgerTransaction>(`/api/contexts/${campaignId}/money-exchanges/`, {
     method: "POST",
     body: JSON.stringify(payload),
