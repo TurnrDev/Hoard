@@ -87,6 +87,78 @@ body {
   font-size: 0.875rem;
 }
 
+.ability-save {
+  padding: 8px 16px 6px;
+}
+
+.ability-save-cell + .ability-save-cell {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ability-save-heading,
+.ability-save-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.ability-save-heading {
+  gap: 5px;
+}
+
+.ability-save-name,
+.ability-save-row span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.ability-save-heading strong {
+  color: inherit;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.ability-save-score {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+}
+
+.ability-save-row {
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.6875rem;
+}
+
+.ability-save-row strong {
+  color: inherit;
+  font-size: 0.75rem;
+}
+
+.ability-save-row .proficiency-bonus {
+  color: #d5a250;
+}
+
+@media (max-width: 959px) {
+  .ability-save-cell + .ability-save-cell {
+    border-left: 0;
+  }
+
+  .ability-save-cell:nth-child(n + 3) {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
+@media (max-width: 599px) {
+  .ability-save-cell + .ability-save-cell {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .ability-save-cell:nth-child(n + 3) {
+    border-top: 0;
+  }
+}
+
 .money-summary {
   padding: 4px 0;
 }

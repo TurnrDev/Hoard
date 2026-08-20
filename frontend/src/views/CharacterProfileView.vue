@@ -102,42 +102,6 @@ const canAct = computed(
 const canEdit = computed(
   () => ownCharacter.value || campaign.value?.is_game_master,
 );
-const abilityScores = computed<[string, number, number][]>(() =>
-  character.value
-    ? [
-        [
-          "STR",
-          character.value.strength,
-          character.value.sheet.abilities.strength.modifier,
-        ],
-        [
-          "DEX",
-          character.value.dexterity,
-          character.value.sheet.abilities.dexterity.modifier,
-        ],
-        [
-          "CON",
-          character.value.constitution,
-          character.value.sheet.abilities.constitution.modifier,
-        ],
-        [
-          "INT",
-          character.value.intelligence,
-          character.value.sheet.abilities.intelligence.modifier,
-        ],
-        [
-          "WIS",
-          character.value.wisdom,
-          character.value.sheet.abilities.wisdom.modifier,
-        ],
-        [
-          "CHA",
-          character.value.charisma,
-          character.value.sheet.abilities.charisma.modifier,
-        ],
-      ]
-    : [],
-);
 const skillAbilities: Record<string, string> = {
   acrobatics: "dexterity",
   animal_handling: "wisdom",
@@ -171,6 +135,15 @@ const abilityGroups = computed(() => {
     key,
     label,
     abbreviation,
+    score: {
+      strength: character.value!.strength,
+      dexterity: character.value!.dexterity,
+      constitution: character.value!.constitution,
+      intelligence: character.value!.intelligence,
+      wisdom: character.value!.wisdom,
+      charisma: character.value!.charisma,
+    }[key],
+    modifier: character.value!.sheet.abilities[key].modifier,
     save: character.value!.sheet.saves[key],
     skills: Object.entries(character.value!.sheet.skills)
       .filter(([name]) => skillAbilities[name] === key)
@@ -584,50 +557,21 @@ onMounted(load);
                 </div></v-col
               >
             </v-row>
-            <v-divider class="my-4" /><v-row
-              ><v-col
-                v-for="[label, score, modifier] in abilityScores"
-                :key="label"
-                cols="4"
-                sm="2"
-                ><div class="ability">
-                  <strong>{{ signed(modifier) }}</strong
-                  ><span>{{ label }} · {{ score }}</span>
-                </div></v-col
-              ></v-row
-            ></v-card-text
+            </v-card-text
           ></v-card
         >
-        <v-card class="mt-4"
-          ><v-card-title>Saving throws</v-card-title
+        <v-card class="mt-4 ability-save-card"
           ><v-card-text
             ><v-row dense
-              ><v-col
-                v-for="ability in abilityGroups"
-                :key="ability.key"
-                cols="4"
-                sm="2"
-                ><div class="ability">
-                  <v-tooltip
-                    v-if="ability.save.proficient"
-                    :text="proficiencyLabel('proficient')"
-                    location="top"
-                  >
-                    <template #activator="{ props }">
-                      <span
-                        v-bind="props"
-                        :class="proficiencyClass('proficient')"
-                      >
-                        {{ signed(ability.save.bonus) }}
-                      </span>
-                    </template>
-                  </v-tooltip>
-                  <strong v-else>{{ signed(ability.save.bonus) }}</strong>
-                  <span>{{ ability.abbreviation }} save</span>
-                </div></v-col
-              ></v-row
-            ></v-card-text
-          ></v-card
+              ><v-col v-for="ability in abilityGroups" :key="ability.key" class="ability-save-cell" cols="12" sm="6" md="2"
+                ><div class="ability-save"
+                  ><div class="ability-save-heading"><span class="ability-save-name">{{ ability.abbreviation }}</span><strong>{{ signed(ability.modifier) }}</strong><span class="ability-save-score">{{ ability.score }}</span></div
+                  ><v-divider class="my-3" /><div class="ability-save-row"><span>SAVE</span><v-tooltip v-if="ability.save.proficient" :text="proficiencyLabel('proficient')" location="top"><template #activator="{ props }"><strong v-bind="props" :class="proficiencyClass('proficient')">{{ signed(ability.save.bonus) }}</strong></template></v-tooltip><strong v-else>{{ signed(ability.save.bonus) }}</strong></div
+                ></div
+              ></v-col
+            ></v-row
+          ></v-card-text
+        ></v-card
         >
         <v-card class="mt-4"
           ><v-card-title>Skills</v-card-title
