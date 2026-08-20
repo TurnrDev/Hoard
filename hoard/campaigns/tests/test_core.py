@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -35,6 +36,21 @@ class CoreModelTests(TestCase):
             CampaignContext.objects.create(
                 campaign=self.campaign, user=self.user, kind=CampaignContext.Kind.GM
             )
+
+    def test_campaign_calendar_defaults_and_rollover(self) -> None:
+        self.assertEqual(self.campaign.calendar_era_abbreviation, "PD")
+        self.assertEqual(self.campaign.calendar_era_name, "Powder Dynasty")
+        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (81, 137))
+        self.campaign.calendar_year, self.campaign.calendar_day = 81, 365
+        self.campaign.adjust_calendar_day(1)
+        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (82, 1))
+        self.campaign.adjust_calendar_day(-1)
+        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (81, 365))
+
+    def test_campaign_calendar_cannot_precede_first_day(self) -> None:
+        self.campaign.calendar_year, self.campaign.calendar_day = 1, 1
+        with self.assertRaises(ValidationError):
+            self.campaign.adjust_calendar_day(-1)
 
     def test_sheet_derives_modifiers_saves_and_skills(self) -> None:
         character = Character.objects.create(

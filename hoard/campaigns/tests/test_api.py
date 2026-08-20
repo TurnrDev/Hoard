@@ -55,6 +55,40 @@ class ContextApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual({row["kind"] for row in response.json()}, {"gm", "pc"})
 
+    def test_players_can_view_the_calendar_but_only_gms_can_adjust_it(self) -> None:
+        self.client.force_login(self.player_user)
+        visible = self.client.get(f"/api/contexts/{self.pc.pk}/calendar/")
+        self.assertEqual(visible.status_code, 200)
+        self.assertEqual(visible.json()["year"], 81)
+        forbidden = self.client.post(
+            f"/api/contexts/{self.pc.pk}/calendar/adjust/",
+            data=json.dumps({"amount": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.force_login(self.gm_user)
+        self.campaign.calendar_year, self.campaign.calendar_day = 81, 365
+        self.campaign.save(update_fields=("calendar_year", "calendar_day"))
+        updated = self.client.post(
+            f"/api/contexts/{self.gm.pk}/calendar/adjust/",
+            data=json.dumps({"amount": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual((updated.json()["year"], updated.json()["day"]), (82, 1))
+
+    def test_calendar_rejects_decrement_before_first_day(self) -> None:
+        self.campaign.calendar_year, self.campaign.calendar_day = 1, 1
+        self.campaign.save(update_fields=("calendar_year", "calendar_day"))
+        self.client.force_login(self.gm_user)
+        response = self.client.post(
+            f"/api/contexts/{self.gm.pk}/calendar/adjust/",
+            data=json.dumps({"amount": -1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 422)
+
     def test_player_cannot_edit_another_character(self) -> None:
         self.client.force_login(self.player_user)
         response = self.client.patch(

@@ -20,6 +20,7 @@ import {
   type Item,
   type LedgerTransaction,
 } from "../api";
+import { useCampaignRefresh } from "../realtime";
 import { exchangedCoinAmount } from "../coinExchange";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
@@ -129,6 +130,12 @@ const hasMoneyAmounts = computed(
 );
 const selectedInventoryQuantity = computed(
   () => selectedInventoryItem.value?.quantity ?? 0,
+);
+const itemActionInvalid = computed(
+  () =>
+    itemActionQuantity.value < 1 ||
+    itemActionQuantity.value > selectedInventoryQuantity.value ||
+    (itemAction.value === "transfer" && !itemActionDestination.value),
 );
 const canAct = computed(
   () =>
@@ -531,6 +538,7 @@ async function commitImport(): Promise<void> {
 }
 
 onMounted(load);
+useCampaignRefresh(load);
 </script>
 
 <template>
@@ -1105,11 +1113,7 @@ onMounted(load);
           <v-btn @click="closeItemAction">Cancel</v-btn>
           <v-btn
             color="primary"
-            :disabled="
-              itemActionQuantity < 1 ||
-              itemActionQuantity > selectedInventoryQuantity ||
-              (itemAction === 'transfer' && !itemActionDestination)
-            "
+            :disabled="itemActionInvalid"
             @click="submitItemAction"
           >
             {{

@@ -38,7 +38,15 @@ class CampaignAdminForm(forms.ModelForm):
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
     form = CampaignAdminForm
-    list_display = ("name", "use_shared_exp", "shared_experience", "item_sources")
+    list_display = (
+        "name",
+        "calendar_era_abbreviation",
+        "calendar_year",
+        "calendar_day",
+        "use_shared_exp",
+        "shared_experience",
+        "item_sources",
+    )
     search_fields = ("name",)
 
 

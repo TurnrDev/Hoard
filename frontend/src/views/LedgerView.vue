@@ -8,6 +8,7 @@ import {
   type Campaign,
   type LedgerTransaction,
 } from "../api";
+import { useCampaignRefresh } from "../realtime";
 
 const campaignId = Number(useRoute().params.id);
 const campaign = ref<Campaign>();
@@ -42,6 +43,14 @@ function typeIcon(transaction: LedgerTransaction): string {
   );
 }
 
+function canReverse(transaction: LedgerTransaction): boolean {
+  return Boolean(
+    campaign.value?.is_game_master &&
+    !transaction.is_reversed &&
+    !transaction.reversal_of_id,
+  );
+}
+
 async function load(): Promise<void> {
   try {
     const [next, history] = await Promise.all([
@@ -69,6 +78,7 @@ async function reverse(): Promise<void> {
 }
 
 onMounted(load);
+useCampaignRefresh(load);
 </script>
 
 <template>
@@ -131,11 +141,7 @@ onMounted(load);
             <td>{{ transaction.actor || "—" }}</td>
             <td>
               <v-btn
-                v-if="
-                  campaign?.is_game_master &&
-                  !transaction.is_reversed &&
-                  !transaction.reversal_of_id
-                "
+                v-if="canReverse(transaction)"
                 icon="mdi-undo"
                 size="small"
                 variant="text"

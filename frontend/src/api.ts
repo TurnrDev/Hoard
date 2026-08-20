@@ -12,6 +12,12 @@ export type CampaignContext = {
   character_id: number | null;
   character_name: string | null;
 };
+export type CampaignCalendar = {
+  era_abbreviation: string;
+  era_name: string;
+  year: number;
+  day: number;
+};
 export type CampaignMember = {
   id: number;
   username: string;
@@ -77,6 +83,7 @@ export type Campaign = CampaignSummary & {
   use_shared_exp: boolean;
   shared_experience: number;
   item_sources: string[];
+  calendar: CampaignCalendar;
   party_money: Record<string, number | string>;
   characters: Character[];
 };
@@ -163,6 +170,13 @@ export const getCampaigns = async (): Promise<CampaignSummary[]> => {
   return [...campaigns.values()];
 };
 export const getCampaign = (id: number) => request<Campaign>(`/api/contexts/${id}/`);
+export const getCalendar = (id: number) =>
+  request<CampaignCalendar>(`/api/contexts/${id}/calendar/`);
+export const adjustCalendar = (id: number, amount: -1 | 1) =>
+  request<CampaignCalendar>(`/api/contexts/${id}/calendar/adjust/`, {
+    method: "POST",
+    body: JSON.stringify({ amount }),
+  });
 export const getItems = (id: number) => request<Item[]>(`/api/contexts/${id}/items/`);
 export const addMember = (id: number, username: string, isGameMaster = false) =>
   request<CampaignMember>(`/api/contexts/${id}/manage/contexts/`, {

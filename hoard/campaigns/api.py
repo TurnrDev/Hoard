@@ -30,6 +30,7 @@ from .models import (
     MoneyEntry,
     MoneyTransaction,
 )
+from .realtime import notify_campaign_changed
 from .services import exchange_coins, reverse_transaction
 from .services.cah import ABILITIES, SKILL_NAMES, parse_cah
 from .services.ledger import post_inventory_transaction, post_money_transaction
@@ -133,6 +134,10 @@ class MoneyExchangeCreate(Schema):
 class SharedXpAwardCreate(Schema):
     amount: int
     description: str = ""
+
+
+class CalendarAdjustment(Schema):
+    amount: Literal[-1, 1]
 
 
 class CahCommit(Schema):
@@ -243,6 +248,15 @@ def _context_data(context: CampaignContext) -> dict[str, object]:
         "kind": context.kind,
         "character_id": character.pk if character else None,
         "character_name": character.name if character else None,
+    }
+
+
+def _calendar_data(campaign: Campaign) -> dict[str, int | str]:
+    return {
+        "era_abbreviation": campaign.calendar_era_abbreviation,
+        "era_name": campaign.calendar_era_name,
+        "year": campaign.calendar_year,
+        "day": campaign.calendar_day,
     }
 
 
@@ -455,11 +469,31 @@ def context_detail(request, context_id: int):
         "use_shared_exp": context.campaign.use_shared_exp,
         "shared_experience": context.campaign.shared_experience,
         "item_sources": context.campaign.item_sources,
+        "calendar": _calendar_data(context.campaign),
         "party_money": _party_money(context.campaign),
         "characters": [
             _character_data(value) for value in _visible_characters(context)
         ],
     }
+
+
+@contexts.get("/{context_id}/calendar/")
+def calendar_detail(request, context_id: int):
+    return _calendar_data(_context_access(request, context_id).campaign)
+
+
+@contexts.post("/{context_id}/calendar/adjust/")
+def calendar_adjust(request, context_id: int, payload: CalendarAdjustment):
+    context = _context_access(request, context_id)
+    _gm(context)
+    try:
+        context.campaign.adjust_calendar_day(payload.amount)
+        context.campaign.full_clean()
+        context.campaign.save(update_fields=("calendar_year", "calendar_day"))
+    except DjangoValidationError as error:
+        raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
+    return _calendar_data(context.campaign)
 
 
 @contexts.get("/{context_id}/characters/")
@@ -478,6 +512,7 @@ def character_create(request, context_id: int, payload: CharacterCreate):
         character = Character.objects.create(
             campaign=context.campaign, is_active=True, **values
         )
+        notify_campaign_changed(context.campaign_id)
         return 201, _character_data(character)
     if CampaignContext.objects.filter(
         campaign=context.campaign,
@@ -499,6 +534,7 @@ def character_create(request, context_id: int, payload: CharacterCreate):
             **values,
         )
         character.activate()
+    notify_campaign_changed(context.campaign_id)
     return 201, _character_data(character)
 
 
@@ -533,6 +569,7 @@ def character_update(
         character.save()
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return _character_data(character)
 
 
@@ -551,6 +588,7 @@ def character_archive(request, context_id: int, character_id: int):
     if character.context_id:
         character.context.is_active = False
         character.context.save(update_fields=("is_active",))
+    notify_campaign_changed(context.campaign_id)
     return _character_data(character)
 
 
@@ -595,6 +633,7 @@ def cah_commit(request, context_id: int, payload: CahCommit):
         target.full_clean()
         target.save()
         cache.delete(key)
+        notify_campaign_changed(context.campaign_id)
         return 200, _character_data(target)
     if CampaignContext.objects.filter(
         campaign=context.campaign,
@@ -624,6 +663,7 @@ def cah_commit(request, context_id: int, payload: CahCommit):
         )
         target.activate()
     cache.delete(key)
+    notify_campaign_changed(context.campaign_id)
     return 201, _character_data(target)
 
 
@@ -647,6 +687,7 @@ def item_create(request, context_id: int, payload: ItemCreate):
         item.save()
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return 201, _item_data(item)
 
 
@@ -668,6 +709,7 @@ def item_update(request, context_id: int, item_id: int, payload: ItemUpdate):
         item.save()
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(item.campaign_id)
     return _item_data(item)
 
 
@@ -676,7 +718,9 @@ def item_delete(request, context_id: int, item_id: int):
     item = _editable_item(_context_access(request, context_id), item_id)
     if item.entries.exists():
         raise HttpError(409, "Items referenced by ledger entries cannot be deleted.")
+    campaign_id = item.campaign_id
     item.delete()
+    notify_campaign_changed(campaign_id)
     return 204, None
 
 
@@ -745,6 +789,7 @@ def inventory_transaction_create(
         posted.save(update_fields=("created_by",))
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return 201, _transaction_data(posted)
 
 
@@ -812,6 +857,7 @@ def money_transfer_create(request, context_id: int, payload: MoneyTransferCreate
         posted.save(update_fields=("created_by",))
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return 201, _transaction_data(posted)
 
 
@@ -832,6 +878,7 @@ def money_exchange_create(request, context_id: int, payload: MoneyExchangeCreate
         posted.save(update_fields=("created_by",))
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return 201, _transaction_data(posted)
 
 
@@ -848,6 +895,7 @@ def shared_xp_award_create(request, context_id: int, payload: SharedXpAwardCreat
         )
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return 201, _transaction_data(posted)
 
 
@@ -970,6 +1018,7 @@ def transaction_reverse(
         reversed_posted.save(update_fields=("created_by",))
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    notify_campaign_changed(context.campaign_id)
     return _history_data(reversed_posted)
 
 
@@ -1037,6 +1086,7 @@ def managed_context_create(request, context_id: int, payload: ContextCreate):
             charisma=10,
         )
         character.activate()
+    notify_campaign_changed(context.campaign_id)
     return 201, _context_data(candidate)
 
 
@@ -1063,6 +1113,7 @@ def managed_context_deactivate(request, context_id: int, managed_context_id: int
         candidate.character.save(
             update_fields=("is_active", "is_archived", "archived_at")
         )
+    notify_campaign_changed(context.campaign_id)
     return 204, None
 
 

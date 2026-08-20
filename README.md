@@ -11,7 +11,7 @@ A D&D 5e tool for our campaign with specific tools for our homebrew rules. You w
 Run Django management commands from the repository root:
 
 ```sh
-docker compose up -d db
+docker compose up -d db redis
 uv run python manage.py migrate
 uv run python manage.py runserver
 ```
@@ -29,6 +29,29 @@ HTML, while Vite supplies development modules and hot reload from port 5173. For
 production build, run `npm run build` in `frontend/`, then `uv run python manage.py
 collectstatic --noinput`. Run Django with `DJANGO_DEBUG=false` to make django-vite
 load the compiled manifest rather than the development server.
+
+## Live updates and WebSockets
+
+Hoard uses Redis for campaign update broadcasts. Start it with the database before
+running the app:
+
+```sh
+docker compose up -d db redis
+uv run python manage.py runserver
+```
+
+The installed Daphne integration makes the normal Django `runserver` command serve
+both HTTP and authenticated WebSocket connections at `ws://localhost:8000`. The
+Vite development server proxies both `/api` and `/ws` to that server, so opening
+either `http://localhost:8000` or `http://localhost:5173` works; the frontend
+automatically connects to the matching `/ws/campaigns/<campaign_id>/` endpoint.
+
+For a production ASGI process, point `REDIS_URL` at the shared Redis instance and
+run:
+
+```sh
+uv run daphne hoard.asgi:application
+```
 
 If the tools are not installed locally, enter the repository's declarative
 development environment once with `nix-shell`. It provides Python, `uv`, Node,

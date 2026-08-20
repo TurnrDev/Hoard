@@ -14,6 +14,7 @@ import {
   type CampaignMember,
   type Character,
 } from "../api";
+import { useCampaignRefresh } from "../realtime";
 
 const route = useRoute();
 const router = useRouter();
@@ -119,6 +120,7 @@ async function deactivate(member: CampaignMember): Promise<void> {
 }
 
 onMounted(load);
+useCampaignRefresh(load);
 </script>
 
 <template>

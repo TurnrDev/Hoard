@@ -55,6 +55,10 @@ class Campaign(models.Model):
     item_sources: list[str]
 
     name = models.CharField(max_length=200)
+    calendar_era_abbreviation = models.CharField(max_length=20, default="PD")
+    calendar_era_name = models.CharField(max_length=100, default="Powder Dynasty")
+    calendar_year = models.PositiveIntegerField(default=81)
+    calendar_day = models.PositiveSmallIntegerField(default=137)
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
     item_sources = ArrayField(
@@ -66,6 +70,21 @@ class Campaign(models.Model):
 
     def allows_item_source(self, source_system: str) -> bool:
         return source_system in self.item_sources
+
+    def adjust_calendar_day(self, amount: int) -> None:
+        """Move the campaign calendar by a single non-zero number of days."""
+        if amount not in (-1, 1):
+            raise ValidationError("Calendar adjustments must be one day.")
+        if amount == -1 and self.calendar_year == 1 and self.calendar_day == 1:
+            raise ValidationError("The calendar cannot be before year 1, day 1.")
+        if amount == 1 and self.calendar_day == 365:
+            self.calendar_year += 1
+            self.calendar_day = 1
+        elif amount == -1 and self.calendar_day == 1:
+            self.calendar_year -= 1
+            self.calendar_day = 365
+        else:
+            self.calendar_day += amount
 
     def inventory_system_account(self) -> InventoryAccount:
         from ..services.ledger import system_account
@@ -123,6 +142,14 @@ class Campaign(models.Model):
                     "item_sources": "Choose zero or more supported item sources: 5e, 5e2024."
                 }
             )
+        if self.calendar_year < 1:
+            raise ValidationError({"calendar_year": "Year must be at least 1."})
+        if not 1 <= self.calendar_day <= 365:
+            raise ValidationError({"calendar_day": "Day must be between 1 and 365."})
+        if not self.calendar_era_abbreviation.strip():
+            raise ValidationError({"calendar_era_abbreviation": "Era is required."})
+        if not self.calendar_era_name.strip():
+            raise ValidationError({"calendar_era_name": "Era name is required."})
 
 
 class CampaignContext(models.Model):

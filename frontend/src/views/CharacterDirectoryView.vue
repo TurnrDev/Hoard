@@ -9,6 +9,7 @@ import {
   type Campaign,
   type Character,
 } from "../api";
+import { useCampaignRefresh } from "../realtime";
 
 const campaignId = Number(useRoute().params.id);
 const campaign = ref<Campaign>();
@@ -17,6 +18,9 @@ const ownIds = ref(new Set<number>());
 const error = ref("");
 const playerCharacters = computed(() =>
   characters.value.filter((character) => character.is_player_character),
+);
+const hasNpcs = computed(() =>
+  characters.value.some((character) => !character.is_player_character),
 );
 
 async function load(): Promise<void> {
@@ -44,6 +48,7 @@ function actingPath(character: Character): string {
 }
 
 onMounted(load);
+useCampaignRefresh(load);
 </script>
 
 <template>
@@ -106,10 +111,7 @@ onMounted(load);
       </v-col>
     </v-row>
     <section
-      v-if="
-        campaign?.is_game_master &&
-        characters.some((character) => !character.is_player_character)
-      "
+      v-if="campaign?.is_game_master && hasNpcs"
       class="mt-8"
     >
       <div class="text-overline text-secondary mb-2">NPCs</div>

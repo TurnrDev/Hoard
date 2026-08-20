@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { logout } from "./api";
+import { getCalendar, logout, type CampaignCalendar } from "./api";
+import { formatCampaignDate } from "./calendar";
 import NavigationMenu from "./components/NavigationMenu.vue";
 import { contextPath, contexts, rememberContext, type ActingContext } from "./context";
+import {
+  connectCampaignRealtime,
+  campaignRefreshRevision,
+  disconnectCampaignRealtime,
+  subscribeCampaignChanges,
+} from "./realtime";
 
 const route = useRoute();
 const router = useRouter();
@@ -11,6 +18,8 @@ const drawer = ref(false);
 const isDesktop = ref(window.innerWidth >= 960);
 const busy = ref(false);
 const availableContexts = ref<ActingContext[]>([]);
+const calendar = ref<CampaignCalendar>();
+let unsubscribeCampaignChanges: (() => void) | undefined;
 const contextId = computed(() => Number(route.params.id));
 const activeContext = computed(() =>
   availableContexts.value.find((context) => context.id === contextId.value),
@@ -39,6 +48,7 @@ async function selectContext(context: ActingContext): Promise<void> {
 async function signOut(): Promise<void> {
   busy.value = true;
   await logout();
+  disconnectCampaignRealtime();
   await router.push("/login");
   busy.value = false;
 }
@@ -54,11 +64,40 @@ watch(
     if (activeContext.value) rememberContext(activeContext.value);
   },
 );
+watch(
+  activeContext,
+  (context) => {
+    unsubscribeCampaignChanges?.();
+    calendar.value = undefined;
+    if (!context) {
+      disconnectCampaignRealtime();
+      return;
+    }
+    const refreshCalendar = async (): Promise<void> => {
+      try {
+        calendar.value = await getCalendar(context.id);
+      } catch {
+        calendar.value = undefined;
+      }
+    };
+    void refreshCalendar();
+    connectCampaignRealtime(context.campaign_id);
+    unsubscribeCampaignChanges = subscribeCampaignChanges(context.campaign_id, () => {
+      void refreshCalendar();
+      campaignRefreshRevision.value += 1;
+    });
+  },
+  { immediate: true },
+);
 onMounted(() => {
   window.addEventListener("resize", updateViewport);
   void loadContexts();
 });
 onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
+onBeforeUnmount(() => {
+  unsubscribeCampaignChanges?.();
+  disconnectCampaignRealtime();
+});
 </script>
 
 <template>
@@ -78,6 +117,13 @@ onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
         class="app-context d-none d-sm-inline"
       >
         {{ title }}
+      </span>
+      <span
+        v-if="calendar"
+        class="app-date ms-auto me-2"
+        :title="calendar.era_name"
+      >
+        {{ formatCampaignDate(calendar) }}
       </span>
       <v-menu
         v-if="$route.path !== '/login'"

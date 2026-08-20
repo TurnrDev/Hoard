@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { formatGoldValue } from "../money";
 import GmCoinForm from "../components/GmCoinForm.vue";
+import GmCalendarCard from "../components/GmCalendarCard.vue";
 import GmItemForm from "../components/GmItemForm.vue";
 import GmSharedXpForm from "../components/GmSharedXpForm.vue";
 import {
@@ -13,6 +14,7 @@ import {
   type Character,
   type Item,
 } from "../api";
+import { useCampaignRefresh } from "../realtime";
 const route = useRoute();
 const router = useRouter();
 const contextId = Number(route.params.id);
@@ -48,6 +50,7 @@ async function completed(message: string): Promise<void> {
 }
 
 onMounted(load);
+useCampaignRefresh(load);
 </script>
 <template>
   <v-container class="page-shell">
@@ -127,6 +130,17 @@ onMounted(load);
     </v-row>
     <div class="text-overline text-secondary mb-2">GM actions</div>
     <v-row class="gm-actions">
+      <v-col
+        v-if="campaign"
+        cols="12"
+        md="4"
+      >
+        <GmCalendarCard
+          :context-id="contextId"
+          :calendar="campaign.calendar"
+          @changed="(calendar) => (campaign = { ...campaign!, calendar })"
+        />
+      </v-col>
       <v-col
         cols="12"
         md="4"

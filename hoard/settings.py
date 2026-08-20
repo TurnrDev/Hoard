@@ -38,6 +38,7 @@ ALLOWED_HOSTS: list[str] = []
 # Application definition
 
 INSTALLED_APPS: list[str] = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -46,6 +47,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.postgres",
     "django.contrib.staticfiles",
     "django_vite",
+    "channels",
     "hoard.campaigns",
 ]
 
@@ -77,6 +79,14 @@ TEMPLATES: list[dict[str, object]] = [
 ]
 
 WSGI_APPLICATION: str = "hoard.wsgi.application"
+ASGI_APPLICATION: str = "hoard.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379/0")]},
+    }
+}
 
 
 # Database

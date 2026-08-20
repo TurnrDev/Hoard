@@ -10,6 +10,7 @@ import {
   type Campaign,
   type Item,
 } from "../api";
+import { useCampaignRefresh } from "../realtime";
 import { itemSummary } from "../itemPicker";
 
 const campaignId = Number(useRoute().params.id);
@@ -40,6 +41,12 @@ const filtered = computed(() => {
       .includes(needle),
   );
 });
+
+function summary(item: Item): string {
+  return (
+    itemSummary(item) || (item.is_imported ? "Imported item" : "Campaign custom item")
+  );
+}
 
 async function load(): Promise<void> {
   try {
@@ -90,6 +97,7 @@ async function remove(item: Item): Promise<void> {
 }
 
 onMounted(load);
+useCampaignRefresh(load);
 </script>
 
 <template>
@@ -144,10 +152,7 @@ onMounted(load);
         <v-card class="h-100">
           <v-card-title>{{ item.name }}</v-card-title>
           <v-card-subtitle>
-            {{
-              itemSummary(item) ||
-              (item.is_imported ? "Imported item" : "Campaign custom item")
-            }}
+            {{ summary(item) }}
           </v-card-subtitle>
           <v-card-text>
             <p class="item-description">
