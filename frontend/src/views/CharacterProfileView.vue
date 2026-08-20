@@ -327,9 +327,7 @@ async function grantItem(): Promise<void> {
       description: "Self-granted item",
     });
     notice.value = "Saved to the ledger.";
-    grantItemId.value = undefined;
-    grantQuantity.value = 1;
-    addItemOpen.value = false;
+    closeAddItemDialog();
     await load();
   } catch (exception) {
     error.value =
@@ -353,6 +351,49 @@ function openItemAction(
 function closeItemAction(): void {
   itemAction.value = undefined;
   selectedInventoryItem.value = undefined;
+  itemActionQuantity.value = 1;
+  itemActionDestination.value = undefined;
+  itemActionDescription.value = "";
+}
+
+function closeAddItemDialog(): void {
+  addItemOpen.value = false;
+  grantItemId.value = undefined;
+  grantQuantity.value = 1;
+}
+
+function closeMoneyDialog(): void {
+  moneyDialog.value = false;
+  moneyAction.value = "spend";
+  denomination.value = "gp";
+  amount.value = 1;
+  exchangeTargetDenomination.value = "sp";
+  moneyAmounts.value = { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 };
+  moneyDestination.value = undefined;
+  moneyDescription.value = "";
+}
+
+function closeEditDialog(): void {
+  editOpen.value = false;
+  editName.value = "";
+  editRace.value = "";
+  editClass.value = "";
+  editBaseHp.value = 1;
+  editProficiencyAdjustment.value = 0;
+  editAbilities.value = {
+    strength: 10,
+    dexterity: 10,
+    constitution: 10,
+    intelligence: 10,
+    wisdom: 10,
+    charisma: 10,
+  };
+}
+
+function closeImportDialog(): void {
+  importOpen.value = false;
+  importFile.value = undefined;
+  importPreview.value = undefined;
 }
 
 async function submitItemAction(): Promise<void> {
@@ -405,10 +446,7 @@ async function submitMoneyAction(): Promise<void> {
       });
     }
     notice.value = "Saved to the ledger.";
-    moneyDescription.value = "";
-    moneyAmounts.value = { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 };
-    moneyDestination.value = undefined;
-    moneyDialog.value = false;
+    closeMoneyDialog();
     await load();
   } catch (exception) {
     error.value =
@@ -417,6 +455,7 @@ async function submitMoneyAction(): Promise<void> {
 }
 
 function openMoneyDialog(action: "spend" | "transfer" | "exchange"): void {
+  closeMoneyDialog();
   moneyAction.value = action;
   moneyDialog.value = true;
 }
@@ -450,7 +489,7 @@ async function saveProfile(): Promise<void> {
       proficiency_bonus_adjustment: editProficiencyAdjustment.value,
       ...editAbilities.value,
     });
-    editOpen.value = false;
+    closeEditDialog();
     await load();
   } catch (exception) {
     error.value =
@@ -483,8 +522,7 @@ async function commitImport(): Promise<void> {
   if (!character.value || !importPreview.value) return;
   try {
     await commitCahImport(campaignId, importPreview.value.token, character.value.id);
-    importOpen.value = false;
-    importPreview.value = undefined;
+    closeImportDialog();
     await load();
   } catch (exception) {
     error.value =
@@ -894,6 +932,7 @@ onMounted(load);
     <v-dialog
       v-model="addItemOpen"
       max-width="560"
+      @update:model-value="(open) => !open && closeAddItemDialog()"
     >
       <v-card title="Add item">
         <v-card-text>
@@ -912,7 +951,7 @@ onMounted(load);
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="addItemOpen = false">Cancel</v-btn>
+          <v-btn @click="closeAddItemDialog">Cancel</v-btn>
           <v-btn
             color="primary"
             :disabled="!grantItemId || grantQuantity < 1"
@@ -926,6 +965,7 @@ onMounted(load);
     <v-dialog
       v-model="moneyDialog"
       max-width="620"
+      @update:model-value="(open) => !open && closeMoneyDialog()"
     >
       <v-card
         :title="
@@ -997,7 +1037,7 @@ onMounted(load);
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="moneyDialog = false">Cancel</v-btn>
+          <v-btn @click="closeMoneyDialog">Cancel</v-btn>
           <v-btn
             color="primary"
             :disabled="
@@ -1083,6 +1123,7 @@ onMounted(load);
     <v-dialog
       v-model="editOpen"
       max-width="720"
+      @update:model-value="(open) => !open && closeEditDialog()"
     >
       <v-card title="Edit character">
         <v-card-text>
@@ -1154,7 +1195,7 @@ onMounted(load);
             Archive
           </v-btn>
           <v-spacer />
-          <v-btn @click="editOpen = false">Cancel</v-btn>
+          <v-btn @click="closeEditDialog">Cancel</v-btn>
           <v-btn
             color="primary"
             @click="saveProfile"
@@ -1167,6 +1208,7 @@ onMounted(load);
     <v-dialog
       v-model="importOpen"
       max-width="560"
+      @update:model-value="(open) => !open && closeImportDialog()"
     >
       <v-card title="Import 5e Companion character">
         <v-card-text>
@@ -1217,7 +1259,7 @@ onMounted(load);
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="importOpen = false">Cancel</v-btn>
+          <v-btn @click="closeImportDialog">Cancel</v-btn>
           <v-btn
             color="primary"
             :disabled="!importPreview"
