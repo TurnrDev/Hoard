@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { formatGoldValue } from "../money";
 import {
   getCampaign,
   getCharacters,
@@ -75,7 +76,7 @@ onMounted(load);
             >{{ character.race }} · {{ character.class }}</v-card-subtitle
           >
           <v-card-text>
-            <div class="text-h6">{{ character.money.gold_value }} ¤</div>
+            <div class="text-h6">{{ formatGoldValue(character.money.gold_value) }} ¤</div>
             <div class="text-caption">
               {{ character.experience }} XP ·
               {{ character.inventory.length }} inventory entries

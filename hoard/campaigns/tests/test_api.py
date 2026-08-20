@@ -95,3 +95,26 @@ class ContextApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertIn("created_at", response.json())
+
+    def test_item_response_includes_picker_equipment_metadata(self) -> None:
+        self.item.source_system = "5e"
+        self.item.source_book = "phb"
+        self.item.equipment_category = "weapon"
+        self.item.item_type = "sword"
+        self.item.cost_amount = "10.00"
+        self.item.cost_currency = "gp"
+        self.item.weight_amount = "3.000"
+        self.item.weight_unit = "pounds"
+        self.item.rarity = "common"
+        self.item.is_magic = False
+        self.item.requires_attunement = False
+        self.item.save()
+
+        self.client.force_login(self.player_user)
+        response = self.client.get(f"/api/contexts/{self.pc.pk}/items/")
+
+        self.assertEqual(response.status_code, 200)
+        item = next(row for row in response.json() if row["id"] == self.item.pk)
+        self.assertEqual(item["equipment"]["category"], "weapon")
+        self.assertEqual(item["equipment"]["cost_amount"], "10.00")
+        self.assertEqual(item["equipment"]["weight_amount"], "3.000")

@@ -87,6 +87,31 @@ body {
   font-size: 0.875rem;
 }
 
+.money-summary {
+  padding: 4px 0;
+}
+
+.money-wealth {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.money-controls {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 599px) {
+  .money-wealth {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 16px;
+  }
+
+  .money-controls {
+    justify-content: flex-start;
+  }
+}
+
 .xp-progress-labels {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

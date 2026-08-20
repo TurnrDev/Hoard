@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import {
@@ -20,6 +20,8 @@ import {
   type Item,
 } from "../api";
 import type { PickerCandidate } from "../itemPicker";
+import { exchangedCoinAmount } from "../coinExchange";
+import { formatGoldValue } from "../money";
 
 const route = useRoute();
 const router = useRouter();
@@ -32,15 +34,20 @@ const characters = ref<Character[]>([]);
 const items = ref<Item[]>([]);
 const error = ref("");
 const notice = ref("");
-const action = ref("item");
-const itemId = ref<number>();
-const destinationId = ref<number | null>(null);
-const quantity = ref(1);
+const grantItemId = ref<number>();
+const grantQuantity = ref(1);
+const itemAction = ref<"use" | "destroy" | "transfer">();
+const selectedInventoryItem = ref<{ item_id: number; name: string; quantity: number }>();
+const itemActionQuantity = ref(1);
+const itemActionDestination = ref<number>();
+const itemActionDescription = ref("");
+const moneyAction = ref<"spend" | "transfer" | "exchange">("spend");
+const moneyDialog = ref(false);
 const denomination = ref("gp");
 const amount = ref(1);
-const receivedDenomination = ref("sp");
-const receivedAmount = ref(10);
-const description = ref("");
+const moneyDestination = ref<number>();
+const exchangeTargetDenomination = ref("sp");
+const moneyDescription = ref("");
 const editOpen = ref(false);
 const importOpen = ref(false);
 const importFile = ref<File>();
@@ -63,21 +70,29 @@ const xpThresholds = [
   0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000,
   120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
 ];
-const inventoryCandidates = computed<PickerCandidate[]>(
-  () =>
-    character.value?.inventory.flatMap((entry) => {
-      const item = items.value.find(
-        (candidate) => candidate.id === entry.item_id,
-      );
-      return item ? [{ item, quantity: entry.quantity }] : [];
-    }) ?? [],
+const allItemCandidates = computed<PickerCandidate[]>(() =>
+  items.value.map((item) => ({ item })),
 );
 const destinationOptions = computed(() => [
-  { title: "Campaign store", value: null },
   ...characters.value
-    .filter((candidate) => candidate.is_active && !candidate.is_archived)
+    .filter(
+      (candidate) =>
+        candidate.id !== character.value?.id &&
+        candidate.is_active &&
+        !candidate.is_archived,
+    )
     .map((candidate) => ({ title: candidate.name, value: candidate.id })),
 ]);
+const exchangeAmount = computed(() =>
+  exchangedCoinAmount(
+    denomination.value,
+    exchangeTargetDenomination.value,
+    amount.value,
+  ),
+);
+const selectedInventoryQuantity = computed(
+  () => selectedInventoryItem.value?.quantity ?? 0,
+);
 const canAct = computed(
   () =>
     ownCharacter.value &&
@@ -291,38 +306,19 @@ async function load(): Promise<void> {
   }
 }
 
-watch(inventoryCandidates, (candidates) => {
-  if (!candidates.some((candidate) => candidate.item.id === itemId.value))
-    itemId.value = undefined;
-});
-
-async function submit(): Promise<void> {
-  if (!character.value) return;
+async function grantItem(): Promise<void> {
+  if (!character.value || !grantItemId.value) return;
   try {
-    if (action.value === "item" && itemId.value)
-      await createInventoryTransaction(campaignId, {
-        from_character_id: character.value.id,
-        to_character_id: destinationId.value,
-        item_id: itemId.value,
-        quantity: quantity.value,
-        description: description.value,
-      });
-    if (action.value === "money")
-      await createMoneyTransfer(campaignId, {
-        from_character_id: character.value.id,
-        to_character_id: destinationId.value,
-        amounts: { [denomination.value]: amount.value },
-        description: description.value,
-      });
-    if (action.value === "exchange")
-      await createMoneyExchange(campaignId, {
-        character_id: character.value.id,
-        given: { [denomination.value]: amount.value },
-        received: { [receivedDenomination.value]: receivedAmount.value },
-        description: description.value,
-      });
+    await createInventoryTransaction(campaignId, {
+      from_character_id: null,
+      to_character_id: character.value.id,
+      item_id: grantItemId.value,
+      quantity: grantQuantity.value,
+      description: "Self-granted item",
+    });
     notice.value = "Saved to the ledger.";
-    description.value = "";
+    grantItemId.value = undefined;
+    grantQuantity.value = 1;
     await load();
   } catch (exception) {
     error.value =
@@ -332,10 +328,84 @@ async function submit(): Promise<void> {
   }
 }
 
-function scrollToActions(): void {
-  document
-    .getElementById("character-actions")
-    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+function openItemAction(
+  action: "use" | "destroy" | "transfer",
+  entry: { item_id: number; name: string; quantity: number },
+): void {
+  itemAction.value = action;
+  selectedInventoryItem.value = entry;
+  itemActionQuantity.value = 1;
+  itemActionDestination.value = undefined;
+  itemActionDescription.value = "";
+}
+
+function closeItemAction(): void {
+  itemAction.value = undefined;
+  selectedInventoryItem.value = undefined;
+}
+
+async function submitItemAction(): Promise<void> {
+  if (!character.value || !selectedInventoryItem.value || !itemAction.value) return;
+  if (
+    itemActionQuantity.value < 1 ||
+    itemActionQuantity.value > selectedInventoryQuantity.value ||
+    (itemAction.value === "transfer" && !itemActionDestination.value)
+  )
+    return;
+  try {
+    await createInventoryTransaction(campaignId, {
+      from_character_id: character.value.id,
+      to_character_id:
+        itemAction.value === "transfer" ? itemActionDestination.value! : null,
+      item_id: selectedInventoryItem.value.item_id,
+      quantity: itemActionQuantity.value,
+      description:
+        itemActionDescription.value ||
+        `${itemAction.value === "use" ? "Used" : itemAction.value === "destroy" ? "Destroyed" : "Transferred"} ${selectedInventoryItem.value.name}`,
+    });
+    notice.value = "Saved to the ledger.";
+    closeItemAction();
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to update inventory.";
+  }
+}
+
+async function submitMoneyAction(): Promise<void> {
+  if (!character.value || !amount.value || amount.value < 1) return;
+  try {
+    if (moneyAction.value === "exchange") {
+      if (!exchangeAmount.value) return;
+      await createMoneyExchange(campaignId, {
+        character_id: character.value.id,
+        given: { [denomination.value]: amount.value },
+        received: { [exchangeTargetDenomination.value]: exchangeAmount.value },
+        description: moneyDescription.value,
+      });
+    } else {
+      await createMoneyTransfer(campaignId, {
+        from_character_id: character.value.id,
+        to_character_id:
+          moneyAction.value === "transfer" ? moneyDestination.value ?? null : null,
+        amounts: { [denomination.value]: amount.value },
+        description: moneyDescription.value,
+      });
+    }
+    notice.value = "Saved to the ledger.";
+    moneyDescription.value = "";
+    moneyDestination.value = undefined;
+    moneyDialog.value = false;
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to update money.";
+  }
+}
+
+function openMoneyDialog(action: "spend" | "transfer" | "exchange"): void {
+  moneyAction.value = action;
+  moneyDialog.value = true;
 }
 
 function openEdit(): void {
@@ -462,11 +532,11 @@ onMounted(load);
       >{{ notice }}</v-alert
     >
     <v-row
-      ><v-col cols="12" :lg="canAct ? 7 : 12"
+      ><v-col cols="12"
         ><v-card
           ><v-card-text
             ><v-row
-              ><v-col cols="12" sm="7"
+              ><v-col cols="12"
                 ><div class="text-overline">
                   Level {{ experienceProgress.level }}
                 </div>
@@ -485,18 +555,21 @@ onMounted(load);
                     formatXp(experienceProgress.maximum)
                   }}</span
                   ><span v-else>Maximum level</span>
-                </div></v-col
-              ><v-col cols="12" sm="5"
-                ><div class="text-overline">Total wealth</div>
-                <div class="text-h4">
-                  {{ character.money.gold_value }} ¤
-                </div></v-col
-              ></v-row
+                </div></v-col></v-row
             ><v-divider class="my-4" />
-            <div class="money-line">
-              {{ character.money.pp }} pp · {{ character.money.gp }} gp ·
-              {{ character.money.ep }} ep · {{ character.money.sp }} sp ·
-              {{ character.money.cp }} cp
+            <v-row align="center" class="money-summary">
+              <v-col cols="12" sm="8"><div class="text-overline">Coin pouch</div><div class="money-line">{{ character.money.pp }} pp · {{ character.money.gp }} gp · {{ character.money.ep }} ep · {{ character.money.sp }} sp · {{ character.money.cp }} cp</div></v-col>
+              <v-col cols="12" sm="4" class="money-wealth"><div class="text-overline">Total wealth</div><div class="text-h4">{{ formatGoldValue(character.money.gold_value) }} ¤</div></v-col>
+            </v-row>
+            <div v-if="canAct" class="money-controls mt-4">
+              <v-menu>
+                <template #activator="{ props }"><v-btn v-bind="props" variant="tonal" prepend-icon="mdi-cash-multiple">Money</v-btn></template>
+                <v-list density="compact">
+                  <v-list-item title="Spend coins" prepend-icon="mdi-cash-minus" @click="openMoneyDialog('spend')" />
+                  <v-list-item title="Transfer coins" prepend-icon="mdi-cash-fast" @click="openMoneyDialog('transfer')" />
+                  <v-list-item title="Exchange coins" prepend-icon="mdi-swap-horizontal" @click="openMoneyDialog('exchange')" />
+                </v-list>
+              </v-menu>
             </div>
             <v-divider class="my-4" />
             <v-row>
@@ -602,115 +675,56 @@ onMounted(load);
             ></v-card-text
           ></v-card
         ><v-card class="mt-4"
-          ><v-card-title>Inventory</v-card-title
+          ><v-card-title class="d-flex align-center"
+            >Inventory<v-spacer /><ItemPickerDialog
+              v-if="canAct"
+              v-model="grantItemId"
+              :candidates="allItemCandidates"
+              label="Give yourself an item"
+              no-data-text="No campaign items available."
+            /></v-card-title
           ><v-card-text
-            ><v-chip
-              v-for="entry in character.inventory"
-              :key="entry.item_id"
-              class="mr-2 mb-2"
-              >{{ entry.quantity }} × {{ entry.name }}</v-chip
-            ><span
-              v-if="!character.inventory.length"
-              class="text-medium-emphasis"
-              >No inventory recorded.</span
-            ></v-card-text
-          ></v-card
-        ></v-col
-      >
-      <v-col id="character-actions" cols="12" lg="5" v-if="canAct"
-        ><v-card
-          ><v-card-title>Actions</v-card-title
-          ><v-card-text
-            ><v-tabs v-model="action" grow
-              ><v-tab value="item">Move</v-tab><v-tab value="money">Send</v-tab
-              ><v-tab value="exchange">Exchange</v-tab></v-tabs
-            ><v-window v-model="action" class="pt-4"
-              ><v-window-item value="item"
-                ><ItemPickerDialog
-                  v-model="itemId"
-                  :candidates="inventoryCandidates"
-                  label="Item to move"
-                  no-data-text="No recorded items." /><v-select
-                  v-model="destinationId"
-                  :items="destinationOptions"
-                  label="Move to" /><v-text-field
-                  v-model.number="quantity"
-                  type="number"
-                  min="1"
-                  label="Quantity" /></v-window-item
-              ><v-window-item value="money"
-                ><v-select
-                  v-model="destinationId"
-                  :items="destinationOptions"
-                  label="Send to" /><v-row
-                  ><v-col
-                    ><v-select
-                      v-model="denomination"
-                      :items="denominations"
-                      label="Denomination" /></v-col
-                  ><v-col
-                    ><v-text-field
-                      v-model.number="amount"
-                      type="number"
-                      min="1"
-                      label="Amount" /></v-col></v-row></v-window-item
-              ><v-window-item value="exchange"
-                ><v-row
-                  ><v-col
-                    ><v-select
-                      v-model="denomination"
-                      :items="denominations"
-                      label="Give" /><v-text-field
-                      v-model.number="amount"
-                      type="number"
-                      min="1"
-                      label="Amount" /></v-col
-                  ><v-col
-                    ><v-select
-                      v-model="receivedDenomination"
-                      :items="denominations"
-                      label="Receive" /><v-text-field
-                      v-model.number="receivedAmount"
-                      type="number"
-                      min="1"
-                      label="Amount" /></v-col></v-row></v-window-item></v-window
-            ><v-textarea
-              v-model="description"
-              label="Note (optional)"
-              rows="2"
-            /><v-btn
-              block
-              color="primary"
-              :disabled="
-                (action === 'item' && !itemId) ||
-                (action !== 'exchange' && destinationId === undefined)
-              "
-              @click="submit"
-              >{{
-                action === "item"
-                  ? "Move item"
-                  : action === "money"
-                    ? "Send money"
-                    : "Exchange money"
-              }}</v-btn
-            ></v-card-text
-          ></v-card
-        ></v-col
-      ></v-row
+            ><div v-if="canAct" class="d-flex align-center ga-3 mb-4"><v-text-field v-model.number="grantQuantity" type="number" min="1" label="Quantity" hide-details /><v-btn color="primary" :disabled="!grantItemId || grantQuantity < 1" @click="grantItem">Give yourself</v-btn></div><v-table v-if="character.inventory.length" density="comfortable"
+              ><thead><tr><th>Item</th><th>Quantity</th><th class="text-right">Controls</th></tr></thead
+              ><tbody><tr v-for="entry in character.inventory" :key="entry.item_id"
+                ><td>{{ entry.name }}</td><td>{{ entry.quantity }}</td><td class="text-right"
+                  ><template v-if="canAct"
+                    ><v-btn size="small" variant="text" @click="openItemAction('use', entry)">Use</v-btn><v-btn size="small" variant="text" @click="openItemAction('destroy', entry)">Destroy</v-btn><v-btn size="small" color="primary" variant="text" @click="openItemAction('transfer', entry)">Transfer</v-btn
+                  ></template
+                ></td
+              ></tr></tbody
+            ></v-table><span v-else class="text-medium-emphasis">No inventory recorded.</span
+          ></v-card-text
+        ></v-card
+      ></v-col
+    ></v-row
     >
-    <v-tooltip v-if="canAct" text="Jump to actions" location="top">
-      <template #activator="{ props }">
-        <v-btn
-          v-bind="props"
-          class="actions-fab"
-          color="primary"
-          icon="mdi-arrow-down"
-          size="large"
-          aria-label="Jump to actions"
-          @click="scrollToActions"
-        />
-      </template>
-    </v-tooltip>
+    <v-dialog v-model="moneyDialog" max-width="620">
+      <v-card :title="moneyAction === 'spend' ? 'Spend coins' : moneyAction === 'transfer' ? 'Transfer coins' : 'Exchange coins'">
+        <v-card-text>
+          <template v-if="moneyAction === 'spend'">
+            <v-row><v-col><v-select v-model="denomination" :items="denominations" label="Denomination" /></v-col><v-col><v-text-field v-model.number="amount" type="number" min="1" label="Amount" /></v-col></v-row>
+            <div class="text-caption text-medium-emphasis mb-3">Coins will be transferred to the campaign system.</div>
+          </template>
+          <template v-else-if="moneyAction === 'transfer'">
+            <v-select v-model="moneyDestination" :items="destinationOptions" label="Transfer to" />
+            <v-row><v-col><v-select v-model="denomination" :items="denominations" label="Denomination" /></v-col><v-col><v-text-field v-model.number="amount" type="number" min="1" label="Amount" /></v-col></v-row>
+          </template>
+          <template v-else>
+            <v-row><v-col><v-select v-model="denomination" :items="denominations" label="Source denomination" /><v-text-field v-model.number="amount" type="number" min="1" label="Source coins" /></v-col><v-col><v-select v-model="exchangeTargetDenomination" :items="denominations" label="Target denomination" /><v-text-field :model-value="exchangeAmount ?? ''" readonly label="Target coins" /></v-col></v-row>
+            <v-alert v-if="!exchangeAmount" type="warning" variant="tonal" density="compact">Choose different denominations and an exactly convertible quantity.</v-alert>
+          </template>
+          <v-textarea v-if="moneyAction !== 'exchange'" v-model="moneyDescription" label="Note (optional)" rows="2" />
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn @click="moneyDialog = false">Cancel</v-btn><v-btn color="primary" :disabled="moneyAction === 'transfer' ? !moneyDestination : moneyAction === 'exchange' ? !exchangeAmount : !amount || amount < 1" @click="submitMoneyAction">{{ moneyAction === 'spend' ? 'Spend coins' : moneyAction === 'transfer' ? 'Transfer coins' : 'Exchange coins' }}</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog :model-value="Boolean(itemAction)" max-width="560" @update:model-value="(value) => !value && closeItemAction()"
+      ><v-card :title="itemAction === 'use' ? 'Use item' : itemAction === 'destroy' ? 'Destroy item' : 'Transfer item'"
+        ><v-card-text v-if="selectedInventoryItem"><div class="mb-4">{{ selectedInventoryItem.name }} · {{ selectedInventoryItem.quantity }} held</div><v-select v-if="itemAction === 'transfer'" v-model="itemActionDestination" :items="destinationOptions" label="Transfer to" /><v-text-field v-model.number="itemActionQuantity" type="number" min="1" :max="selectedInventoryItem.quantity" label="Quantity" /><v-textarea v-model="itemActionDescription" label="Note (optional)" rows="2" /></v-card-text
+        ><v-card-actions><v-spacer /><v-btn @click="closeItemAction">Cancel</v-btn><v-btn color="primary" :disabled="itemActionQuantity < 1 || itemActionQuantity > selectedInventoryQuantity || (itemAction === 'transfer' && !itemActionDestination)" @click="submitItemAction">{{ itemAction === 'use' ? 'Use item' : itemAction === 'destroy' ? 'Destroy item' : 'Transfer item' }}</v-btn></v-card-actions
+      ></v-card
+    ></v-dialog>
     <v-dialog v-model="editOpen" max-width="720">
       <v-card title="Edit character">
         <v-card-text>

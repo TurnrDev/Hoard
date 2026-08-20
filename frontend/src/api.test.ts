@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createInventoryTransaction, initialiseCsrf, login } from "./api";
+import {
+  createInventoryTransaction,
+  createMoneyExchange,
+  createMoneyTransfer,
+  initialiseCsrf,
+  login,
+} from "./api";
 
 describe("API client", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -56,6 +62,35 @@ describe("API client", () => {
           quantity: 1,
         }),
       }),
+    );
+  });
+
+  it("posts money transfers and exchanges to their concrete resources", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 4, ledger: "money" }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await createMoneyTransfer(8, {
+      from_character_id: 2,
+      to_character_id: null,
+      amounts: { gp: 3 },
+    });
+    await createMoneyExchange(8, {
+      character_id: 2,
+      given: { gp: 1 },
+      received: { sp: 10 },
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/contexts/8/money-transfers/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/contexts/8/money-exchanges/",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 });

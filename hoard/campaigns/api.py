@@ -353,6 +353,19 @@ def _item_data(item: InventoryItem) -> dict[str, object]:
         else None,
         "source_system": item.source_system or None,
         "source_identifier": item.source_identifier or None,
+        "source_repository": item.source_repository or None,
+        "equipment": {
+            "category": item.equipment_category or None,
+            "source_book": item.source_book or None,
+            "item_type": item.item_type or None,
+            "cost_amount": str(item.cost_amount) if item.cost_amount is not None else None,
+            "cost_currency": item.cost_currency or None,
+            "weight_amount": str(item.weight_amount) if item.weight_amount is not None else None,
+            "weight_unit": item.weight_unit or None,
+            "rarity": item.rarity or None,
+            "is_magic": item.is_magic,
+            "requires_attunement": item.requires_attunement,
+        },
         "is_imported": item.is_imported,
     }
 

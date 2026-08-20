@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { formatGoldValue } from "../money";
 import GmCoinForm from "../components/GmCoinForm.vue";
 import GmGiveItemForm from "../components/GmGiveItemForm.vue";
 import GmSharedXpForm from "../components/GmSharedXpForm.vue";
@@ -77,7 +78,7 @@ onMounted(load);
           ><v-card-text
             ><div class="text-overline">Party wealth</div>
             <div class="text-h5">
-              {{ campaign.party_money.gold_value }} ¤
+              {{ formatGoldValue(campaign.party_money.gold_value) }} ¤
             </div></v-card-text
           ></v-card
         ></v-col
