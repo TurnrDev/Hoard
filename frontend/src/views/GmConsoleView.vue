@@ -3,9 +3,8 @@ import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { formatGoldValue } from "../money";
 import GmCoinForm from "../components/GmCoinForm.vue";
-import GmGiveItemForm from "../components/GmGiveItemForm.vue";
+import GmItemForm from "../components/GmItemForm.vue";
 import GmSharedXpForm from "../components/GmSharedXpForm.vue";
-import GmTakeItemForm from "../components/GmTakeItemForm.vue";
 import {
   getCampaign,
   getCharacters,
@@ -127,10 +126,10 @@ onMounted(load);
       </v-col>
     </v-row>
     <div class="text-overline text-secondary mb-2">GM actions</div>
-    <v-row>
+    <v-row class="gm-actions">
       <v-col
         cols="12"
-        md="6"
+        md="4"
       >
         <GmSharedXpForm
           :context-id="contextId"
@@ -140,9 +139,9 @@ onMounted(load);
       </v-col>
       <v-col
         cols="12"
-        md="6"
+        md="4"
       >
-        <GmGiveItemForm
+        <GmItemForm
           :context-id="contextId"
           :items="items"
           @completed="completed"
@@ -150,17 +149,7 @@ onMounted(load);
       </v-col>
       <v-col
         cols="12"
-        md="6"
-      >
-        <GmTakeItemForm
-          :context-id="contextId"
-          :items="items"
-          @completed="completed"
-        />
-      </v-col>
-      <v-col
-        cols="12"
-        md="6"
+        md="4"
       >
         <GmCoinForm
           :context-id="contextId"

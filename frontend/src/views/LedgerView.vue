@@ -32,6 +32,16 @@ function amount(transaction: LedgerTransaction): string {
     .join(" · ");
 }
 
+function typeIcon(transaction: LedgerTransaction): string {
+  return (
+    {
+      experience: "mdi-star-four-points",
+      money: "mdi-coins",
+      inventory: "mdi-package-variant",
+    }[transaction.ledger] ?? "mdi-book-open-variant"
+  );
+}
+
 async function load(): Promise<void> {
   try {
     const [next, history] = await Promise.all([
@@ -83,10 +93,12 @@ onMounted(load);
         <thead>
           <tr>
             <th>When</th>
+            <th>Type</th>
             <th>From</th>
             <th>To</th>
             <th>Amount</th>
             <th>Description</th>
+            <th>By</th>
             <th />
           </tr>
         </thead>
@@ -96,6 +108,14 @@ onMounted(load);
             :key="`${transaction.ledger}-${transaction.id}`"
           >
             <td>{{ new Date(transaction.created_at).toLocaleString() }}</td>
+            <td>
+              <v-icon
+                :icon="typeIcon(transaction)"
+                size="small"
+                color="primary"
+              />
+              {{ transaction.ledger }}
+            </td>
             <td>{{ names(transaction, false) }}</td>
             <td>{{ names(transaction, true) }}</td>
             <td>{{ amount(transaction) }}</td>
@@ -108,6 +128,7 @@ onMounted(load);
                 (reversed)
               </span>
             </td>
+            <td>{{ transaction.actor || "—" }}</td>
             <td>
               <v-btn
                 v-if="

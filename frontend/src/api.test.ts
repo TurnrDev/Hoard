@@ -76,7 +76,7 @@ describe("API client", () => {
     await createMoneyTransfer(8, {
       from_character_id: 2,
       to_character_id: null,
-      amounts: { gp: 3 },
+      amounts: { gp: 3, sp: 4, cp: 7 },
     });
     await createMoneyExchange(8, {
       character_id: 2,
@@ -87,7 +87,14 @@ describe("API client", () => {
     expect(fetch).toHaveBeenNthCalledWith(
       1,
       "/api/contexts/8/money-transfers/",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          from_character_id: 2,
+          to_character_id: null,
+          amounts: { gp: 3, sp: 4, cp: 7 },
+        }),
+      }),
     );
     expect(fetch).toHaveBeenNthCalledWith(
       2,

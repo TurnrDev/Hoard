@@ -394,7 +394,12 @@ def _transaction_data(
         "description": posted.description,
         "created_at": posted.created_at,
         "created_by_id": posted.created_by_id,
+        "actor": _actor_name(posted.created_by.user) if posted.created_by_id else None,
     }
+
+
+def _actor_name(user) -> str:
+    return getattr(user, "name", "") or user.get_username()
 
 
 @api.get("/auth/csrf/", auth=None)
@@ -883,7 +888,9 @@ def _transaction_queryset(model, campaign):
     entries = entry_model.objects.select_related(
         "account__character", *(("item",) if model is InventoryTransaction else ())
     )
-    return model.objects.filter(campaign=campaign).prefetch_related(
+    return model.objects.filter(campaign=campaign).select_related(
+        "created_by__user"
+    ).prefetch_related(
         Prefetch("entries", queryset=entries)
     )
 
@@ -893,6 +900,7 @@ def transaction_list(
     request,
     context_id: int,
     ledger: Literal["all", "inventory", "money", "experience"] = "all",
+    character_id: int | None = None,
     page: int = 1,
     page_size: int = 25,
 ):
@@ -907,8 +915,13 @@ def transaction_list(
         else ((ledger, TRANSACTION_MODELS[ledger]),)
     )
     rows = []
+    character = (
+        _character(context, character_id) if character_id is not None else None
+    )
     for _, model in choices:
         query = _transaction_queryset(model, context.campaign)
+        if character:
+            query = query.filter(entries__account__character=character).distinct()
         if context.kind != CampaignContext.Kind.GM:
             query = query.filter(
                 entries__account__character__context__user=context.user

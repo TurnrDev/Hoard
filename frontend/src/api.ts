@@ -100,6 +100,7 @@ export type LedgerTransaction = {
   reason?: string;
   requested_amount?: number;
   discarded_amount?: number;
+  actor: string | null;
 };
 
 let csrfToken = "";
@@ -320,13 +321,22 @@ export const createSharedXpAward = (
     method: "POST",
     body: JSON.stringify(payload),
   });
-export const getTransactions = (campaignId: number, ledger = "all", page = 1) =>
+export const getTransactions = (
+  campaignId: number,
+  ledger = "all",
+  page = 1,
+  characterId?: number,
+) =>
   request<{
     count: number;
     page: number;
     page_size: number;
     results: LedgerTransaction[];
-  }>(`/api/contexts/${campaignId}/transactions/?ledger=${ledger}&page=${page}`);
+  }>(
+    `/api/contexts/${campaignId}/transactions/?ledger=${ledger}&page=${page}${
+      characterId ? `&character_id=${characterId}` : ""
+    }`,
+  );
 export const reverseTransaction = (
   campaignId: number,
   transaction: LedgerTransaction,

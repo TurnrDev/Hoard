@@ -5,7 +5,13 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
-from hoard.campaigns.models import Campaign, CampaignContext, Character, InventoryItem
+from hoard.campaigns.models import (
+    Campaign,
+    CampaignContext,
+    Character,
+    InventoryItem,
+    MoneyTransaction,
+)
 
 
 class ContextApiTests(TestCase):
@@ -118,3 +124,82 @@ class ContextApiTests(TestCase):
         self.assertEqual(item["equipment"]["category"], "weapon")
         self.assertEqual(item["equipment"]["cost_amount"], "10.00")
         self.assertEqual(item["equipment"]["weight_amount"], "3.000")
+
+    def test_money_transfer_accepts_multiple_denominations_as_one_transaction(self) -> None:
+        self.client.force_login(self.gm_user)
+        response = self.client.post(
+            f"/api/contexts/{self.gm.pk}/money-transfers/",
+            data=json.dumps(
+                {
+                    "from_character_id": None,
+                    "to_character_id": self.character.pk,
+                    "amounts": {"gp": 12, "sp": 4, "cp": 7},
+                    "description": "Quest reward",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(MoneyTransaction.objects.count(), 1)
+        self.assertEqual(response.json()["actor"], "gm")
+        self.assertEqual(self.character.money.gold, 12)
+        self.assertEqual(self.character.money.silver, 4)
+        self.assertEqual(self.character.money.copper, 7)
+
+    def test_money_transfer_rejects_zero_negative_and_insufficient_take(self) -> None:
+        self.client.force_login(self.gm_user)
+        endpoint = f"/api/contexts/{self.gm.pk}/money-transfers/"
+        for amounts in ({"gp": 0}, {"gp": -1}):
+            response = self.client.post(
+                endpoint,
+                data=json.dumps(
+                    {
+                        "from_character_id": None,
+                        "to_character_id": self.character.pk,
+                        "amounts": amounts,
+                    }
+                ),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 422)
+        response = self.client.post(
+            endpoint,
+            data=json.dumps(
+                {
+                    "from_character_id": self.character.pk,
+                    "to_character_id": None,
+                    "amounts": {"gp": 1, "sp": 1},
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_character_transaction_filter_includes_actor(self) -> None:
+        self.client.force_login(self.gm_user)
+        self.client.post(
+            f"/api/contexts/{self.gm.pk}/money-transfers/",
+            data=json.dumps(
+                {
+                    "from_character_id": None,
+                    "to_character_id": self.character.pk,
+                    "amounts": {"gp": 1},
+                }
+            ),
+            content_type="application/json",
+        )
+        response = self.client.get(
+            f"/api/contexts/{self.gm.pk}/transactions/?character_id={self.character.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(response.json()["results"][0]["actor"], "gm")
+
+    def test_player_cannot_award_shared_experience(self) -> None:
+        self.client.force_login(self.player_user)
+        response = self.client.post(
+            f"/api/contexts/{self.pc.pk}/shared-xp-awards/",
+            data=json.dumps({"amount": 100, "description": "No permission"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)

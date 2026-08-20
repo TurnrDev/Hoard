@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
+import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import {
   archiveCharacter,
   commitCahImport,
@@ -11,6 +12,7 @@ import {
   getCampaign,
   getCharacters,
   getItems,
+  getTransactions,
   getMyCharacters,
   previewCahImport,
   updateCharacter,
@@ -18,6 +20,7 @@ import {
   type Campaign,
   type Character,
   type Item,
+  type LedgerTransaction,
 } from "../api";
 import type { PickerCandidate } from "../itemPicker";
 import { exchangedCoinAmount } from "../coinExchange";
@@ -49,11 +52,20 @@ const moneyAction = ref<"spend" | "transfer" | "exchange">("spend");
 const moneyDialog = ref(false);
 const denomination = ref("gp");
 const amount = ref(1);
+const moneyAmounts = ref<Record<string, number>>({
+  pp: 0,
+  gp: 0,
+  ep: 0,
+  sp: 0,
+  cp: 0,
+});
 const moneyDestination = ref<number>();
 const exchangeTargetDenomination = ref("sp");
 const moneyDescription = ref("");
 const editOpen = ref(false);
 const importOpen = ref(false);
+const addItemOpen = ref(false);
+const activity = ref<LedgerTransaction[]>([]);
 const importFile = ref<File>();
 const importPreview = ref<CahPreview>();
 const editName = ref("");
@@ -77,6 +89,12 @@ const xpThresholds = [
 const allItemCandidates = computed<PickerCandidate[]>(() =>
   items.value.map((item) => ({ item })),
 );
+const inventoryRows = computed(() =>
+  (character.value?.inventory ?? []).map((entry) => ({
+    ...entry,
+    item: items.value.find((item) => item.id === entry.item_id),
+  })),
+);
 const destinationOptions = computed(() => [
   ...characters.value
     .filter(
@@ -93,6 +111,21 @@ const exchangeAmount = computed(() =>
     exchangeTargetDenomination.value,
     amount.value,
   ),
+);
+const submittedMoneyAmounts = computed(() =>
+  Object.fromEntries(
+    Object.entries(moneyAmounts.value).filter(
+      ([, value]) => Number.isInteger(value) && value > 0,
+    ),
+  ),
+);
+const hasInvalidMoneyAmounts = computed(() =>
+  Object.values(moneyAmounts.value).some(
+    (value) => !Number.isInteger(value) || value < 0,
+  ),
+);
+const hasMoneyAmounts = computed(
+  () => Object.keys(submittedMoneyAmounts.value).length > 0,
 );
 const selectedInventoryQuantity = computed(
   () => selectedInventoryItem.value?.quantity ?? 0,
@@ -166,6 +199,16 @@ const displayName = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
 const formatXp = (value: number) => `${value.toLocaleString()} XP`;
+const activityAmount = (transaction: LedgerTransaction) =>
+  transaction.entries
+    .filter((entry) => entry.account_name === character.value?.name)
+    .map(
+      (entry) =>
+        `${entry.amount > 0 ? "+" : ""}${entry.amount} ${
+          entry.item_name ?? entry.denomination ?? "XP"
+        }`,
+    )
+    .join(" · ");
 const experienceProgress = computed(() => {
   const level = character.value?.sheet.level ?? 1;
   const current = character.value?.experience ?? 0;
@@ -249,11 +292,12 @@ const importChanges = computed(() => {
 
 async function load(): Promise<void> {
   try {
-    const [nextCampaign, visible, own, nextItems] = await Promise.all([
+    const [nextCampaign, visible, own, nextItems, recent] = await Promise.all([
       getCampaign(campaignId),
       getCharacters(campaignId),
       getMyCharacters(campaignId),
       getItems(campaignId),
+      getTransactions(campaignId, "all", 1, characterId),
     ]);
     campaign.value = nextCampaign;
     characters.value = visible;
@@ -262,6 +306,7 @@ async function load(): Promise<void> {
       own.find((candidate) => candidate.id === characterId);
     ownCharacter.value = own.some((candidate) => candidate.id === characterId);
     items.value = nextItems;
+    activity.value = recent.results.slice(0, 5);
     if (!character.value) await router.replace(`/c/${campaignId}/characters`);
   } catch (exception) {
     error.value =
@@ -284,6 +329,7 @@ async function grantItem(): Promise<void> {
     notice.value = "Saved to the ledger.";
     grantItemId.value = undefined;
     grantQuantity.value = 1;
+    addItemOpen.value = false;
     await load();
   } catch (exception) {
     error.value =
@@ -338,7 +384,7 @@ async function submitItemAction(): Promise<void> {
 }
 
 async function submitMoneyAction(): Promise<void> {
-  if (!character.value || !amount.value || amount.value < 1) return;
+  if (!character.value) return;
   try {
     if (moneyAction.value === "exchange") {
       if (!exchangeAmount.value) return;
@@ -349,16 +395,18 @@ async function submitMoneyAction(): Promise<void> {
         description: moneyDescription.value,
       });
     } else {
+      if (!hasMoneyAmounts.value || hasInvalidMoneyAmounts.value) return;
       await createMoneyTransfer(campaignId, {
         from_character_id: character.value.id,
         to_character_id:
           moneyAction.value === "transfer" ? (moneyDestination.value ?? null) : null,
-        amounts: { [denomination.value]: amount.value },
+        amounts: submittedMoneyAmounts.value,
         description: moneyDescription.value,
       });
     }
     notice.value = "Saved to the ledger.";
     moneyDescription.value = "";
+    moneyAmounts.value = { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 };
     moneyDestination.value = undefined;
     moneyDialog.value = false;
     await load();
@@ -498,105 +546,146 @@ onMounted(load);
     >
       {{ notice }}
     </v-alert>
-    <v-row>
-      <v-col cols="12">
-        <v-card>
+    <v-row class="profile-overview">
+      <v-col
+        cols="12"
+        md="5"
+      >
+        <v-card class="profile-card h-100">
           <v-card-text>
-            <v-row>
-              <v-col cols="12">
-                <div class="text-overline">Level {{ experienceProgress.level }}</div>
-                <v-progress-linear
-                  class="mt-2"
-                  color="primary"
-                  :model-value="experienceProgress.progress"
-                  height="8"
-                  rounded
-                  :aria-label="`Level ${experienceProgress.level} experience progress`"
-                />
-                <div class="xp-progress-labels">
-                  <span>{{ formatXp(experienceProgress.minimum) }}</span>
-                  <strong>{{ formatXp(experienceProgress.current) }}</strong>
-                  <span v-if="experienceProgress.maximum">
-                    {{ formatXp(experienceProgress.maximum) }}
-                  </span>
-                  <span v-else>Maximum level</span>
-                </div>
-              </v-col>
-            </v-row>
-            <v-divider class="my-4" />
-            <v-row
-              align="center"
-              class="money-summary"
+            <div class="text-overline">Level {{ experienceProgress.level }}</div>
+            <v-progress-linear
+              class="mt-2"
+              color="primary"
+              :model-value="experienceProgress.progress"
+              height="8"
+              rounded
+              :aria-label="`Level ${experienceProgress.level} experience progress`"
+            />
+            <div class="xp-progress-labels">
+              <span>{{ formatXp(experienceProgress.minimum) }}</span>
+              <strong>{{ formatXp(experienceProgress.current) }}</strong>
+              <span v-if="experienceProgress.maximum">
+                {{ formatXp(experienceProgress.maximum) }}
+              </span>
+              <span v-else>Maximum level</span>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col
+        cols="12"
+        md="7"
+      >
+        <v-card class="profile-card h-100 coin-summary-card">
+          <v-row
+            no-gutters
+            class="h-100"
+          >
+            <v-col
+              cols="12"
+              sm="7"
             >
-              <v-col
-                cols="12"
-                sm="8"
-              >
+              <v-card-text>
                 <div class="text-overline">Coin pouch</div>
-                <div class="money-line">
+                <div class="money-line mt-3">
                   {{ character.money.pp }} pp · {{ character.money.gp }} gp ·
                   {{ character.money.ep }} ep · {{ character.money.sp }} sp ·
                   {{ character.money.cp }} cp
                 </div>
-              </v-col>
-              <v-col
-                cols="12"
-                sm="4"
-                class="money-wealth"
-              >
-                <div class="text-overline">Total wealth</div>
-                <div class="text-h4">
-                  {{ formatGoldValue(character.money.gold_value) }} ¤
-                </div>
-              </v-col>
-            </v-row>
-            <div
-              v-if="canAct"
-              class="money-controls mt-4"
+              </v-card-text>
+            </v-col>
+            <v-col
+              cols="12"
+              sm="5"
+              class="coin-value-pane"
             >
-              <v-menu>
-                <template #activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    variant="tonal"
-                    prepend-icon="mdi-cash-multiple"
-                  >
-                    Money
-                  </v-btn>
-                </template>
-                <v-list density="compact">
-                  <v-list-item
-                    title="Spend coins"
-                    prepend-icon="mdi-cash-minus"
-                    @click="openMoneyDialog('spend')"
-                  />
-                  <v-list-item
-                    title="Transfer coins"
-                    prepend-icon="mdi-cash-fast"
-                    @click="openMoneyDialog('transfer')"
-                  />
-                  <v-list-item
-                    title="Exchange coins"
-                    prepend-icon="mdi-swap-horizontal"
-                    @click="openMoneyDialog('exchange')"
-                  />
-                </v-list>
-              </v-menu>
-            </div>
-            <v-divider class="my-4" />
-            <v-row>
-              <v-col cols="6">
-                <div class="text-overline">Max HP</div>
-                <div class="text-h5">{{ character.sheet.max_hp }}</div>
-              </v-col>
-              <v-col cols="6">
-                <div class="text-overline">Proficiency</div>
-                <div class="text-h5">+{{ character.sheet.proficiency_bonus }}</div>
-              </v-col>
-            </v-row>
-          </v-card-text>
+              <v-card-text>
+                <div class="text-overline">Coin value</div>
+                <div class="d-flex align-center justify-space-between mt-3">
+                  <div class="text-h4">
+                    {{ formatGoldValue(character.money.gold_value) }} ¤
+                  </div>
+                  <v-menu v-if="canAct">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-dots-horizontal"
+                        size="small"
+                        variant="text"
+                        aria-label="Coin actions"
+                      />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item
+                        title="Spend coins"
+                        prepend-icon="mdi-cash-minus"
+                        @click="openMoneyDialog('spend')"
+                      />
+                      <v-list-item
+                        title="Transfer coins"
+                        prepend-icon="mdi-cash-fast"
+                        @click="openMoneyDialog('transfer')"
+                      />
+                      <v-list-item
+                        title="Exchange coins"
+                        prepend-icon="mdi-swap-horizontal"
+                        @click="openMoneyDialog('exchange')"
+                      />
+                    </v-list>
+                  </v-menu>
+                </div>
+              </v-card-text>
+            </v-col>
+          </v-row>
         </v-card>
-        <v-card class="mt-4 ability-save-card">
+      </v-col>
+      <v-col cols="12">
+        <v-row
+          dense
+          class="profile-stat-row"
+        >
+          <v-col
+            cols="12"
+            sm="4"
+          >
+            <v-card class="profile-card">
+              <v-card-text>
+                <div class="text-overline">HP</div>
+                <div class="text-h5">{{ character.sheet.max_hp }}</div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col
+            cols="12"
+            sm="4"
+          >
+            <v-card class="profile-card">
+              <v-card-text>
+                <div class="text-overline">Initiative bonus</div>
+                <div class="text-h5">
+                  {{ signed(character.sheet.abilities.dexterity.modifier) }}
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col
+            cols="12"
+            sm="4"
+          >
+            <v-card class="profile-card">
+              <v-card-text>
+                <div class="text-overline">Proficiency bonus</div>
+                <div class="text-h5">
+                  {{ signed(character.sheet.proficiency_bonus) }}
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-col>
+      <v-col cols="12">
+        <v-card class="ability-save-card">
           <v-card-text>
             <v-row dense>
               <v-col
@@ -637,131 +726,83 @@ onMounted(load);
             </v-row>
           </v-card-text>
         </v-card>
-        <v-card class="mt-4">
-          <v-card-title>Skills</v-card-title>
-          <v-card-text>
-            <v-row dense>
-              <v-col
-                v-for="(column, columnIndex) in skillColumns"
-                :key="columnIndex"
-                cols="12"
-                sm="6"
-              >
-                <div
-                  v-for="ability in column"
-                  :key="ability.key"
-                  class="skill-group"
-                >
-                  <div class="skill-group-title">{{ ability.label }}</div>
-                  <div
-                    v-for="skill in ability.skills"
-                    :key="skill.name"
-                    class="skill-row"
-                  >
-                    <v-tooltip
-                      v-if="skill.proficiency !== 'none'"
-                      :text="proficiencyLabel(skill.proficiency)"
-                      location="top"
-                    >
-                      <template #activator="{ props }">
-                        <span
-                          v-bind="props"
-                          :class="proficiencyClass(skill.proficiency)"
-                        >
-                          <span
-                            v-if="skill.proficiency === 'expertise'"
-                            class="expertise-sparkle"
-                            aria-hidden="true"
-                          >
-                            ✦
-                          </span>
-                          {{ signed(skill.bonus) }}
-                        </span>
-                      </template>
-                    </v-tooltip>
-                    <strong v-else>{{ signed(skill.bonus) }}</strong>
-                    <span>{{ displayName(skill.name) }}</span>
-                  </div>
-                </div>
-              </v-col>
-            </v-row>
-          </v-card-text>
-        </v-card>
-        <v-card class="mt-4">
+        <v-card class="mt-4 inventory-card">
           <v-card-title class="d-flex align-center">
             Inventory
+            <span class="text-caption text-medium-emphasis ml-3">
+              {{ character.inventory.length }} items
+            </span>
             <v-spacer />
-            <ItemPickerDialog
+            <v-btn
               v-if="canAct"
-              v-model="grantItemId"
-              :candidates="allItemCandidates"
-              label="Give yourself an item"
-              no-data-text="No campaign items available."
-            />
+              size="small"
+              prepend-icon="mdi-plus"
+              @click="addItemOpen = true"
+            >
+              Add item
+            </v-btn>
           </v-card-title>
           <v-card-text>
-            <div
-              v-if="canAct"
-              class="d-flex align-center ga-3 mb-4"
-            >
-              <v-text-field
-                v-model.number="grantQuantity"
-                type="number"
-                min="1"
-                label="Quantity"
-                hide-details
-              />
-              <v-btn
-                color="primary"
-                :disabled="!grantItemId || grantQuantity < 1"
-                @click="grantItem"
-              >
-                Give yourself
-              </v-btn>
-            </div>
             <v-table
               v-if="character.inventory.length"
-              density="comfortable"
+              density="compact"
             >
               <thead>
                 <tr>
                   <th>Item</th>
                   <th>Quantity</th>
-                  <th class="text-right">Controls</th>
+                  <th>Weight</th>
+                  <th>Value</th>
+                  <th class="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="entry in character.inventory"
+                  v-for="entry in inventoryRows"
                   :key="entry.item_id"
                 >
                   <td>{{ entry.name }}</td>
                   <td>{{ entry.quantity }}</td>
+                  <td>
+                    {{
+                      entry.item?.equipment.weight_amount
+                        ? `${entry.item.equipment.weight_amount} ${entry.item.equipment.weight_unit}`
+                        : "—"
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      entry.item?.equipment.cost_amount
+                        ? `${entry.item.equipment.cost_amount} ${entry.item.equipment.cost_currency}`
+                        : "—"
+                    }}
+                  </td>
                   <td class="text-right">
-                    <template v-if="canAct">
-                      <v-btn
-                        size="small"
-                        variant="text"
-                        @click="openItemAction('use', entry)"
-                      >
-                        Use
-                      </v-btn>
-                      <v-btn
-                        size="small"
-                        variant="text"
-                        @click="openItemAction('destroy', entry)"
-                      >
-                        Destroy
-                      </v-btn>
-                      <v-btn
-                        size="small"
-                        color="primary"
-                        variant="text"
-                        @click="openItemAction('transfer', entry)"
-                      >
-                        Transfer
-                      </v-btn>
-                    </template>
+                    <v-menu v-if="canAct">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon="mdi-dots-horizontal"
+                          size="small"
+                          variant="text"
+                        />
+                      </template>
+                      <v-list density="compact">
+                        <v-list-item
+                          title="Use"
+                          @click="openItemAction('use', entry)"
+                        />
+                        <v-list-item
+                          title="Transfer"
+                          @click="openItemAction('transfer', entry)"
+                        />
+                        <v-list-item
+                          title="Destroy"
+                          base-color="error"
+                          @click="openItemAction('destroy', entry)"
+                        />
+                      </v-list>
+                    </v-menu>
                   </td>
                 </tr>
               </tbody>
@@ -774,8 +815,114 @@ onMounted(load);
             </span>
           </v-card-text>
         </v-card>
+        <v-expansion-panels
+          class="mt-4 skills-panel"
+          variant="accordion"
+        >
+          <v-expansion-panel title="Skills">
+            <v-expansion-panel-text>
+              <v-row dense>
+                <v-col
+                  v-for="(column, columnIndex) in skillColumns"
+                  :key="columnIndex"
+                  cols="12"
+                  sm="6"
+                >
+                  <div
+                    v-for="ability in column"
+                    :key="ability.key"
+                    class="skill-group"
+                  >
+                    <div class="skill-group-title">{{ ability.label }}</div>
+                    <div
+                      v-for="skill in ability.skills"
+                      :key="skill.name"
+                      class="skill-row"
+                    >
+                      <strong
+                        :class="
+                          skill.proficiency !== 'none'
+                            ? proficiencyClass(skill.proficiency)
+                            : ''
+                        "
+                      >
+                        {{ signed(skill.bonus) }}
+                      </strong>
+                      <span>{{ displayName(skill.name) }}</span>
+                    </div>
+                  </div>
+                </v-col>
+              </v-row>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
+        <v-card class="mt-4 activity-card">
+          <v-card-title class="d-flex align-center">
+            Recent activity
+            <v-spacer />
+            <v-btn
+              :to="`/c/${campaignId}/ledger`"
+              size="small"
+              variant="text"
+            >
+              View full ledger
+            </v-btn>
+          </v-card-title>
+          <v-card-text>
+            <template v-if="activity.length">
+              <div
+                v-for="transaction in activity"
+                :key="`${transaction.ledger}-${transaction.id}`"
+                class="activity-row"
+              >
+                <span>{{ new Date(transaction.created_at).toLocaleString() }}</span>
+                <strong>{{ activityAmount(transaction) }}</strong>
+                <span>{{ transaction.description || transaction.ledger }}</span>
+                <span>{{ transaction.actor ? `by ${transaction.actor}` : "—" }}</span>
+              </div>
+            </template>
+            <span
+              v-else
+              class="text-medium-emphasis"
+            >
+              No recent activity.
+            </span>
+          </v-card-text>
+        </v-card>
       </v-col>
     </v-row>
+    <v-dialog
+      v-model="addItemOpen"
+      max-width="560"
+    >
+      <v-card title="Add item">
+        <v-card-text>
+          <ItemPickerDialog
+            v-model="grantItemId"
+            :candidates="allItemCandidates"
+            label="Item"
+            no-data-text="No campaign items available."
+          />
+          <v-text-field
+            v-model.number="grantQuantity"
+            type="number"
+            min="1"
+            label="Quantity"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="addItemOpen = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :disabled="!grantItemId || grantQuantity < 1"
+            @click="grantItem"
+          >
+            Add item
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-dialog
       v-model="moneyDialog"
       max-width="620"
@@ -791,23 +938,7 @@ onMounted(load);
       >
         <v-card-text>
           <template v-if="moneyAction === 'spend'">
-            <v-row>
-              <v-col>
-                <v-select
-                  v-model="denomination"
-                  :items="denominations"
-                  label="Denomination"
-                />
-              </v-col>
-              <v-col>
-                <v-text-field
-                  v-model.number="amount"
-                  type="number"
-                  min="1"
-                  label="Amount"
-                />
-              </v-col>
-            </v-row>
+            <CoinAmountPicker v-model="moneyAmounts" />
             <div class="text-caption text-medium-emphasis mb-3">
               Coins will be transferred to the campaign system.
             </div>
@@ -818,23 +949,7 @@ onMounted(load);
               :items="destinationOptions"
               label="Transfer to"
             />
-            <v-row>
-              <v-col>
-                <v-select
-                  v-model="denomination"
-                  :items="denominations"
-                  label="Denomination"
-                />
-              </v-col>
-              <v-col>
-                <v-text-field
-                  v-model.number="amount"
-                  type="number"
-                  min="1"
-                  label="Amount"
-                />
-              </v-col>
-            </v-row>
+            <CoinAmountPicker v-model="moneyAmounts" />
           </template>
           <template v-else>
             <v-row>
@@ -887,10 +1002,10 @@ onMounted(load);
             color="primary"
             :disabled="
               moneyAction === 'transfer'
-                ? !moneyDestination
+                ? !moneyDestination || !hasMoneyAmounts || hasInvalidMoneyAmounts
                 : moneyAction === 'exchange'
                   ? !exchangeAmount
-                  : !amount || amount < 1
+                  : !hasMoneyAmounts || hasInvalidMoneyAmounts
             "
             @click="submitMoneyAction"
           >

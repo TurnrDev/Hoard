@@ -262,6 +262,85 @@ body {
   overflow-x: auto;
 }
 
+.profile-overview > .v-col,
+.profile-stat-row > .v-col {
+  padding: 6px;
+}
+
+.profile-card,
+.inventory-card,
+.activity-card,
+.action-card {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.profile-card .v-card-text {
+  padding: 16px;
+}
+
+.coin-value-pane {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.inventory-card .v-table,
+.activity-card {
+  font-size: 0.875rem;
+}
+
+.skills-panel .v-expansion-panel {
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: 180px minmax(110px, 0.7fr) minmax(160px, 1fr) minmax(
+      100px,
+      0.6fr
+    );
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 10px 0;
+}
+
+.activity-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.activity-row strong {
+  color: #d5a250;
+}
+.coin-inputs {
+  margin-bottom: 20px;
+}
+
+.coin-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  padding-top: 12px;
+}
+
+.coin-total strong {
+  color: #d5a250;
+  font-size: 1.25rem;
+}
+
+@media (max-width: 700px) {
+  .activity-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .coin-value-pane {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
 @media (min-width: 600px) {
   .page-shell {
     padding: 32px 28px 52px;
