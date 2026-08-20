@@ -24,11 +24,12 @@ async function adjust(amount: -1 | 1): Promise<void> {
 </script>
 
 <template>
-  <v-card>
-    <v-card-title class="text-overline">Campaign date</v-card-title>
-    <v-card-text>
-      <div class="text-h5">{{ formatCampaignDate(calendar) }}</div>
-      <div class="text-caption">{{ calendar.era_name }}</div>
+  <v-card class="profile-card h-100">
+    <v-card-text class="d-flex align-center justify-space-between h-100">
+      <div>
+        <div class="text-h5">{{ formatCampaignDate(calendar) }}</div>
+        <div class="text-caption">{{ calendar.era_name }}</div>
+      </div>
       <v-alert
         v-if="error"
         density="compact"
@@ -37,25 +38,26 @@ async function adjust(amount: -1 | 1): Promise<void> {
       >
         {{ error }}
       </v-alert>
+      <div class="d-flex ga-1">
+        <v-btn
+          icon="mdi-minus"
+          size="small"
+          variant="text"
+          :disabled="!canDecrement"
+          :loading="busy"
+          aria-label="Decrement campaign date by one day"
+          @click="adjust(-1)"
+        />
+        <v-btn
+          icon="mdi-plus"
+          size="small"
+          variant="text"
+          color="primary"
+          :loading="busy"
+          aria-label="Increment campaign date by one day"
+          @click="adjust(1)"
+        />
+      </div>
     </v-card-text>
-    <v-card-actions>
-      <v-btn
-        :disabled="!canDecrement"
-        :loading="busy"
-        prepend-icon="mdi-minus"
-        @click="adjust(-1)"
-      >
-        DEC one day
-      </v-btn>
-      <v-spacer />
-      <v-btn
-        color="primary"
-        :loading="busy"
-        append-icon="mdi-plus"
-        @click="adjust(1)"
-      >
-        INC one day
-      </v-btn>
-    </v-card-actions>
   </v-card>
 </template>

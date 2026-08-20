@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { formatGoldValue } from "../money";
 import GmCoinForm from "../components/GmCoinForm.vue";
@@ -23,6 +23,12 @@ const characters = ref<Character[]>([]);
 const items = ref<Item[]>([]);
 const error = ref("");
 const notice = ref("");
+const activePcCount = computed(
+  () =>
+    characters.value.filter(
+      (character) => character.is_active && character.is_player_character,
+    ).length,
+);
 
 async function load(): Promise<void> {
   try {
@@ -58,6 +64,13 @@ useCampaignRefresh(load);
       <div>
         <div class="text-overline text-secondary">Campaign dashboard</div>
         <h1>{{ campaign?.name }}</h1>
+        <v-chip
+          size="small"
+          variant="tonal"
+          prepend-icon="mdi-account-group-outline"
+        >
+          {{ activePcCount }} active players
+        </v-chip>
       </div>
       <v-btn
         :to="`/c/${contextId}/characters`"
@@ -82,58 +95,12 @@ useCampaignRefresh(load);
     </v-snackbar>
     <v-row
       v-if="campaign"
-      class="mb-2"
+      dense
+      class="profile-overview mb-4"
     >
       <v-col
-        cols="6"
-        md="3"
-      >
-        <v-card>
-          <v-card-text>
-            <div class="text-overline">Party wealth</div>
-            <div class="text-h5">
-              {{ formatGoldValue(campaign.party_money.gold_value) }} ¤
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col
-        cols="6"
-        md="3"
-      >
-        <v-card>
-          <v-card-text>
-            <div class="text-overline">Active PCs</div>
-            <div class="text-h5">
-              {{
-                characters.filter(
-                  (character) => character.is_active && character.is_player_character,
-                ).length
-              }}
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col
         cols="12"
-        md="6"
-      >
-        <v-card>
-          <v-card-text>
-            <div class="text-overline">Party coin</div>
-            {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp ·
-            {{ campaign.party_money.ep }} ep · {{ campaign.party_money.sp }} sp ·
-            {{ campaign.party_money.cp }} cp
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-    <div class="text-overline text-secondary mb-2">GM actions</div>
-    <v-row class="gm-actions">
-      <v-col
-        v-if="campaign"
-        cols="12"
-        md="4"
+        md="5"
       >
         <GmCalendarCard
           :context-id="contextId"
@@ -141,6 +108,46 @@ useCampaignRefresh(load);
           @changed="(calendar) => (campaign = { ...campaign!, calendar })"
         />
       </v-col>
+      <v-col
+        cols="12"
+        md="7"
+      >
+        <v-card class="profile-card h-100 coin-summary-card">
+          <v-row
+            no-gutters
+            class="h-100"
+          >
+            <v-col
+              cols="12"
+              sm="7"
+            >
+              <v-card-text>
+                <div class="text-overline">Party coin</div>
+                <div class="money-line mt-3">
+                  {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp ·
+                  {{ campaign.party_money.ep }} ep · {{ campaign.party_money.sp }} sp ·
+                  {{ campaign.party_money.cp }} cp
+                </div>
+              </v-card-text>
+            </v-col>
+            <v-col
+              cols="12"
+              sm="5"
+              class="coin-value-pane"
+            >
+              <v-card-text>
+                <div class="text-overline">Party wealth</div>
+                <div class="text-h4 mt-3">
+                  {{ formatGoldValue(campaign.party_money.gold_value) }} ¤
+                </div>
+              </v-card-text>
+            </v-col>
+          </v-row>
+        </v-card>
+      </v-col>
+    </v-row>
+    <div class="text-overline text-secondary mb-2">GM actions</div>
+    <v-row class="gm-actions">
       <v-col
         cols="12"
         md="4"

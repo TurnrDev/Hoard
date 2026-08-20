@@ -113,17 +113,18 @@ onBeforeUnmount(() => {
       />
       <v-app-bar-title class="font-weight-black text-primary">HOARD</v-app-bar-title>
       <span
+        v-if="calendar"
+        class="app-context app-date app-date--center"
+        :title="calendar.era_name"
+      >
+        {{ formatCampaignDate(calendar) }}
+      </span>
+      <v-spacer />
+      <span
         v-if="activeContext"
         class="app-context d-none d-sm-inline"
       >
         {{ title }}
-      </span>
-      <span
-        v-if="calendar"
-        class="app-date ms-auto me-2"
-        :title="calendar.era_name"
-      >
-        {{ formatCampaignDate(calendar) }}
       </span>
       <v-menu
         v-if="$route.path !== '/login'"
