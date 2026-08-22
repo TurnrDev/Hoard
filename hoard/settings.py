@@ -84,7 +84,17 @@ ASGI_APPLICATION: str = "hoard.asgi.application"
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379/0")]},
+        # channels-redis polls Redis with five-second blocking reads.  redis-py 8
+        # defaults its transport timeout to the same duration, which turns an
+        # ordinary empty poll into a TimeoutError and drops the WebSocket.
+        "CONFIG": {
+            "hosts": [
+                {
+                    "address": os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+                    "socket_timeout": None,
+                }
+            ]
+        },
     }
 }
 
