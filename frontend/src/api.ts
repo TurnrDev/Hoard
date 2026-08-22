@@ -1,3 +1,5 @@
+import { campaignRequest, ensureCampaignRealtime } from "./realtime";
+
 export type User = { id: number; username: string };
 export type CampaignSummary = {
   id: number;
@@ -59,6 +61,7 @@ export type Character = {
   archived_at: string | null;
   race: string;
   class: string;
+  background: string;
   strength: number;
   dexterity: number;
   constitution: number;
@@ -69,6 +72,13 @@ export type Character = {
     level: number;
     base_hp: number;
     max_hp: number;
+    current_hp: number;
+    temporary_hp: number;
+    base_ac: number;
+    ac_adjustment: number;
+    armor_class: number;
+    speed: string;
+    spell_slots: Record<string, number>;
     proficiency_bonus_adjustment: number;
     proficiency_bonus: number;
     abilities: Record<string, { score: number; modifier: number; adjustment: number }>;
@@ -78,14 +88,68 @@ export type Character = {
   experience: number;
   money: Record<string, number | string>;
   inventory: Array<{ item_id: number; name: string; quantity: number }>;
+  notes: Array<{ id: number; title: string; body: string }>;
+  features: Array<{
+    id: number;
+    kind: string;
+    name: string;
+    description: string;
+    notes: string;
+    catalogue_entry_id: number | null;
+  }>;
+  spells: Array<{
+    id: number;
+    name: string;
+    level: number;
+    description: string;
+    notes: string;
+    prepared: boolean;
+    catalogue_entry_id: number | null;
+  }>;
+  loadout: Array<{
+    id: number;
+    item_id: number;
+    name: string;
+    equipped: boolean;
+    label: string;
+  }>;
+  companions: Array<{
+    id: number;
+    name: string;
+    armor_class: number;
+    max_hp: number;
+    current_hp: number;
+    speed: string;
+    abilities: Record<string, number | null>;
+    attacks: Array<Record<string, unknown>>;
+    notes: string;
+    monster_template_id: number | null;
+  }>;
 };
 export type Campaign = CampaignSummary & {
   use_shared_exp: boolean;
   shared_experience: number;
-  item_sources: string[];
   calendar: CampaignCalendar;
   party_money: Record<string, number | string>;
   characters: Character[];
+};
+export type CompendiumSource = {
+  id: number;
+  identifier: string;
+  name: string;
+  repository: string;
+  campaign_id: number | null;
+  enabled: boolean;
+  entry_count: number;
+};
+export type CompendiumRepository = {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  repository_url: string;
+  github_repository: string;
+  installed: boolean;
 };
 export type LedgerEntry = {
   account_id: number;
@@ -137,11 +201,27 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(
-      typeof error.detail === "string" ? error.detail : JSON.stringify(error),
-    );
+    throw new Error(apiErrorMessage(error, response.statusText));
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
+}
+
+function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== "object" || !("detail" in error)) return fallback;
+  const { detail } = error as { detail: unknown };
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((entry) => {
+      if (typeof entry === "string") return entry;
+      if (entry && typeof entry === "object" && "msg" in entry) {
+        const { msg } = entry as { msg: unknown };
+        if (typeof msg === "string") return msg;
+      }
+      return "";
+    });
+    return messages.filter(Boolean).join(" ") || fallback;
+  }
+  return fallback;
 }
 
 export async function initialiseCsrf(): Promise<void> {
@@ -177,7 +257,53 @@ export const adjustCalendar = (id: number, amount: -1 | 1) =>
     method: "POST",
     body: JSON.stringify({ amount }),
   });
-export const getItems = (id: number) => request<Item[]>(`/api/contexts/${id}/items/`);
+
+async function compendiumRequest<T>(
+  contextId: number,
+  type: string,
+  payload: Record<string, unknown> = {},
+): Promise<T> {
+  const campaign = await getCampaign(contextId);
+  await ensureCampaignRealtime(campaign.id);
+  return campaignRequest<T>(type, payload);
+}
+
+export const getItems = (id: number) => getCompendiumItemPages(id);
+
+type CompendiumItemPage = {
+  items: Item[];
+  next_offset: number | null;
+};
+
+async function getCompendiumItemPages(contextId: number): Promise<Item[]> {
+  const campaign = await getCampaign(contextId);
+  await ensureCampaignRealtime(campaign.id);
+  const items: Item[] = [];
+  let nextOffset: number | null = 0;
+  while (nextOffset !== null) {
+    const page: CompendiumItemPage = await campaignRequest<CompendiumItemPage>(
+      "compendium.items.list",
+      { offset: nextOffset, limit: 100 },
+    );
+    items.push(...page.items);
+    nextOffset = page.next_offset;
+  }
+  return items;
+}
+
+export const getCompendiumSources = (id: number) =>
+  compendiumRequest<CompendiumSource[]>(id, "compendium.sources.list");
+export const enableCompendiumSource = (id: number, sourceId: number) =>
+  compendiumRequest<CompendiumSource>(id, "compendium.sources.enable", {
+    source_id: sourceId,
+  });
+export const disableCompendiumSource = (id: number, sourceId: number) =>
+  compendiumRequest<void>(id, "compendium.sources.disable", {
+    source_id: sourceId,
+  });
+export const getCompendiumRepositories = (id: number) => {
+  return compendiumRequest<CompendiumRepository[]>(id, "compendium.repositories.list");
+};
 export const addMember = (id: number, username: string, isGameMaster = false) =>
   request<CampaignMember>(`/api/contexts/${id}/manage/contexts/`, {
     method: "POST",
@@ -201,11 +327,13 @@ export const createItem = (
   name: string,
   description: string,
   metadata: Partial<EquipmentMetadata> = {},
-) =>
-  request<Item>(`/api/contexts/${id}/items/`, {
-    method: "POST",
-    body: JSON.stringify({ name, description, metadata }),
+): Promise<Item> => {
+  return compendiumRequest<Item>(id, "compendium.items.create", {
+    name,
+    description,
+    metadata,
   });
+};
 export const updateItem = (
   campaignId: number,
   itemId: number,
@@ -214,15 +342,17 @@ export const updateItem = (
     description?: string;
     metadata?: Partial<EquipmentMetadata>;
   },
-) =>
-  request<Item>(`/api/contexts/${campaignId}/items/${itemId}/`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
+) => {
+  return compendiumRequest<Item>(campaignId, "compendium.items.update", {
+    item_id: itemId,
+    ...payload,
   });
-export const deleteItem = (campaignId: number, itemId: number) =>
-  request<void>(`/api/contexts/${campaignId}/items/${itemId}/`, {
-    method: "DELETE",
+};
+export const deleteItem = (campaignId: number, itemId: number) => {
+  return compendiumRequest<void>(campaignId, "compendium.items.delete", {
+    item_id: itemId,
   });
+};
 export const getCharacters = (campaignId: number) =>
   request<Character[]>(`/api/contexts/${campaignId}/characters/`);
 export const getMyCharacters = (contextId: number) =>
@@ -257,13 +387,30 @@ export const archiveCharacter = (campaignId: number, characterId: number) =>
 export type CahPreview = {
   token: string;
   fields: Record<string, unknown>;
+  collections: Record<string, Array<Record<string, unknown>>>;
+  inventory: Array<{
+    line_id: string;
+    name: string;
+    kind: string;
+    description: string;
+    quantity: number;
+    equipped: boolean;
+    matched_item_id: number | null;
+    action: "add" | "leave";
+  }>;
   warnings: string[];
+  calculated_before: Record<string, unknown> | null;
+  calculated_after: Record<string, unknown> | null;
 };
-export const previewCahImport = (contextId: number, file: File) => {
+export const previewCahImport = (
+  contextId: number,
+  characterId: number,
+  file: File,
+) => {
   const body = new FormData();
   body.append("file", file);
   return request<CahPreview>(
-    `/api/contexts/${contextId}/character-imports/cah/preview`,
+    `/api/contexts/${contextId}/character-imports/cah/preview?character_id=${characterId}`,
     { method: "POST", body },
   );
 };
@@ -271,10 +418,16 @@ export const commitCahImport = (
   contextId: number,
   token: string,
   characterId?: number,
+  inventory: Array<{
+    line_id: string;
+    action: "add" | "leave";
+    quantity: number;
+    item_id?: number;
+  }> = [],
 ) =>
   request<Character>(`/api/contexts/${contextId}/character-imports/cah/commit`, {
     method: "POST",
-    body: JSON.stringify({ token, character_id: characterId }),
+    body: JSON.stringify({ token, character_id: characterId, inventory }),
   });
 export const updateCharacter = (
   campaignId: number,

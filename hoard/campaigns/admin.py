@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from django import forms
 from django.contrib import admin
 from django.forms.models import BaseModelForm
 from django.http import HttpRequest
@@ -14,7 +13,6 @@ from .models import (
     ExperienceTransaction,
     InventoryAccount,
     InventoryEntry,
-    InventoryItem,
     InventoryTransaction,
     MoneyAccount,
     MoneyEntry,
@@ -22,22 +20,8 @@ from .models import (
 )
 
 
-class CampaignAdminForm(forms.ModelForm):
-    item_sources = forms.MultipleChoiceField(
-        choices=(("5e", "D&D 5e"), ("5e2024", "D&D 5e (2024)")),
-        required=False,
-        widget=forms.CheckboxSelectMultiple,
-        help_text="Imported catalogue sources available to this campaign.",
-    )
-
-    class Meta:
-        model = Campaign
-        fields = "__all__"
-
-
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    form = CampaignAdminForm
     list_display = (
         "name",
         "calendar_era_abbreviation",
@@ -45,7 +29,6 @@ class CampaignAdmin(admin.ModelAdmin):
         "calendar_day",
         "use_shared_exp",
         "shared_experience",
-        "item_sources",
     )
     search_fields = ("name",)
 
@@ -79,34 +62,6 @@ class CharacterAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         if activate:
             obj.activate()
-
-
-@admin.register(InventoryItem)
-class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = (
-        "name",
-        "equipment_category",
-        "rarity",
-        "campaign",
-        "created_by",
-        "source_system",
-        "source_book",
-    )
-    list_filter = ("campaign", "source_system", "equipment_category", "rarity")
-    search_fields = ("name", "source_identifier", "source_book", "item_type")
-    readonly_fields = (
-        "source_repository",
-        "source_system",
-        "source_identifier",
-        "source_data",
-    )
-
-    def has_change_permission(
-        self, request: HttpRequest, obj: InventoryItem | None = None
-    ) -> bool:
-        if obj is not None and obj.is_imported:
-            return False
-        return super().has_change_permission(request, obj)
 
 
 class ReadOnlyLedgerAdmin(admin.ModelAdmin):

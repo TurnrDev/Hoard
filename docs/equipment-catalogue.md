@@ -1,6 +1,7 @@
 # Equipment catalogue
 
-Hoard imports global equipment from the pinned RPG Companion systems repository.
+Hoard imports global equipment from repositories discovered through the RPG
+Companion community registry.
 The importer supports `item`, `weapon`, and `armor` resources from both `5e`
 and `5e2024`.
 
@@ -9,13 +10,13 @@ also extracts facts useful to a DM and players: source book, category, type,
 cost, weight, rarity, magic, and attunement. A missing fact means the upstream
 resource did not provide a usable value; it is not treated as zero or false.
 
-Run the repeatable importer after updating the submodule:
+Synchronise the registry and install its default repository with:
 
 ```sh
-uv run python manage.py import_rpg_companion_items
+uv run python manage.py update_compendium_registries
 ```
 
-It upserts imported equipment by repository, system, equipment category, and
+It upserts imported equipment by repository, source, equipment category, and
 upstream identifier. Rerunning it updates facts without duplicating entries.
 
 Campaign item source settings control which global systems appear in a

@@ -6,23 +6,18 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.conf import settings
-from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Sum
 
 if TYPE_CHECKING:
     from hoard.campaigns.models.experience import ExperienceAccount
-    from hoard.campaigns.models.inventory import (
-        InventoryAccount,
-        InventoryItem,
-        InventoryTransaction,
-    )
+    from hoard.campaigns.models.inventory import InventoryAccount, InventoryTransaction
     from hoard.campaigns.models.money import MoneyAccount, MoneyTransaction
     from hoard.campaigns.services.actions import CoinAmounts
+    from hoard.compendium.models import CompendiumEntry
 
 
-DEFAULT_ITEM_SOURCES: list[str] = ["5e", "5e2024"]
 XP_LEVEL_THRESHOLDS = (
     0,
     300,
@@ -47,13 +42,7 @@ XP_LEVEL_THRESHOLDS = (
 )
 
 
-def default_item_sources() -> list[str]:
-    return list(DEFAULT_ITEM_SOURCES)
-
-
 class Campaign(models.Model):
-    item_sources: list[str]
-
     name = models.CharField(max_length=200)
     calendar_era_abbreviation = models.CharField(max_length=20, default="PD")
     calendar_era_name = models.CharField(max_length=100, default="Powder Dynasty")
@@ -61,15 +50,9 @@ class Campaign(models.Model):
     calendar_day = models.PositiveSmallIntegerField(default=137)
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
-    item_sources = ArrayField(
-        models.CharField(
-            max_length=10, choices=(("5e", "D&D 5e"), ("5e2024", "D&D 5e (2024)"))
-        ),
-        default=default_item_sources,
+    compendium_sources = models.ManyToManyField(
+        "compendium.CompendiumSource", blank=True, related_name="enabled_campaigns"
     )
-
-    def allows_item_source(self, source_system: str) -> bool:
-        return source_system in self.item_sources
 
     def adjust_calendar_day(self, amount: int) -> None:
         """Move the campaign calendar by a single non-zero number of days."""
@@ -128,20 +111,6 @@ class Campaign(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        allowed_sources = {"5e", "5e2024"}
-        if (
-            not isinstance(self.item_sources, list)
-            or any(
-                not isinstance(source, str) or source not in allowed_sources
-                for source in self.item_sources
-            )
-            or len(self.item_sources) != len(set(self.item_sources))
-        ):
-            raise ValidationError(
-                {
-                    "item_sources": "Choose zero or more supported item sources: 5e, 5e2024."
-                }
-            )
         if self.calendar_year < 1:
             raise ValidationError({"calendar_year": "Year must be at least 1."})
         if not 1 <= self.calendar_day <= 365:
@@ -223,6 +192,7 @@ class Character(models.Model):
     name = models.CharField(max_length=200)
     race = models.CharField(max_length=100)
     character_class = models.CharField(max_length=100)
+    background = models.CharField(max_length=100, blank=True)
     strength = models.PositiveSmallIntegerField()
     dexterity = models.PositiveSmallIntegerField()
     constitution = models.PositiveSmallIntegerField()
@@ -230,6 +200,12 @@ class Character(models.Model):
     wisdom = models.PositiveSmallIntegerField()
     charisma = models.PositiveSmallIntegerField()
     base_hp = models.PositiveSmallIntegerField(default=1)
+    current_hp = models.IntegerField(default=1)
+    temporary_hp = models.IntegerField(default=0)
+    base_ac = models.PositiveSmallIntegerField(default=10)
+    ac_adjustment = models.SmallIntegerField(default=0)
+    speed = models.CharField(max_length=100, blank=True)
+    spell_slots = models.JSONField(default=dict, blank=True)
     proficiency_bonus_adjustment = models.SmallIntegerField(default=0)
     strength_modifier_adjustment = models.SmallIntegerField(default=0)
     dexterity_modifier_adjustment = models.SmallIntegerField(default=0)
@@ -341,8 +317,10 @@ class Character(models.Model):
         )
 
     @property
-    def inventory(self) -> dict[InventoryItem, int]:
-        from .inventory import InventoryEntry, InventoryItem
+    def inventory(self) -> dict[CompendiumEntry, int]:
+        from hoard.compendium.models import CompendiumEntry
+
+        from .inventory import InventoryEntry
 
         rows = (
             InventoryEntry.objects.filter(account__character=self)
@@ -350,7 +328,7 @@ class Character(models.Model):
             .annotate(total=Sum("amount"))
             .filter(total__gt=0)
         )
-        items = InventoryItem.objects.in_bulk([row["item_id"] for row in rows])
+        items = CompendiumEntry.objects.in_bulk([row["item_id"] for row in rows])
         return {items[row["item_id"]]: row["total"] for row in rows}
 
     def activate(self) -> Character:
@@ -359,7 +337,7 @@ class Character(models.Model):
         return activate_character(self)
 
     def grant_loot(
-        self, item: InventoryItem, quantity: int, description: str = ""
+        self, item: CompendiumEntry, quantity: int, description: str = ""
     ) -> InventoryTransaction:
         from ..services.actions import grant_loot
 
@@ -370,7 +348,7 @@ class Character(models.Model):
     def transfer_item(
         self,
         recipient: Character,
-        item: InventoryItem,
+        item: CompendiumEntry,
         quantity: int,
         description: str = "",
     ) -> InventoryTransaction:

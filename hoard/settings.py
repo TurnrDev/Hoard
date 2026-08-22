@@ -48,6 +48,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.staticfiles",
     "django_vite",
     "channels",
+    "hoard.compendium",
     "hoard.campaigns",
 ]
 
@@ -97,6 +98,17 @@ CHANNEL_LAYERS = {
         },
     }
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ.get("REDIS_CACHE_URL", "redis://localhost:6379/1"),
+    }
+}
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/2")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", "redis://localhost:6379/2"
+)
 
 
 # Database

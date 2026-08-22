@@ -21,8 +21,6 @@ missing resources, and `422` for invalid request schemas or domain input.
 | `GET`/`POST /characters/` | member | Visible characters and self-owned character creation. |
 | `GET /characters/me/` | member | All of the caller's characters, including inactive or archived records. |
 | `GET`/`PATCH`/`DELETE /characters/<id>/` | owner / GM | Read, update, or archive a character. |
-| `GET`/`POST /items/` | member | List catalogue items or create a campaign-local item. |
-| `GET`/`PATCH`/`DELETE /items/<id>/` | member / GM | Read an item; GMs update or delete local items. |
 | `POST /inventory-transactions/` | GM/member | Move one item between characters or the system. |
 | `POST /money-transfers/` | GM/member | Move positive coin amounts between characters or the system. |
 | `POST /money-exchanges/` | GM/member | Exchange equal copper value for one character. |
@@ -40,6 +38,24 @@ Transactions are immutable. DELETE is available only for the latest record in
 the matching campaign ledger and creates a final compensating transaction. It
 returns that reversal with `200`; the original remains in collection history
 but its detail URL returns `410 Gone`.
+
+## Compendium WebSocket API
+
+Compendium operations use the campaign WebSocket at
+`/ws/campaigns/<campaign_id>/`, rather than HTTP endpoints. Each request has a
+unique `request_id`; the server replies with `response` or `response.error`
+carrying the same ID.
+
+| Message type | Access | Purpose |
+| --- | --- | --- |
+| `compendium.items.list` | member | List enabled equipment entries in bounded pages (`offset`, `limit`). |
+| `compendium.items.create` | member | Create a campaign-local item. |
+| `compendium.items.update`/`delete` | GM | Change or delete a local item. |
+| `compendium.search` | member | Search enabled entries by kind and name. |
+| `compendium.sources.list` | member | List sources available to the campaign. |
+| `compendium.sources.enable`/`disable` | GM | Change the campaign's enabled sources. |
+| `compendium.repositories.list` | member | List compatible community-registry repositories. |
+| `compendium.repositories.import` | GM | Queue installation of a registered repository. |
 
 ## Money visibility
 

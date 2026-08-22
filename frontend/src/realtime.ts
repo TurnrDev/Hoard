@@ -4,7 +4,33 @@ let socket: WebSocket | undefined;
 let campaignId: number | undefined;
 let reconnectTimer: number | undefined;
 let shouldReconnect = false;
+const SOCKET_CONNECT_TIMEOUT_MS = 5_000;
+const SOCKET_CONNECT_POLL_MS = 50;
+const REQUEST_TIMEOUT_MS = 10_000;
 export const campaignRefreshRevision = ref(0);
+export type RepositoryImportEvent = {
+  type:
+    | "repository.import.started"
+    | "repository.import.progress"
+    | "repository.import.finished"
+    | "repository.import.error";
+  job_id?: string;
+  detail?: string;
+  stage?: string;
+  message?: string;
+  current?: number | null;
+  total?: number | null;
+  heartbeat?: boolean;
+};
+const repositoryImportListeners = new Set<(event: RepositoryImportEvent) => void>();
+const pendingRequests = new Map<
+  string,
+  {
+    resolve: (data: unknown) => void;
+    reject: (error: Error) => void;
+    timeout: number;
+  }
+>();
 
 function socketUrl(id: number): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -19,11 +45,38 @@ function open(): void {
   if (!campaignId) return;
   socket = new WebSocket(socketUrl(campaignId));
   socket.onmessage = (event) => {
-    const message = JSON.parse(event.data) as { type?: string };
+    const message = JSON.parse(event.data) as {
+      type?: string;
+      request_id?: string;
+      data?: unknown;
+      detail?: string;
+    };
+    if (
+      (message.type === "response" || message.type === "response.error") &&
+      message.request_id
+    ) {
+      const pending = pendingRequests.get(message.request_id);
+      if (pending) {
+        window.clearTimeout(pending.timeout);
+        pendingRequests.delete(message.request_id);
+        if (message.type === "response.error") {
+          pending.reject(new Error(message.detail ?? "Campaign request failed."));
+        } else {
+          pending.resolve(message.data);
+        }
+      }
+      return;
+    }
     if (message.type === "campaign.changed" && campaignId) notify(campaignId);
+    if (message.type?.startsWith("repository.import.")) {
+      repositoryImportListeners.forEach((listener) =>
+        listener(message as RepositoryImportEvent),
+      );
+    }
   };
   socket.onclose = () => {
     socket = undefined;
+    rejectPendingRequests("The campaign connection closed.");
     if (shouldReconnect) reconnectTimer = window.setTimeout(open, 1000);
   };
 }
@@ -36,6 +89,13 @@ export function connectCampaignRealtime(id: number): void {
   open();
 }
 
+export async function ensureCampaignRealtime(id: number): Promise<WebSocket> {
+  if (campaignId !== id || socket?.readyState === WebSocket.CLOSED) {
+    connectCampaignRealtime(id);
+  }
+  return readySocket();
+}
+
 export function disconnectCampaignRealtime(): void {
   shouldReconnect = false;
   campaignId = undefined;
@@ -43,6 +103,68 @@ export function disconnectCampaignRealtime(): void {
   reconnectTimer = undefined;
   socket?.close();
   socket = undefined;
+  rejectPendingRequests("The campaign connection closed.");
+}
+
+export async function campaignRequest<T>(
+  type: string,
+  payload: Record<string, unknown> = {},
+): Promise<T> {
+  const connection = await readySocket();
+  const requestId = crypto.randomUUID();
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingRequests.delete(requestId);
+      reject(new Error("The campaign request timed out."));
+    }, REQUEST_TIMEOUT_MS);
+    pendingRequests.set(requestId, {
+      resolve: (data) => resolve(data as T),
+      reject,
+      timeout,
+    });
+    connection.send(JSON.stringify({ type, request_id: requestId, ...payload }));
+  });
+}
+
+export async function startRepositoryImport(payload: {
+  repositoryId: string;
+  ref?: string;
+}): Promise<void> {
+  const connection = await readySocket();
+  connection.send(
+    JSON.stringify({
+      type: "compendium.repositories.import",
+      repository_id: payload.repositoryId,
+      ref: payload.ref ?? "",
+    }),
+  );
+}
+
+async function readySocket(): Promise<WebSocket> {
+  const deadline = Date.now() + SOCKET_CONNECT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (socket?.readyState === WebSocket.OPEN) return socket;
+    if (!campaignId || !shouldReconnect) break;
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, SOCKET_CONNECT_POLL_MS);
+    });
+  }
+  throw new Error("Could not connect to the campaign. Please try again.");
+}
+
+function rejectPendingRequests(detail: string): void {
+  for (const pending of pendingRequests.values()) {
+    window.clearTimeout(pending.timeout);
+    pending.reject(new Error(detail));
+  }
+  pendingRequests.clear();
+}
+
+export function subscribeRepositoryImport(
+  listener: (event: RepositoryImportEvent) => void,
+): () => void {
+  repositoryImportListeners.add(listener);
+  return () => repositoryImportListeners.delete(listener);
 }
 
 export function subscribeCampaignChanges(id: number, listener: () => void): () => void {

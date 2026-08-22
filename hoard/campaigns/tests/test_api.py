@@ -5,12 +5,17 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
+from hoard.campaigns.api import _item_data, _items
 from hoard.campaigns.models import (
     Campaign,
     CampaignContext,
     Character,
-    InventoryItem,
     MoneyTransaction,
+)
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
 )
 
 
@@ -42,7 +47,16 @@ class ContextApiTests(TestCase):
             wisdom=10,
             charisma=10,
         )
-        self.item = InventoryItem.objects.create(campaign=self.campaign, name="Rope")
+        repository = CompendiumRepository.objects.create(
+            identifier="test-api", name="Tests"
+        )
+        self.source = CompendiumSource.objects.create(
+            repository=repository, identifier="5e", name="5e"
+        )
+        self.campaign.compendium_sources.add(self.source)
+        self.item = CompendiumEntry.objects.create(
+            source=self.source, kind="item", source_identifier="rope", name="Rope"
+        )
 
     def test_contexts_show_both_roles_for_one_user(self) -> None:
         CampaignContext.objects.create(
@@ -136,11 +150,8 @@ class ContextApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertIn("created_at", response.json())
 
-    def test_item_response_includes_picker_equipment_metadata(self) -> None:
-        self.item.source_system = "5e"
+    def test_item_data_includes_picker_equipment_metadata(self) -> None:
         self.item.source_book = "phb"
-        self.item.equipment_category = "weapon"
-        self.item.item_type = "sword"
         self.item.cost_amount = "10.00"
         self.item.cost_currency = "gp"
         self.item.weight_amount = "3.000"
@@ -148,18 +159,33 @@ class ContextApiTests(TestCase):
         self.item.rarity = "common"
         self.item.is_magic = False
         self.item.requires_attunement = False
+        self.item.kind = "weapon"
+        self.item.data = {"item_type": "sword"}
         self.item.save()
 
-        self.client.force_login(self.player_user)
-        response = self.client.get(f"/api/contexts/{self.pc.pk}/items/")
-
-        self.assertEqual(response.status_code, 200)
-        item = next(row for row in response.json() if row["id"] == self.item.pk)
+        item = _item_data(_items(self.campaign).get(pk=self.item.pk))
         self.assertEqual(item["equipment"]["category"], "weapon")
+        self.assertEqual(item["equipment"]["item_type"], "sword")
         self.assertEqual(item["equipment"]["cost_amount"], "10.00")
         self.assertEqual(item["equipment"]["weight_amount"], "3.000")
 
-    def test_money_transfer_accepts_multiple_denominations_as_one_transaction(self) -> None:
+    def test_item_list_defers_raw_compendium_payloads(self) -> None:
+        self.item.data = {"raw": "x" * 1_000_000}
+        self.item.source.data = {"encounter_templates": "x" * 1_000_000}
+        self.item.source.repository.data = {"registry": "x" * 1_000_000}
+        self.item.save(update_fields=("data",))
+        self.item.source.save(update_fields=("data",))
+        self.item.source.repository.save(update_fields=("data",))
+
+        item = _items(self.campaign).get(pk=self.item.pk)
+
+        self.assertIn("data", item.get_deferred_fields())
+        self.assertIn("data", item.source.get_deferred_fields())
+        self.assertIn("data", item.source.repository.get_deferred_fields())
+
+    def test_money_transfer_accepts_multiple_denominations_as_one_transaction(
+        self,
+    ) -> None:
         self.client.force_login(self.gm_user)
         response = self.client.post(
             f"/api/contexts/{self.gm.pk}/money-transfers/",

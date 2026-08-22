@@ -3,11 +3,16 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from hoard.campaigns.models import Campaign, InventoryItem, MoneyEntry
+from hoard.campaigns.models import Campaign, MoneyEntry
 from hoard.campaigns.services import (
     post_inventory_transaction,
     post_money_transaction,
     reverse_inventory_transaction,
+)
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
 )
 
 from .helpers import make_character
@@ -18,8 +23,21 @@ class LedgerTests(TestCase):
         self.campaign = Campaign.objects.create(name="Hoard")
         self.character = make_character(self.campaign)
 
+    def item(self, campaign: Campaign) -> CompendiumEntry:
+        repository, _ = CompendiumRepository.objects.get_or_create(
+            identifier=f"test-ledger-{campaign.pk}",
+            defaults={"name": "Test repository", "campaign": campaign},
+        )
+        source, _ = CompendiumSource.objects.get_or_create(
+            repository=repository, identifier="5e", defaults={"name": "5e"}
+        )
+        campaign.compendium_sources.add(source)
+        return CompendiumEntry.objects.create(
+            source=source, kind="item", source_identifier="torch", name="Torch"
+        )
+
     def test_inventory_entries_balance_are_immutable_and_reversible(self) -> None:
-        item = InventoryItem.objects.create(campaign=self.campaign, name="Torch")
+        item = self.item(self.campaign)
         system = self.campaign.inventory_system_account()
         account = self.character.inventory_account()
         posted = post_inventory_transaction(
@@ -68,7 +86,7 @@ class LedgerTests(TestCase):
     def test_cross_campaign_inventory_and_money_operations_are_rejected(self) -> None:
         other_campaign = Campaign.objects.create(name="Other")
         other_character = make_character(other_campaign, "Other hero")
-        item = InventoryItem.objects.create(campaign=self.campaign, name="Torch")
+        item = self.item(self.campaign)
 
         with self.assertRaises(ValidationError):
             post_inventory_transaction(

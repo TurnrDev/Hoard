@@ -5,12 +5,13 @@ from typing import Protocol, TypeVar, cast
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from hoard.compendium.models import CompendiumEntry
+
 from ..models import (
     Campaign,
     Character,
     InventoryAccount,
     InventoryEntry,
-    InventoryItem,
     InventoryTransaction,
     MoneyAccount,
     MoneyEntry,
@@ -70,14 +71,14 @@ def post_inventory_transaction(
     *,
     from_account: InventoryAccount,
     to_account: InventoryAccount,
-    item: InventoryItem,
+    item: CompendiumEntry,
     quantity: int,
     description: str = "",
 ) -> InventoryTransaction:
     """Transfer a positive quantity of one item between two campaign accounts."""
     campaign = from_account.campaign
     _validate_campaign_scope(campaign, to_account)
-    if item.campaign_id not in (None, campaign.id):
+    if item.source.repository.campaign_id not in (None, campaign.id):
         raise ValidationError(
             "The supplied item must be global or belong to the same campaign."
         )

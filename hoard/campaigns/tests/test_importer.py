@@ -2,111 +2,94 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
-from django.core.management import call_command
-from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase, TestCase
 
-from hoard.campaigns.models import Campaign, InventoryItem
-from hoard.campaigns.services import grant_loot
-
-from .helpers import make_character
+from hoard.campaigns.models import Campaign, CampaignContext, Character
+from hoard.campaigns.services.cah import parse_cah
 
 
-class RpgCompanionImportTests(TestCase):
-    def _write_item(
-        self,
-        directory: Path,
-        system: str,
-        identifier: str,
-        name: str,
-        resource_id: str = "item",
-    ) -> None:
-        resource_directory = directory / "systems" / system / "resource_instances"
-        resource_directory.mkdir(parents=True, exist_ok=True)
-        (resource_directory / f"{resource_id}_{identifier}.rpg.json").write_text(
-            json.dumps(
+class CahImporterTests(SimpleTestCase):
+    def test_full_5e_companion_export_preserves_sheet_sections(self) -> None:
+        source = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"
+
+        preview = parse_cah(source.read_bytes())
+
+        self.assertEqual(preview.fields["name"], "Hero")
+        self.assertEqual(preview.fields["current_hp"], 9)
+        self.assertEqual(preview.fields["temporary_hp"], 0)
+        self.assertEqual(preview.fields["base_ac"], 10)
+        self.assertEqual(preview.fields["background"], "Criminal")
+        self.assertEqual(preview.fields["character_class"], "Fighter")
+        self.assertEqual(preview.fields["spell_slots"]["first"], 0)
+        self.assertEqual(len(preview.collections["notes"]), 1)
+        self.assertEqual(len(preview.inventory), 7)
+        self.assertEqual(preview.inventory[0]["line_id"], "equipment-0")
+
+    def test_rejects_non_character_json(self) -> None:
+        with self.assertRaisesMessage(Exception, "5e Companion character"):
+            parse_cah(b'{"jsonType": "spell"}')
+
+
+class CahImportApiTests(TestCase):
+    def setUp(self) -> None:
+        self.campaign = Campaign.objects.create(name="Test campaign")
+        user = get_user_model().objects.create_user(
+            username="player", password="secret"
+        )
+        self.context = CampaignContext.objects.create(
+            campaign=self.campaign, user=user, kind=CampaignContext.Kind.PC
+        )
+        self.character = Character.objects.create(
+            campaign=self.campaign,
+            context=self.context,
+            is_active=True,
+            name="Before",
+            race="Human",
+            character_class="Fighter",
+            strength=10,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+        )
+        self.client.force_login(user)
+
+    def test_preview_and_commit_replace_sheet_without_coins_or_xp(self) -> None:
+        source = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"
+        preview = self.client.post(
+            f"/api/contexts/{self.context.pk}/character-imports/cah/preview?character_id={self.character.pk}",
+            {"file": SimpleUploadedFile("hero.cah", source.read_bytes())},
+        )
+        self.assertEqual(preview.status_code, 200)
+        draft = preview.json()
+        self.assertEqual(draft["calculated_before"]["max_hp"], 1)
+        self.assertEqual(draft["calculated_after"]["max_hp"], 9)
+        self.assertTrue(draft["inventory"])
+        committed = self.client.post(
+            f"/api/contexts/{self.context.pk}/character-imports/cah/commit",
+            data=json.dumps(
                 {
-                    "resource_id": resource_id,
-                    "stats": {
-                        "id": identifier,
-                        "name": {"value": name},
-                        "description": {"value": f"{name} description"},
-                        "source": {"value": "dmg"},
-                        "type": {
-                            "value": "shield" if resource_id == "armor" else "sword"
-                        },
-                        "rarity": {"value": "rare"},
-                        "is_magic": {"value": True},
-                        "requires_attunement": {"value": False},
-                        "cost": {
-                            "value": {
-                                "resource_id": "cost",
-                                "stats": {
-                                    "value": {"value": 15},
-                                    "unit": {"value": "gold"},
-                                },
-                            }
-                        },
-                        "weight": {
-                            "value": {
-                                "resource_id": "weight",
-                                "stats": {
-                                    "value": {"value": 6.5},
-                                    "unit": {"value": "pounds"},
-                                },
-                            }
-                        },
-                    },
+                    "token": draft["token"],
+                    "character_id": self.character.pk,
+                    "inventory": [
+                        {
+                            "line_id": draft["inventory"][0]["line_id"],
+                            "action": "add",
+                            "quantity": 2,
+                        }
+                    ],
                 }
             ),
-            encoding="utf-8",
+            content_type="application/json",
         )
-
-    def test_import_is_idempotent_and_global_items_are_usable(self) -> None:
-        with TemporaryDirectory() as temporary_directory:
-            source = Path(temporary_directory)
-            self._write_item(source, "5e", "torch", "Torch")
-            self._write_item(source, "5e2024", "torch", "Torch (2024)")
-            self._write_item(
-                source, "5e", "torch", "Torch weapon", resource_id="weapon"
-            )
-            self._write_item(source, "5e2024", "shield", "Shield", resource_id="armor")
-            legacy = InventoryItem.objects.create(
-                campaign=None,
-                name="Old Torch",
-                source_repository="https://github.com/blastervla/rpg-companion-app-systems",
-                source_system="5e",
-                source_identifier="torch",
-            )
-            call_command("import_rpg_companion_items", source=source)
-            call_command("import_rpg_companion_items", source=source)
-
-        self.assertEqual(InventoryItem.objects.count(), 4)
-        item = InventoryItem.objects.get(
-            source_system="5e", source_identifier="torch", equipment_category="item"
-        )
-        self.assertEqual(item.pk, legacy.pk)
-        self.assertIsNone(item.campaign)
-        self.assertTrue(item.is_imported)
-        self.assertEqual(item.equipment_category, "item")
-        self.assertEqual(str(item.cost_amount), "15.00")
-        self.assertEqual(item.cost_currency, "gp")
-        self.assertEqual(str(item.weight_amount), "6.500")
-        self.assertEqual(item.weight_unit, "pounds")
-        self.assertEqual(item.source_book, "dmg")
-        self.assertEqual(item.rarity, "rare")
-        self.assertTrue(item.is_magic)
-        self.assertFalse(item.requires_attunement)
-        self.assertEqual(
-            InventoryItem.objects.get(
-                source_system="5e",
-                source_identifier="torch",
-                equipment_category="weapon",
-            ).name,
-            "Torch weapon",
-        )
-        campaign = Campaign.objects.create(name="Hoard")
-        character = make_character(campaign)
-        grant_loot(recipient=character, item=item, quantity=1)
-        self.assertEqual(character.inventory[item], 1)
+        self.assertEqual(committed.status_code, 200)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.name, "Hero")
+        self.assertEqual(self.character.background, "Criminal")
+        self.assertEqual(self.character.experience, 0)
+        self.assertEqual(self.character.money.gold, 0)
+        self.assertEqual(sum(self.character.inventory.values()), 2)

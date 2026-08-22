@@ -4,10 +4,11 @@ from collections.abc import Mapping
 
 from django.core.exceptions import ValidationError
 
+from hoard.compendium.models import CompendiumEntry
+
 from ..models import (
     Character,
     ExperienceTransaction,
-    InventoryItem,
     InventoryTransaction,
     MoneyEntry,
     MoneyTransaction,
@@ -60,12 +61,10 @@ def _ensure_character_has_coins(
 
 
 def grant_loot(
-    *, recipient: Character, item: InventoryItem, quantity: int, description: str = ""
+    *, recipient: Character, item: CompendiumEntry, quantity: int, description: str = ""
 ) -> InventoryTransaction:
     """Create items in the campaign system account and grant them to a character."""
-    if item.campaign_id is None and not recipient.campaign.allows_item_source(
-        item.source_system
-    ):
+    if not recipient.campaign.compendium_sources.filter(pk=item.source_id).exists():
         raise ValidationError("This item source is not enabled for the campaign.")
     return post_inventory_transaction(
         from_account=recipient.campaign.inventory_system_account(),
@@ -80,7 +79,7 @@ def transfer_item(
     *,
     source: Character,
     recipient: Character,
-    item: InventoryItem,
+    item: CompendiumEntry,
     quantity: int,
     description: str = "",
 ) -> InventoryTransaction:
@@ -99,7 +98,7 @@ def transfer_item(
 
 
 def take_loot(
-    *, source: Character, item: InventoryItem, quantity: int, description: str = ""
+    *, source: Character, item: CompendiumEntry, quantity: int, description: str = ""
 ) -> InventoryTransaction:
     """Remove held inventory by returning it to the campaign system account."""
     if quantity <= 0 or source.inventory.get(item, 0) < quantity:

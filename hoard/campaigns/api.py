@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction as db_transaction
 from django.db.models import Prefetch, Q, Sum
+from django.db.models.fields.json import KeyTextTransform
 from django.http import JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware, get_token
 from django.shortcuts import get_object_or_404
@@ -19,13 +20,23 @@ from ninja.errors import HttpError
 from ninja.security import django_auth
 from pydantic import Field
 
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
+)
+
 from .models import (
     Campaign,
     CampaignContext,
     Character,
+    CharacterCompanion,
+    CharacterFeature,
+    CharacterLoadout,
+    CharacterNote,
+    CharacterSpell,
     ExperienceTransaction,
     InventoryEntry,
-    InventoryItem,
     InventoryTransaction,
     MoneyEntry,
     MoneyTransaction,
@@ -68,7 +79,14 @@ class CharacterUpdate(Schema):
     name: str | None = None
     race: str | None = None
     character_class: str | None = None
+    background: str | None = None
     base_hp: int | None = None
+    current_hp: int | None = None
+    temporary_hp: int | None = None
+    base_ac: int | None = None
+    ac_adjustment: int | None = None
+    speed: str | None = None
+    spell_slots: dict[str, int] | None = None
     proficiency_bonus_adjustment: int | None = None
     strength: int | None = None
     dexterity: int | None = None
@@ -97,16 +115,6 @@ class CharacterUpdate(Schema):
     skill_proficiencies: (
         dict[str, Literal["none", "half", "proficient", "expertise"]] | None
     ) = None
-
-
-class ItemCreate(Schema):
-    name: Annotated[str, Field(min_length=1, max_length=200)]
-    description: str = ""
-
-
-class ItemUpdate(Schema):
-    name: str | None = None
-    description: str | None = None
 
 
 class InventoryTransactionCreate(Schema):
@@ -143,6 +151,29 @@ class CalendarAdjustment(Schema):
 class CahCommit(Schema):
     token: str
     character_id: int | None = None
+    inventory: list[dict[str, object]] = []
+
+
+class SheetRecord(Schema):
+    name: str = ""
+    title: str = ""
+    body: str = ""
+    description: str = ""
+    notes: str = ""
+    kind: Literal["feat", "feature"] = "feat"
+    level: int = 0
+    prepared: bool = True
+    catalogue_entry_id: int | None = None
+    item_id: int | None = None
+    equipped: bool = False
+    label: str = ""
+    armor_class: int = 10
+    max_hp: int = 1
+    current_hp: int = 1
+    speed: str = ""
+    abilities: dict[str, int | None] = {}
+    attacks: list[dict[str, object]] = []
+    monster_template_id: int | None = None
 
 
 api = NinjaAPI(title="Hoard API", version="2.0.0", auth=django_auth)
@@ -276,6 +307,13 @@ def _sheet_data(character: Character) -> dict[str, object]:
         "level": character.level,
         "base_hp": character.base_hp,
         "max_hp": character.max_hp,
+        "current_hp": character.current_hp,
+        "temporary_hp": character.temporary_hp,
+        "base_ac": character.base_ac,
+        "ac_adjustment": character.ac_adjustment,
+        "armor_class": character.base_ac + character.ac_adjustment,
+        "speed": character.speed,
+        "spell_slots": character.spell_slots,
         "proficiency_bonus_adjustment": character.proficiency_bonus_adjustment,
         "proficiency_bonus": character.proficiency_bonus,
         "abilities": {
@@ -315,6 +353,7 @@ def _character_data(character: Character) -> dict[str, object]:
         "archived_at": character.archived_at,
         "race": character.race,
         "class": character.character_class,
+        "background": character.background,
         "sheet": _sheet_data(character),
         "strength": character.strength,
         "dexterity": character.dexterity,
@@ -327,6 +366,60 @@ def _character_data(character: Character) -> dict[str, object]:
         "inventory": [
             {"item_id": item.pk, "name": item.name, "quantity": quantity}
             for item, quantity in character.inventory.items()
+        ],
+        "notes": [
+            {"id": note.pk, "title": note.title, "body": note.body}
+            for note in character.notes.all()
+        ],
+        "features": [
+            {
+                "id": feature.pk,
+                "kind": feature.kind,
+                "name": feature.name,
+                "description": feature.description,
+                "notes": feature.notes,
+                "catalogue_entry_id": feature.catalogue_entry_id,
+            }
+            for feature in character.features.select_related("catalogue_entry").all()
+        ],
+        "spells": [
+            {
+                "id": spell.pk,
+                "name": spell.name,
+                "level": spell.level,
+                "description": spell.description,
+                "notes": spell.notes,
+                "prepared": spell.prepared,
+                "catalogue_entry_id": spell.catalogue_entry_id,
+            }
+            for spell in character.spells.select_related("catalogue_entry").all()
+        ],
+        "loadout": [
+            {
+                "id": loadout.pk,
+                "item_id": loadout.item_id,
+                "name": loadout.item.name,
+                "equipped": loadout.equipped,
+                "label": loadout.label,
+            }
+            for loadout in character.loadout.select_related("item").all()
+        ],
+        "companions": [
+            {
+                "id": companion.pk,
+                "name": companion.name,
+                "armor_class": companion.armor_class,
+                "max_hp": companion.max_hp,
+                "current_hp": companion.current_hp,
+                "speed": companion.speed,
+                "abilities": companion.abilities,
+                "attacks": companion.attacks,
+                "notes": companion.notes,
+                "monster_template_id": companion.monster_template_id,
+            }
+            for companion in character.companions.select_related(
+                "monster_template"
+            ).all()
         ],
     }
 
@@ -355,23 +448,21 @@ def _party_money(campaign: Campaign) -> dict[str, int | str]:
     return totals
 
 
-def _item_data(item: InventoryItem) -> dict[str, object]:
+def _item_data(item: CompendiumEntry) -> dict[str, object]:
     return {
         "id": item.pk,
         "name": item.name,
         "description": item.description,
-        "campaign_id": item.campaign_id,
-        "created_by_id": item.created_by_id,
-        "created_by_username": item.created_by.user.get_username()
-        if item.created_by_id
-        else None,
-        "source_system": item.source_system or None,
+        "campaign_id": item.source.repository.campaign_id,
+        "created_by_id": None,
+        "created_by_username": None,
+        "source_system": item.source.name,
         "source_identifier": item.source_identifier or None,
-        "source_repository": item.source_repository or None,
+        "source_repository": item.source.repository.repository_url or None,
         "equipment": {
-            "category": item.equipment_category or None,
+            "category": item.kind if item.kind in {"item", "weapon", "armor"} else None,
             "source_book": item.source_book or None,
-            "item_type": item.item_type or None,
+            "item_type": getattr(item, "compendium_item_type", None),
             "cost_amount": (
                 str(item.cost_amount) if item.cost_amount is not None else None
             ),
@@ -384,19 +475,32 @@ def _item_data(item: InventoryItem) -> dict[str, object]:
             "is_magic": item.is_magic,
             "requires_attunement": item.requires_attunement,
         },
-        "is_imported": item.is_imported,
+        "is_imported": True,
     }
 
 
 def _items(campaign: Campaign):
     return (
-        InventoryItem.objects.filter(Q(campaign=campaign) | Q(campaign__isnull=True))
-        .filter(
-            Q(campaign=campaign)
-            | Q(campaign__isnull=True, source_system__in=campaign.item_sources)
+        CompendiumEntry.objects.filter(
+            source__in=campaign.compendium_sources.all(),
+            kind__in=("item", "weapon", "armor"),
         )
-        .select_related("created_by__user")
+        .select_related("source", "source__repository")
+        .annotate(compendium_item_type=KeyTextTransform("item_type", "data"))
+        .defer("data", "source__data", "source__repository__data")
     )
+
+
+def _source_data(source: CompendiumSource, enabled: bool) -> dict[str, object]:
+    return {
+        "id": source.pk,
+        "identifier": source.identifier,
+        "name": source.name,
+        "repository": source.repository.name,
+        "campaign_id": source.repository.campaign_id,
+        "enabled": enabled,
+        "entry_count": source.entries.count(),
+    }
 
 
 def _transaction_data(
@@ -468,7 +572,6 @@ def context_detail(request, context_id: int):
         "is_game_master": context.kind == CampaignContext.Kind.GM,
         "use_shared_exp": context.campaign.use_shared_exp,
         "shared_experience": context.campaign.shared_experience,
-        "item_sources": context.campaign.item_sources,
         "calendar": _calendar_data(context.campaign),
         "party_money": _party_money(context.campaign),
         "characters": [
@@ -573,6 +676,259 @@ def character_update(
     return _character_data(character)
 
 
+def _editable_sheet_character(context: CampaignContext, character_id: int) -> Character:
+    character = _character(context, character_id)
+    if context.kind != CampaignContext.Kind.GM and not _is_owner(context, character):
+        raise HttpError(403, "You may only edit your own character.")
+    return character
+
+
+def _enabled_entry(campaign: Campaign, entry_id: int | None, kind: str | None = None):
+    if entry_id is None:
+        return None
+    query = CompendiumEntry.objects.filter(
+        pk=entry_id, source__in=campaign.compendium_sources.all()
+    )
+    if kind:
+        query = query.filter(kind=kind)
+    return get_object_or_404(query)
+
+
+@contexts.post("/{context_id}/characters/{character_id}/notes/", response={201: dict})
+def note_create(request, context_id: int, character_id: int, payload: SheetRecord):
+    character = _editable_sheet_character(
+        _context_access(request, context_id), character_id
+    )
+    note = CharacterNote.objects.create(
+        character=character, title=payload.title, body=payload.body
+    )
+    return 201, {"id": note.pk, "title": note.title, "body": note.body}
+
+
+@contexts.post(
+    "/{context_id}/characters/{character_id}/features/", response={201: dict}
+)
+def feature_create(request, context_id: int, character_id: int, payload: SheetRecord):
+    context = _context_access(request, context_id)
+    character = _editable_sheet_character(context, character_id)
+    entry = _enabled_entry(context.campaign, payload.catalogue_entry_id, "feat")
+    feature = CharacterFeature.objects.create(
+        character=character,
+        kind=payload.kind,
+        catalogue_entry=entry,
+        name=payload.name or (entry.name if entry else ""),
+        description=payload.description,
+        notes=payload.notes,
+    )
+    return 201, {"id": feature.pk}
+
+
+@contexts.post("/{context_id}/characters/{character_id}/spells/", response={201: dict})
+def spell_create(request, context_id: int, character_id: int, payload: SheetRecord):
+    context = _context_access(request, context_id)
+    character = _editable_sheet_character(context, character_id)
+    entry = _enabled_entry(context.campaign, payload.catalogue_entry_id, "spell")
+    spell = CharacterSpell.objects.create(
+        character=character,
+        catalogue_entry=entry,
+        name=payload.name or (entry.name if entry else ""),
+        level=payload.level,
+        description=payload.description,
+        notes=payload.notes,
+        prepared=payload.prepared,
+    )
+    return 201, {"id": spell.pk}
+
+
+@contexts.post("/{context_id}/characters/{character_id}/loadout/", response={201: dict})
+def loadout_create(request, context_id: int, character_id: int, payload: SheetRecord):
+    context = _context_access(request, context_id)
+    character = _editable_sheet_character(context, character_id)
+    item = _enabled_entry(context.campaign, payload.item_id)
+    if item.kind not in {"item", "weapon", "armor"}:
+        raise HttpError(422, "Loadout entries must be equipment.")
+    loadout, _ = CharacterLoadout.objects.update_or_create(
+        character=character,
+        item=item,
+        defaults={"equipped": payload.equipped, "label": payload.label},
+    )
+    return 201, {"id": loadout.pk}
+
+
+@contexts.patch("/{context_id}/characters/{character_id}/loadout/{record_id}/")
+def loadout_update(
+    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
+):
+    context = _context_access(request, context_id)
+    loadout = _sheet_record(context, character_id, CharacterLoadout, record_id)
+    if "item_id" in payload.model_fields_set:
+        item = _enabled_entry(context.campaign, payload.item_id)
+        if item.kind not in {"item", "weapon", "armor"}:
+            raise HttpError(422, "Loadout entries must be equipment.")
+        loadout.item = item
+    for field in ("equipped", "label"):
+        if field in payload.model_fields_set:
+            setattr(loadout, field, getattr(payload, field))
+    loadout.save()
+    return {"id": loadout.pk}
+
+
+@contexts.delete(
+    "/{context_id}/characters/{character_id}/loadout/{record_id}/", response={204: None}
+)
+def loadout_delete(request, context_id: int, character_id: int, record_id: int):
+    _sheet_record(
+        _context_access(request, context_id), character_id, CharacterLoadout, record_id
+    ).delete()
+    return 204, None
+
+
+@contexts.post(
+    "/{context_id}/characters/{character_id}/companions/", response={201: dict}
+)
+def companion_create(request, context_id: int, character_id: int, payload: SheetRecord):
+    context = _context_access(request, context_id)
+    character = _editable_sheet_character(context, character_id)
+    template = _enabled_entry(context.campaign, payload.monster_template_id, "monster")
+    companion = CharacterCompanion.objects.create(
+        character=character,
+        monster_template=template,
+        name=payload.name,
+        armor_class=payload.armor_class,
+        max_hp=payload.max_hp,
+        current_hp=payload.current_hp,
+        speed=payload.speed,
+        abilities=payload.abilities,
+        attacks=payload.attacks,
+        notes=payload.notes,
+    )
+    return 201, {"id": companion.pk}
+
+
+def _sheet_record(context: CampaignContext, character_id: int, model, record_id: int):
+    character = _editable_sheet_character(context, character_id)
+    return get_object_or_404(model, pk=record_id, character=character)
+
+
+@contexts.patch("/{context_id}/characters/{character_id}/notes/{record_id}/")
+def note_update(
+    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
+):
+    context = _context_access(request, context_id)
+    note = _sheet_record(context, character_id, CharacterNote, record_id)
+    for field in ("title", "body"):
+        if field in payload.model_fields_set:
+            setattr(note, field, getattr(payload, field))
+    note.save()
+    return {"id": note.pk, "title": note.title, "body": note.body}
+
+
+@contexts.delete(
+    "/{context_id}/characters/{character_id}/notes/{record_id}/", response={204: None}
+)
+def note_delete(request, context_id: int, character_id: int, record_id: int):
+    note = _sheet_record(
+        _context_access(request, context_id), character_id, CharacterNote, record_id
+    )
+    note.delete()
+    return 204, None
+
+
+@contexts.patch("/{context_id}/characters/{character_id}/features/{record_id}/")
+def feature_update(
+    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
+):
+    context = _context_access(request, context_id)
+    feature = _sheet_record(context, character_id, CharacterFeature, record_id)
+    if "catalogue_entry_id" in payload.model_fields_set:
+        feature.catalogue_entry = _enabled_entry(
+            context.campaign, payload.catalogue_entry_id, "feat"
+        )
+    for field in ("kind", "name", "description", "notes"):
+        if field in payload.model_fields_set:
+            setattr(feature, field, getattr(payload, field))
+    feature.save()
+    return {"id": feature.pk}
+
+
+@contexts.delete(
+    "/{context_id}/characters/{character_id}/features/{record_id}/",
+    response={204: None},
+)
+def feature_delete(request, context_id: int, character_id: int, record_id: int):
+    _sheet_record(
+        _context_access(request, context_id), character_id, CharacterFeature, record_id
+    ).delete()
+    return 204, None
+
+
+@contexts.patch("/{context_id}/characters/{character_id}/spells/{record_id}/")
+def spell_update(
+    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
+):
+    context = _context_access(request, context_id)
+    spell = _sheet_record(context, character_id, CharacterSpell, record_id)
+    if "catalogue_entry_id" in payload.model_fields_set:
+        spell.catalogue_entry = _enabled_entry(
+            context.campaign, payload.catalogue_entry_id, "spell"
+        )
+    for field in ("name", "level", "description", "notes", "prepared"):
+        if field in payload.model_fields_set:
+            setattr(spell, field, getattr(payload, field))
+    spell.save()
+    return {"id": spell.pk}
+
+
+@contexts.delete(
+    "/{context_id}/characters/{character_id}/spells/{record_id}/", response={204: None}
+)
+def spell_delete(request, context_id: int, character_id: int, record_id: int):
+    _sheet_record(
+        _context_access(request, context_id), character_id, CharacterSpell, record_id
+    ).delete()
+    return 204, None
+
+
+@contexts.patch("/{context_id}/characters/{character_id}/companions/{record_id}/")
+def companion_update(
+    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
+):
+    context = _context_access(request, context_id)
+    companion = _sheet_record(context, character_id, CharacterCompanion, record_id)
+    if "monster_template_id" in payload.model_fields_set:
+        companion.monster_template = _enabled_entry(
+            context.campaign, payload.monster_template_id, "monster"
+        )
+    for field in (
+        "name",
+        "armor_class",
+        "max_hp",
+        "current_hp",
+        "speed",
+        "abilities",
+        "attacks",
+        "notes",
+    ):
+        if field in payload.model_fields_set:
+            setattr(companion, field, getattr(payload, field))
+    companion.save()
+    return {"id": companion.pk}
+
+
+@contexts.delete(
+    "/{context_id}/characters/{character_id}/companions/{record_id}/",
+    response={204: None},
+)
+def companion_delete(request, context_id: int, character_id: int, record_id: int):
+    _sheet_record(
+        _context_access(request, context_id),
+        character_id,
+        CharacterCompanion,
+        record_id,
+    ).delete()
+    return 204, None
+
+
 @contexts.delete("/{context_id}/characters/{character_id}/")
 def character_archive(request, context_id: int, character_id: int):
     context = _context_access(request, context_id)
@@ -592,8 +948,61 @@ def character_archive(request, context_id: int, character_id: int):
     return _character_data(character)
 
 
+def _available_entries(campaign: Campaign, kind: str):
+    return CompendiumEntry.objects.filter(
+        source__in=campaign.compendium_sources.all(), kind=kind
+    ).select_related("source", "source__repository")
+
+
+def _custom_source(campaign: Campaign) -> CompendiumSource:
+    repository, _ = CompendiumRepository.objects.get_or_create(
+        identifier=f"campaign-{campaign.pk}-custom",
+        defaults={
+            "name": f"{campaign.name} custom content",
+            "campaign": campaign,
+        },
+    )
+    source, _ = CompendiumSource.objects.get_or_create(
+        repository=repository,
+        identifier="custom",
+        defaults={"name": "Custom content"},
+    )
+    campaign.compendium_sources.add(source)
+    return source
+
+
+def _match_import_entry(campaign: Campaign, row: dict[str, object]) -> int | None:
+    entries = _available_entries(campaign, str(row["kind"]))
+    identifier = str(row.get("source_identifier") or "")
+    if identifier:
+        matched = list(entries.filter(source_identifier=identifier)[:2])
+        if len(matched) == 1:
+            return matched[0].pk
+    matched = list(entries.filter(name__iexact=str(row["name"]))[:2])
+    return matched[0].pk if len(matched) == 1 else None
+
+
+def _calculated_values(character: Character) -> dict[str, object]:
+    sheet = _sheet_data(character)
+    return {
+        "max_hp": sheet["max_hp"],
+        "armor_class": sheet["armor_class"],
+        "proficiency_bonus": sheet["proficiency_bonus"],
+        "ability_modifiers": {
+            ability: sheet["abilities"][ability]["modifier"] for ability in ABILITIES
+        },
+        "saves": {ability: sheet["saves"][ability]["bonus"] for ability in ABILITIES},
+        "skills": {skill: sheet["skills"][skill]["bonus"] for skill in SKILL_NAMES},
+    }
+
+
 @contexts.post("/{context_id}/character-imports/cah/preview")
-def cah_preview(request, context_id: int, file: UploadedFile = File(...)):
+def cah_preview(
+    request,
+    context_id: int,
+    file: UploadedFile = File(...),
+    character_id: int | None = None,
+):
     context = _context_access(request, context_id)
     if not file.name.lower().endswith(".cah"):
         raise HttpError(422, "Upload a .cah file.")
@@ -601,17 +1010,44 @@ def cah_preview(request, context_id: int, file: UploadedFile = File(...)):
         preview = parse_cah(file.read())
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
+    target = _character(context, character_id) if character_id else None
+    if target and not (
+        context.kind == CampaignContext.Kind.GM or _is_owner(context, target)
+    ):
+        raise HttpError(403, "You may only import into your own character.")
+    inventory = [
+        {**row, "matched_item_id": _match_import_entry(context.campaign, row)}
+        for row in preview.inventory
+    ]
+    before = _calculated_values(target) if target else None
+    if target:
+        candidate = Character.objects.get(pk=target.pk)
+        for name, value in preview.fields.items():
+            setattr(candidate, name, value)
+        after = _calculated_values(candidate)
+    else:
+        after = None
     token = secrets.token_urlsafe(24)
     cache.set(
         f"cah-import:{request.auth.pk}:{token}",
         {
             "campaign_id": context.campaign_id,
             "fields": preview.fields,
+            "collections": preview.collections,
+            "inventory": inventory,
             "warnings": preview.warnings,
         },
         timeout=900,
     )
-    return {"token": token, "fields": preview.fields, "warnings": preview.warnings}
+    return {
+        "token": token,
+        "fields": preview.fields,
+        "collections": preview.collections,
+        "inventory": inventory,
+        "warnings": preview.warnings,
+        "calculated_before": before,
+        "calculated_after": after,
+    }
 
 
 @contexts.post(
@@ -626,102 +1062,145 @@ def cah_commit(request, context_id: int, payload: CahCommit):
     fields = draft["fields"]
     target = _character(context, payload.character_id) if payload.character_id else None
     if target:
-        if not _is_owner(context, target):
+        if not (context.kind == CampaignContext.Kind.GM or _is_owner(context, target)):
             raise HttpError(403, "You may only replace your own character.")
+        status = 200
+    else:
+        if CampaignContext.objects.filter(
+            campaign=context.campaign,
+            user=context.user,
+            kind=CampaignContext.Kind.PC,
+            is_active=True,
+        ).exists():
+            raise HttpError(409, "Select your existing player character to replace it.")
+        status = 201
+        defaults = {
+            "name": "Imported character",
+            "race": "",
+            "character_class": "",
+            "strength": 10,
+            "dexterity": 10,
+            "constitution": 10,
+            "intelligence": 10,
+            "wisdom": 10,
+            "charisma": 10,
+        }
+        defaults.update(fields)
+        with db_transaction.atomic():
+            pc_context = CampaignContext.objects.create(
+                campaign=context.campaign,
+                user=context.user,
+                kind=CampaignContext.Kind.PC,
+            )
+            target = Character.objects.create(
+                campaign=context.campaign,
+                context=pc_context,
+                is_active=True,
+                **defaults,
+            )
+            target.activate()
+    with db_transaction.atomic():
         for name, value in fields.items():
             setattr(target, name, value)
         target.full_clean()
         target.save()
-        cache.delete(key)
-        notify_campaign_changed(context.campaign_id)
-        return 200, _character_data(target)
-    if CampaignContext.objects.filter(
-        campaign=context.campaign,
-        user=context.user,
-        kind=CampaignContext.Kind.PC,
-        is_active=True,
-    ).exists():
-        raise HttpError(409, "Select your existing player character to replace it.")
-    defaults = {
-        "name": "Imported character",
-        "race": "",
-        "character_class": "",
-        "strength": 10,
-        "dexterity": 10,
-        "constitution": 10,
-        "intelligence": 10,
-        "wisdom": 10,
-        "charisma": 10,
-    }
-    defaults.update(fields)
-    with db_transaction.atomic():
-        pc_context = CampaignContext.objects.create(
-            campaign=context.campaign, user=context.user, kind=CampaignContext.Kind.PC
+        target.notes.all().delete()
+        target.features.all().delete()
+        target.spells.all().delete()
+        target.loadout.all().delete()
+        target.companions.all().delete()
+        CharacterNote.objects.bulk_create(
+            [
+                CharacterNote(character=target, title=row["title"], body=row["body"])
+                for row in draft["collections"]["notes"]
+            ]
         )
-        target = Character.objects.create(
-            campaign=context.campaign, context=pc_context, is_active=True, **defaults
-        )
-        target.activate()
+        for row in draft["collections"]["features"]:
+            entry_id = _match_import_entry(context.campaign, {**row, "kind": "feat"})
+            CharacterFeature.objects.create(
+                character=target,
+                kind=row["kind"],
+                name=row["name"],
+                description=row["description"],
+                notes=row["notes"],
+                catalogue_entry_id=entry_id,
+            )
+        for row in draft["collections"]["spells"]:
+            entry_id = _match_import_entry(context.campaign, {**row, "kind": "spell"})
+            CharacterSpell.objects.create(
+                character=target,
+                name=row["name"],
+                level=row["level"],
+                description=row["description"],
+                notes=row["notes"],
+                catalogue_entry_id=entry_id,
+            )
+        for row in draft["collections"]["companions"]:
+            entry_id = _match_import_entry(context.campaign, {**row, "kind": "monster"})
+            CharacterCompanion.objects.create(
+                character=target,
+                name=row["name"],
+                armor_class=row["armor_class"],
+                max_hp=row["max_hp"],
+                current_hp=row["current_hp"],
+                speed=row["speed"],
+                abilities=row["abilities"],
+                attacks=row["attacks"],
+                notes=row["description"],
+                monster_template_id=entry_id,
+            )
+        draft_rows = {row["line_id"]: row for row in draft["inventory"]}
+        for selected in payload.inventory:
+            line = draft_rows.get(selected.get("line_id"))
+            if not line or selected.get("action") != "add":
+                continue
+            quantity = selected.get("quantity", line["quantity"])
+            if not isinstance(quantity, int) or quantity < 1:
+                raise HttpError(422, "Imported inventory quantities must be positive.")
+            item_id = selected.get("item_id") or line.get("matched_item_id")
+            item = None
+            if isinstance(item_id, int):
+                item = _items(context.campaign).filter(pk=item_id).first()
+                if not item:
+                    raise HttpError(
+                        422,
+                        "Selected Compendium item is not enabled for this campaign.",
+                    )
+            if item is None:
+                source = _custom_source(context.campaign)
+                item = CompendiumEntry.objects.create(
+                    source=source,
+                    kind=line["kind"],
+                    name=line["name"],
+                    description=line["description"],
+                    source_identifier=f"cah:{secrets.token_urlsafe(12)}",
+                    data={"cah_import": line["raw"]},
+                    created_by=context,
+                )
+            posted = post_inventory_transaction(
+                from_account=context.campaign.inventory_system_account(),
+                to_account=target.inventory_account(),
+                item=item,
+                quantity=quantity,
+                description="Imported from 5e Companion",
+            )
+            posted.created_by = context
+            posted.save(update_fields=("created_by",))
+            if line.get("equipped"):
+                CharacterLoadout.objects.get_or_create(
+                    character=target, item=item, defaults={"equipped": True}
+                )
     cache.delete(key)
     notify_campaign_changed(context.campaign_id)
-    return 201, _character_data(target)
+    return status, _character_data(target)
 
 
-@contexts.get("/{context_id}/items/")
-def item_list(request, context_id: int):
-    context = _context_access(request, context_id)
-    return [_item_data(item) for item in _items(context.campaign).order_by("name")]
-
-
-@contexts.post("/{context_id}/items/", response={201: dict})
-def item_create(request, context_id: int, payload: ItemCreate):
-    context = _context_access(request, context_id)
-    item = InventoryItem(
-        campaign=context.campaign,
-        created_by=context,
-        name=payload.name.strip(),
-        description=payload.description,
-    )
-    try:
-        item.full_clean()
-        item.save()
-    except DjangoValidationError as error:
-        raise _unprocessable(error) from error
-    notify_campaign_changed(context.campaign_id)
-    return 201, _item_data(item)
-
-
-def _editable_item(context: CampaignContext, item_id: int) -> InventoryItem:
+def _editable_item(context: CampaignContext, item_id: int) -> CompendiumEntry:
     item = get_object_or_404(_items(context.campaign), pk=item_id)
-    if item.campaign_id is None:
+    if item.source.repository.campaign_id != context.campaign_id:
         raise HttpError(403, "Imported catalogue items are read-only.")
     _gm(context)
     return item
-
-
-@contexts.patch("/{context_id}/items/{item_id}/")
-def item_update(request, context_id: int, item_id: int, payload: ItemUpdate):
-    item = _editable_item(_context_access(request, context_id), item_id)
-    for name, value in payload.model_dump(exclude_unset=True).items():
-        setattr(item, name, value.strip() if name == "name" and value else value)
-    try:
-        item.full_clean()
-        item.save()
-    except DjangoValidationError as error:
-        raise _unprocessable(error) from error
-    notify_campaign_changed(item.campaign_id)
-    return _item_data(item)
-
-
-@contexts.delete("/{context_id}/items/{item_id}/", response={204: None})
-def item_delete(request, context_id: int, item_id: int):
-    item = _editable_item(_context_access(request, context_id), item_id)
-    if item.entries.exists():
-        raise HttpError(409, "Items referenced by ledger entries cannot be deleted.")
-    campaign_id = item.campaign_id
-    item.delete()
-    notify_campaign_changed(campaign_id)
-    return 204, None
 
 
 def _coin_amounts(amounts: dict[str, int]) -> dict[MoneyEntry.Denomination, int]:
@@ -936,10 +1415,10 @@ def _transaction_queryset(model, campaign):
     entries = entry_model.objects.select_related(
         "account__character", *(("item",) if model is InventoryTransaction else ())
     )
-    return model.objects.filter(campaign=campaign).select_related(
-        "created_by__user"
-    ).prefetch_related(
-        Prefetch("entries", queryset=entries)
+    return (
+        model.objects.filter(campaign=campaign)
+        .select_related("created_by__user")
+        .prefetch_related(Prefetch("entries", queryset=entries))
     )
 
 
@@ -963,9 +1442,7 @@ def transaction_list(
         else ((ledger, TRANSACTION_MODELS[ledger]),)
     )
     rows = []
-    character = (
-        _character(context, character_id) if character_id is not None else None
-    )
+    character = _character(context, character_id) if character_id is not None else None
     for _, model in choices:
         query = _transaction_queryset(model, context.campaign)
         if character:

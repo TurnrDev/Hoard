@@ -69,10 +69,17 @@ const addItemOpen = ref(false);
 const activity = ref<LedgerTransaction[]>([]);
 const importFile = ref<File>();
 const importPreview = ref<CahPreview>();
+const importInventory = ref<CahPreview["inventory"]>([]);
 const editName = ref("");
 const editRace = ref("");
 const editClass = ref("");
+const editBackground = ref("");
 const editBaseHp = ref(1);
+const editCurrentHp = ref(1);
+const editTemporaryHp = ref(0);
+const editBaseAc = ref(10);
+const editAcAdjustment = ref(0);
+const editSpeed = ref("");
 const editProficiencyAdjustment = ref(0);
 const editAbilities = ref({
   strength: 10,
@@ -232,69 +239,37 @@ const proficiencyLabel = (proficiency: string) =>
 const proficiencyClass = (proficiency: string) =>
   `proficiency-bonus proficiency-bonus--${proficiency}`;
 const importChanges = computed(() => {
-  if (!character.value || !importPreview.value) return [];
-  const current: Record<string, unknown> = {
-    name: character.value.name,
-    race: character.value.race,
-    base_hp: character.value.sheet.base_hp,
-    proficiency_bonus_adjustment: character.value.sheet.proficiency_bonus_adjustment,
-    strength: character.value.strength,
-    dexterity: character.value.dexterity,
-    constitution: character.value.constitution,
-    intelligence: character.value.intelligence,
-    wisdom: character.value.wisdom,
-    charisma: character.value.charisma,
-  };
-  const labels: Record<string, string> = {
-    name: "Name",
-    race: "Race",
-    base_hp: "Base HP",
-    proficiency_bonus_adjustment: "Proficiency adjustment",
-    strength: "Strength",
-    dexterity: "Dexterity",
-    constitution: "Constitution",
-    intelligence: "Intelligence",
-    wisdom: "Wisdom",
-    charisma: "Charisma",
-  };
-  for (const ability of [
-    "strength",
-    "dexterity",
-    "constitution",
-    "intelligence",
-    "wisdom",
-    "charisma",
-  ]) {
-    const label = labels[ability];
-    current[`${ability}_modifier_adjustment`] =
-      character.value.sheet.abilities[ability]?.adjustment ?? 0;
-    current[`${ability}_save_proficient`] =
-      character.value.sheet.saves[ability]?.proficient ?? false;
-    current[`${ability}_save_adjustment`] =
-      character.value.sheet.saves[ability]?.adjustment ?? 0;
-    labels[`${ability}_modifier_adjustment`] = `${label} adjustment`;
-    labels[`${ability}_save_proficient`] = `${label} save proficiency`;
-    labels[`${ability}_save_adjustment`] = `${label} save adjustment`;
-  }
-  const changes = Object.entries(importPreview.value.fields).flatMap(
-    ([field, next]) => {
-      if (field === "skill_proficiencies") {
-        return Object.entries(next as Record<string, string>)
-          .filter(
-            ([skill, proficiency]) =>
-              character.value?.sheet.skills[skill]?.proficiency !== proficiency,
-          )
-          .map(([skill, proficiency]) => ({
-            label: skill.replaceAll("_", " "),
-            current: character.value?.sheet.skills[skill]?.proficiency ?? "none",
-            next: proficiency,
-          }));
+  const before = importPreview.value?.calculated_before as Record<
+    string,
+    unknown
+  > | null;
+  const after = importPreview.value?.calculated_after as Record<string, unknown> | null;
+  if (!before || !after) return [];
+  const flatten = (
+    value: Record<string, unknown>,
+    prefix = "",
+  ): Record<string, unknown> => {
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (child && typeof child === "object" && !Array.isArray(child)) {
+        Object.assign(
+          result,
+          flatten(child as Record<string, unknown>, `${prefix}${key} `),
+        );
+      } else {
+        result[`${prefix}${key}`] = child;
       }
-      if (!(field in current) || current[field] === next) return [];
-      return [{ label: labels[field] ?? field, current: current[field], next }];
-    },
-  );
-  return changes;
+    }
+    return result;
+  };
+  const oldValues = flatten(before);
+  return Object.entries(flatten(after))
+    .filter(([key, value]) => oldValues[key] !== value)
+    .map(([key, value]) => ({
+      label: key.replaceAll("_", " "),
+      current: oldValues[key],
+      next: value,
+    }));
 });
 
 async function load(): Promise<void> {
@@ -385,7 +360,13 @@ function closeEditDialog(): void {
   editName.value = "";
   editRace.value = "";
   editClass.value = "";
+  editBackground.value = "";
   editBaseHp.value = 1;
+  editCurrentHp.value = 1;
+  editTemporaryHp.value = 0;
+  editBaseAc.value = 10;
+  editAcAdjustment.value = 0;
+  editSpeed.value = "";
   editProficiencyAdjustment.value = 0;
   editAbilities.value = {
     strength: 10,
@@ -401,6 +382,7 @@ function closeImportDialog(): void {
   importOpen.value = false;
   importFile.value = undefined;
   importPreview.value = undefined;
+  importInventory.value = [];
 }
 
 async function submitItemAction(): Promise<void> {
@@ -472,7 +454,13 @@ function openEdit(): void {
   editName.value = character.value.name;
   editRace.value = character.value.race;
   editClass.value = character.value.class;
+  editBackground.value = character.value.background;
   editBaseHp.value = character.value.sheet.base_hp;
+  editCurrentHp.value = character.value.sheet.current_hp;
+  editTemporaryHp.value = character.value.sheet.temporary_hp;
+  editBaseAc.value = character.value.sheet.base_ac;
+  editAcAdjustment.value = character.value.sheet.ac_adjustment;
+  editSpeed.value = character.value.sheet.speed;
   editProficiencyAdjustment.value = character.value.sheet.proficiency_bonus_adjustment;
   editAbilities.value = {
     strength: character.value.strength,
@@ -492,7 +480,13 @@ async function saveProfile(): Promise<void> {
       name: editName.value.trim(),
       race: editRace.value,
       class: editClass.value,
+      background: editBackground.value,
       base_hp: editBaseHp.value,
+      current_hp: editCurrentHp.value,
+      temporary_hp: editTemporaryHp.value,
+      base_ac: editBaseAc.value,
+      ac_adjustment: editAcAdjustment.value,
+      speed: editSpeed.value,
       proficiency_bonus_adjustment: editProficiencyAdjustment.value,
       ...editAbilities.value,
     });
@@ -518,7 +512,12 @@ async function archive(): Promise<void> {
 async function previewImport(): Promise<void> {
   if (!importFile.value) return;
   try {
-    importPreview.value = await previewCahImport(campaignId, importFile.value);
+    importPreview.value = await previewCahImport(
+      campaignId,
+      characterId,
+      importFile.value,
+    );
+    importInventory.value = importPreview.value.inventory.map((line) => ({ ...line }));
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to read CAH file.";
@@ -528,7 +527,17 @@ async function previewImport(): Promise<void> {
 async function commitImport(): Promise<void> {
   if (!character.value || !importPreview.value) return;
   try {
-    await commitCahImport(campaignId, importPreview.value.token, character.value.id);
+    await commitCahImport(
+      campaignId,
+      importPreview.value.token,
+      character.value.id,
+      importInventory.value.map((line) => ({
+        line_id: line.line_id,
+        action: line.action,
+        quantity: line.quantity,
+        ...(line.matched_item_id ? { item_id: line.matched_item_id } : {}),
+      })),
+    );
     closeImportDialog();
     await load();
   } catch (exception) {
@@ -559,13 +568,38 @@ useCampaignRefresh(load);
         >
           Edit
         </v-btn>
-        <v-btn
-          v-if="ownCharacter"
-          variant="tonal"
-          @click="importOpen = true"
-        >
-          Import CAH
-        </v-btn>
+        <v-menu v-if="ownCharacter">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              variant="tonal"
+              append-icon="mdi-menu-down"
+            >
+              Import from …
+            </v-btn>
+          </template>
+          <v-list>
+            <v-list-item @click="importOpen = true">
+              <template #prepend>
+                <v-avatar
+                  size="28"
+                  image="/static/import-icons/5e-companion.png"
+                />
+              </template>
+              <v-list-item-title>5e Companion</v-list-item-title>
+            </v-list-item>
+            <v-list-item disabled>
+              <template #prepend>
+                <v-avatar
+                  size="28"
+                  image="/static/import-icons/rpg-companion.png"
+                />
+              </template>
+              <v-list-item-title>RPG Companion</v-list-item-title>
+              <v-list-item-subtitle>Coming soon</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-menu>
         <v-btn
           :to="`/c/${campaignId}/characters`"
           prepend-icon="mdi-account-group-outline"
@@ -701,7 +735,13 @@ useCampaignRefresh(load);
             <v-card class="profile-card">
               <v-card-text>
                 <div class="text-overline">HP</div>
-                <div class="text-h5">{{ character.sheet.max_hp }}</div>
+                <div class="text-h5">
+                  {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }}
+                </div>
+                <div class="text-caption">
+                  Temp {{ character.sheet.temporary_hp }} · AC
+                  {{ character.sheet.armor_class }}
+                </div>
               </v-card-text>
             </v-card>
           </v-col>
@@ -902,6 +942,62 @@ useCampaignRefresh(load);
                   </div>
                 </v-col>
               </v-row>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
+        <v-expansion-panels
+          class="mt-4"
+          variant="accordion"
+        >
+          <v-expansion-panel :title="`Notes (${character.notes.length})`">
+            <v-expansion-panel-text>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="note in character.notes"
+                  :key="note.id"
+                  :title="note.title || 'Note'"
+                  :subtitle="note.body"
+                />
+              </v-list>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+          <v-expansion-panel :title="`Features & feats (${character.features.length})`">
+            <v-expansion-panel-text>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="feature in character.features"
+                  :key="feature.id"
+                  :title="feature.name"
+                  :subtitle="feature.description || feature.notes"
+                />
+              </v-list>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+          <v-expansion-panel :title="`Spells (${character.spells.length})`">
+            <v-expansion-panel-text>
+              <div class="text-caption mb-2">
+                Slots: {{ character.sheet.spell_slots }}
+              </div>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="spell in character.spells"
+                  :key="spell.id"
+                  :title="`${spell.name} · level ${spell.level}`"
+                  :subtitle="spell.description || spell.notes"
+                />
+              </v-list>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+          <v-expansion-panel :title="`Companions (${character.companions.length})`">
+            <v-expansion-panel-text>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="companion in character.companions"
+                  :key="companion.id"
+                  :title="companion.name"
+                  :subtitle="`AC ${companion.armor_class} · HP ${companion.current_hp}/${companion.max_hp} · ${companion.speed}`"
+                />
+              </v-list>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
@@ -1162,6 +1258,15 @@ useCampaignRefresh(load);
                 label="Class"
               />
             </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model="editBackground"
+                label="Background"
+              />
+            </v-col>
           </v-row>
           <v-row>
             <v-col
@@ -1173,6 +1278,57 @@ useCampaignRefresh(load);
                 type="number"
                 min="1"
                 label="Base HP"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model.number="editCurrentHp"
+                type="number"
+                label="Current HP"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model.number="editTemporaryHp"
+                type="number"
+                min="0"
+                label="Temporary HP"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model.number="editBaseAc"
+                type="number"
+                min="1"
+                label="Base AC"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model.number="editAcAdjustment"
+                type="number"
+                label="AC adjustment"
+              />
+            </v-col>
+            <v-col
+              cols="12"
+              sm="4"
+            >
+              <v-text-field
+                v-model="editSpeed"
+                label="Speed"
               />
             </v-col>
           </v-row>
@@ -1217,7 +1373,7 @@ useCampaignRefresh(load);
       max-width="560"
       @update:model-value="(open) => !open && closeImportDialog()"
     >
-      <v-card title="Import 5e Companion character">
+      <v-card title="Import from 5e Companion">
         <v-card-text>
           <v-file-input
             v-model="importFile"
@@ -1249,6 +1405,75 @@ useCampaignRefresh(load);
                   title="No supported values would change."
                 />
               </v-list>
+            </v-card>
+            <v-card
+              variant="tonal"
+              class="mt-4"
+            >
+              <v-card-title class="text-subtitle-1">Inventory review</v-card-title>
+              <v-card-text v-if="importInventory.length">
+                <v-row
+                  v-for="line in importInventory"
+                  :key="line.line_id"
+                  dense
+                  class="mb-2"
+                >
+                  <v-col
+                    cols="12"
+                    sm="4"
+                  >
+                    <strong>{{ line.name }}</strong>
+                  </v-col>
+                  <v-col
+                    cols="4"
+                    sm="2"
+                  >
+                    <v-text-field
+                      v-model.number="line.quantity"
+                      density="compact"
+                      type="number"
+                      min="1"
+                      label="Qty"
+                    />
+                  </v-col>
+                  <v-col
+                    cols="4"
+                    sm="3"
+                  >
+                    <v-select
+                      v-model="line.action"
+                      density="compact"
+                      label="Action"
+                      :items="[
+                        { title: 'Add to inventory', value: 'add' },
+                        { title: 'Leave untouched', value: 'leave' },
+                      ]"
+                    />
+                  </v-col>
+                  <v-col
+                    cols="4"
+                    sm="3"
+                  >
+                    <v-select
+                      v-model="line.matched_item_id"
+                      density="compact"
+                      clearable
+                      label="Compendium match"
+                      :items="
+                        items
+                          .filter((item) => item.equipment.category === line.kind)
+                          .map((item) => ({ title: item.name, value: item.id }))
+                      "
+                    />
+                  </v-col>
+                </v-row>
+              </v-card-text>
+              <v-card-text
+                v-else
+                class="text-medium-emphasis"
+              >
+                No inventory to review.
+              </v-card-text>
             </v-card>
             <v-alert
               v-if="importPreview.warnings.length"

@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from hoard.campaigns.models import Campaign, InventoryItem, MoneyEntry
+from hoard.campaigns.models import Campaign, MoneyEntry
 from hoard.campaigns.services import (
     exchange_coins,
     grant_coins,
@@ -9,6 +9,11 @@ from hoard.campaigns.services import (
     spend_coins,
     take_loot,
     transfer_item,
+)
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
 )
 
 from .helpers import make_character
@@ -19,12 +24,18 @@ class CampaignActionTests(TestCase):
         self.campaign = Campaign.objects.create(name="Hoard")
         self.first = make_character(self.campaign, "First")
         self.second = make_character(self.campaign, "Second")
-        self.item = InventoryItem.objects.create(
-            campaign=None,
+        repository = CompendiumRepository.objects.create(
+            identifier="test-actions", name="Tests"
+        )
+        source = CompendiumSource.objects.create(
+            repository=repository, identifier="5e", name="5e"
+        )
+        self.campaign.compendium_sources.add(source)
+        self.item = CompendiumEntry.objects.create(
+            source=source,
             name="Torch",
             source_identifier="torch",
-            source_system="5e",
-            source_repository="https://example.test",
+            kind="item",
         )
 
     def test_loot_and_item_transfer_require_available_inventory(self) -> None:

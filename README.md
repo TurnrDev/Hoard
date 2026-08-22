@@ -13,10 +13,17 @@ Run Django management commands from the repository root:
 ```sh
 docker compose up -d db redis
 uv run python manage.py migrate
-uv run python manage.py runserver
+uv run python manage.py runserver --noreload
 ```
 
-In a second terminal, run the frontend development server:
+In a second backend terminal, start the Celery worker. It handles Compendium
+repository imports without blocking Django or the WebSocket server:
+
+```sh
+uv run celery -A hoard worker --loglevel=INFO
+```
+
+In a third terminal, run the frontend development server:
 
 ```sh
 cd frontend
@@ -37,7 +44,8 @@ running the app:
 
 ```sh
 docker compose up -d db redis
-uv run python manage.py runserver
+uv run python manage.py runserver --noreload
+uv run celery -A hoard worker --loglevel=INFO
 ```
 
 The installed Daphne integration makes the normal Django `runserver` command serve
@@ -45,12 +53,16 @@ both HTTP and authenticated WebSocket connections at `ws://localhost:8000`. The
 Vite development server proxies both `/api` and `/ws` to that server, so opening
 either `http://localhost:8000` or `http://localhost:5173` works; the frontend
 automatically connects to the matching `/ws/campaigns/<campaign_id>/` endpoint.
+Use `--noreload` in development: Django's autoreloader restarts the ASGI process
+while browsers are reconnecting WebSockets, and also retains a supervisor process.
+Restart Django manually after changing Python code.
 
 For a production ASGI process, point `REDIS_URL` at the shared Redis instance and
-run:
+run the ASGI server and a separate worker:
 
 ```sh
 uv run daphne hoard.asgi:application
+uv run celery -A hoard worker --loglevel=INFO
 ```
 
 If the tools are not installed locally, enter the repository's declarative
@@ -62,16 +74,16 @@ database name, user, and password all set to `hoard`. Override the
 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, and
 `POSTGRES_PORT` environment variables as needed.
 
-## Campaign API and items
+## Campaign API and Compendium
 
 The session-authenticated JSON API is rooted at `/api/campaigns/<campaign_id>/`.
 Campaign game masters can post ledger actions; campaign members can create
-shared custom item definitions. See [the API guide](docs/api.md) and [the item
-catalogue guide](docs/items.md). Initialise the pinned source catalogue with:
+shared Compendium entries. See [the API guide](docs/api.md) and the
+[Compendium guide](docs/compendium.md). Synchronise the community repository
+directory and install its `default` repository with:
 
 ```sh
-git submodule update --init --recursive
-uv run python manage.py import_rpg_companion_items
+uv run python manage.py update_compendium_registries
 ```
 
 The frontend login uses the same Django session as the API. Its additional API

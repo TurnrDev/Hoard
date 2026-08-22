@@ -1,22 +1,12 @@
-"""Typed import boundary for the supported 5e Companion CAH subset."""
+"""Defensive reader for legacy 5e Companion character exports."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Any
 
 from django.core.exceptions import ValidationError
-from pydantic import (
-    BaseModel,
-    BeforeValidator,
-    ConfigDict,
-    Field,
-    field_validator,
-)
-from pydantic import (
-    ValidationError as PydanticError,
-)
 
 ABILITIES = (
     "strength",
@@ -26,7 +16,6 @@ ABILITIES = (
     "wisdom",
     "charisma",
 )
-
 SKILL_NAMES = (
     "acrobatics",
     "animal_handling",
@@ -47,7 +36,6 @@ SKILL_NAMES = (
     "stealth",
     "survival",
 )
-
 CAH_PROFICIENCY = {
     "NONE": "none",
     "HALF": "half",
@@ -56,181 +44,230 @@ CAH_PROFICIENCY = {
 }
 
 
-def _optional_integer(value: object) -> int | None:
-    return value if type(value) is int else None
-
-
-OptionalInteger = Annotated[
-    int | None, BeforeValidator(_optional_integer), Field(default=None)
-]
-
-
 @dataclass(frozen=True)
 class CahPreview:
     fields: dict[str, Any]
+    collections: dict[str, list[dict[str, Any]]]
+    inventory: list[dict[str, Any]]
     warnings: list[str]
 
 
-class CahModel(BaseModel):
-    """Ignore the rest of a CAH export deliberately, rather than accidentally."""
-
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
-
-
-class CahRace(CahModel):
-    race_id: str | None = Field(default=None, validation_alias="raceId")
-    subrace_id: str | None = Field(default=None, validation_alias="subraceId")
-
-
-class CahRequiredRace(CahModel):
-    name: str | None = None
-
-
-class CahAbility(CahModel):
-    score: OptionalInteger = None
-    score_modifier: OptionalInteger = Field(validation_alias="scoreModifier")
-    save: bool | None = None
-    save_modifier: OptionalInteger = Field(validation_alias="saveModifier")
-
-
-class CahSkill(CahModel):
-    name: str | None = Field(default=None, validation_alias="typeName")
-    proficiency: str | None = Field(default=None, validation_alias="proficiencyName")
-
-
-class CahCharacter(CahModel):
-    json_type: Literal["character"] = Field(validation_alias="jsonType")
-    name: str | None = None
-    race: CahRace | None = None
-    required_race: CahRequiredRace | None = Field(
-        default=None, validation_alias="requiredRace"
-    )
-    base_hp: OptionalInteger = Field(validation_alias="baseHp")
-    proficiency_modifier: OptionalInteger = Field(
-        validation_alias="proficiencyModifier"
-    )
-    strength: CahAbility | None = None
-    dexterity: CahAbility | None = None
-    constitution: CahAbility | None = None
-    intelligence: CahAbility | None = None
-    wisdom: CahAbility | None = None
-    charisma: CahAbility | None = None
-    skills: list[CahSkill] = Field(default_factory=list)
-
-    @field_validator("name")
-    @classmethod
-    def strip_name(cls, value: str | None) -> str | None:
-        return value.strip() if value and value.strip() else None
-
-    @field_validator("required_race", mode="before")
-    @classmethod
-    def parse_required_race(cls, value: object) -> object:
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return None
+def _json(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
         return value
 
 
-def _value(
-    value: int | None, label: str, warnings: list[str], *, minimum: int | None = None
-) -> int | None:
-    if value is None:
-        warnings.append(f"{label} was missing or invalid and was ignored.")
-        return None
-    if minimum is not None and value < minimum:
-        warnings.append(f"{label} was below {minimum} and was ignored.")
-        return None
-    return value
+def _dict(value: object) -> dict[str, Any]:
+    value = _json(value)
+    return value if isinstance(value, dict) else {}
 
 
-def _set_number(
-    fields: dict[str, Any],
-    name: str,
-    value: int | None,
-    label: str,
-    warnings: list[str],
-    *,
-    minimum: int | None = None,
-) -> None:
-    parsed = _value(value, label, warnings, minimum=minimum)
-    if parsed is not None:
-        fields[name] = parsed
+def _list(value: object) -> list[Any]:
+    value = _json(value)
+    return value if isinstance(value, list) else []
+
+
+def _integer(value: object, *, minimum: int | None = None) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        result = int(value)
+    except TypeError, ValueError:
+        return None
+    return result if minimum is None or result >= minimum else None
+
+
+def _name(value: object) -> str:
+    return str(value).replace("_", " ").title() if value else ""
+
+
+def _description(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    model = _dict(value)
+    if isinstance(model.get("description"), str):
+        return model["description"]
+    for row in _list(model.get("descriptionModels")):
+        description = _dict(row).get("description")
+        if isinstance(description, str):
+            return description
+    return ""
+
+
+def _entry(value: object, *, kind: str = "item") -> dict[str, Any] | None:
+    row = _dict(value)
+    name = row.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return {
+        "source_identifier": str(row.get("id") or ""),
+        "name": name.strip(),
+        "description": _description(row),
+        "notes": row.get("notes") if isinstance(row.get("notes"), str) else "",
+        "level": _integer(row.get("level"), minimum=0) or 0,
+        "kind": kind,
+        "raw": row,
+    }
+
+
+def _feature_entries(source: dict[str, Any]) -> list[dict[str, Any]]:
+    entries = []
+    for value in _list(source.get("feats")):
+        entry = _entry(value, kind="feat")
+        if entry:
+            entries.append(entry)
+    for value in _list(source.get("selectableFeatures")):
+        row = _dict(value)
+        for selected in _list(row.get("selectedFeatures")):
+            entry = _entry(_dict(selected).get("feat", selected), kind="feature")
+            if entry:
+                entries.append(entry)
+    return entries
+
+
+def _inventory_entries(source: dict[str, Any]) -> list[dict[str, Any]]:
+    entries = []
+    for key, kind in (
+        ("equipment", "item"),
+        ("weapons", "weapon"),
+        ("armors", "armor"),
+    ):
+        for index, value in enumerate(_list(source.get(key))):
+            entry = _entry(value, kind=kind)
+            if not entry:
+                continue
+            entry.update(
+                line_id=f"{key}-{index}",
+                quantity=_integer(_dict(value).get("amount"), minimum=1) or 1,
+                equipped=bool(_dict(value).get("isEquipped")),
+                action="add",
+            )
+            entries.append(entry)
+    return entries
 
 
 def parse_cah(raw: bytes) -> CahPreview:
-    """Return only stable reference-sheet fields, never raw CAH content."""
-
+    """Parse supported sheet content while retaining import trace data per entry."""
     try:
-        source = CahCharacter.model_validate_json(raw)
-    except PydanticError as error:
+        source = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValidationError("The uploaded file is not valid JSON.") from error
+    if not isinstance(source, dict) or source.get("jsonType") != "character":
         raise ValidationError(
-            "The uploaded file is not a valid 5e Companion character export."
-        ) from error
+            "The uploaded file is not a 5e Companion character export."
+        )
 
     warnings: list[str] = []
     fields: dict[str, Any] = {"skill_proficiencies": {}}
-    if source.name:
-        fields["name"] = source.name
-    else:
-        warnings.append("Character name was missing and was not imported.")
-    if source.required_race and source.required_race.name:
-        fields["race"] = source.required_race.name
-    elif source.race:
-        race_name = source.race.subrace_id or source.race.race_id
-        if race_name:
-            fields["race"] = race_name.replace("_", " ").title()
+    if isinstance(source.get("name"), str) and source["name"].strip():
+        fields["name"] = source["name"].strip()
+    for target, source_key, minimum in (
+        ("base_hp", "baseHp", 1),
+        ("current_hp", "hp", None),
+        ("temporary_hp", "tempHp", 0),
+        ("base_ac", "baseAc", 1),
+        ("ac_adjustment", "extraAC", None),
+        ("proficiency_bonus_adjustment", "proficiencyModifier", None),
+    ):
+        value = _integer(source.get(source_key), minimum=minimum)
+        if value is not None:
+            fields[target] = value
+    speed = source.get("speed")
+    if isinstance(speed, str) and speed.strip():
+        fields["speed"] = speed.strip()
 
-    _set_number(fields, "base_hp", source.base_hp, "Base HP", warnings, minimum=1)
-    _set_number(
-        fields,
-        "proficiency_bonus_adjustment",
-        source.proficiency_modifier,
-        "Proficiency adjustment",
-        warnings,
+    required_race = _dict(source.get("requiredRace"))
+    race = (
+        required_race.get("name")
+        or _dict(source.get("race")).get("subraceId")
+        or _dict(source.get("race")).get("raceId")
     )
+    if race:
+        fields["race"] = _name(race)
+    required_background = _dict(source.get("requiredBackground"))
+    background = required_background.get("name") or _dict(source.get("background")).get(
+        "backgroundId"
+    )
+    if background:
+        fields["background"] = _name(background)
+    jobs = _list(source.get("jobs"))
+    if jobs and _dict(jobs[0]).get("jobId"):
+        fields["character_class"] = _name(_dict(jobs[0])["jobId"])
 
     for ability_name in ABILITIES:
-        ability = getattr(source, ability_name)
-        if ability is None:
-            warnings.append(f"{ability_name.title()} was missing and was not imported.")
+        ability = _dict(source.get(ability_name))
+        if not ability:
             continue
-        _set_number(
-            fields,
-            ability_name,
-            ability.score,
-            f"{ability_name.title()} score",
-            warnings,
-            minimum=1,
-        )
-        _set_number(
-            fields,
-            f"{ability_name}_modifier_adjustment",
-            ability.score_modifier,
-            f"{ability_name.title()} adjustment",
-            warnings,
-        )
-        _set_number(
-            fields,
-            f"{ability_name}_save_adjustment",
-            ability.save_modifier,
-            f"{ability_name.title()} save adjustment",
-            warnings,
-        )
-        if ability.save is not None:
-            fields[f"{ability_name}_save_proficient"] = ability.save
+        for suffix, key, minimum in (
+            ("", "score", 1),
+            ("_modifier_adjustment", "scoreModifier", None),
+            ("_save_adjustment", "saveModifier", None),
+        ):
+            value = _integer(ability.get(key), minimum=minimum)
+            if value is not None:
+                fields[f"{ability_name}{suffix}"] = value
+        if isinstance(ability.get("save"), bool):
+            fields[f"{ability_name}_save_proficient"] = ability["save"]
+    for value in _list(source.get("skills")):
+        skill = _dict(value)
+        name = str(skill.get("typeName") or "").lower().replace(" ", "_")
+        proficiency = CAH_PROFICIENCY.get(str(skill.get("proficiencyName") or ""))
+        if name in SKILL_NAMES and proficiency:
+            fields["skill_proficiencies"][name] = proficiency
 
-    for skill in source.skills:
-        name = skill.name.lower() if skill.name else ""
-        if name not in SKILL_NAMES:
-            warnings.append(f"Unsupported skill {skill.name!r} was ignored.")
-        elif skill.proficiency not in CAH_PROFICIENCY:
-            warnings.append(f"Unknown proficiency for {name} was ignored.")
-        else:
-            fields["skill_proficiencies"][name] = CAH_PROFICIENCY[skill.proficiency]
-
-    warnings.append(
-        "AC, current/temporary HP, coins, XP, equipment, spells, feats, and notes were not imported."
+    notes = []
+    about = source.get("about")
+    if isinstance(about, str) and about.strip():
+        notes.append({"title": "About", "body": about, "raw": {"about": about}})
+    for note in _list(source.get("notes")):
+        row = _dict(note)
+        body = row.get("text")
+        if isinstance(body, str) and body.strip():
+            notes.append({"title": "", "body": body, "raw": row})
+    spells = [
+        entry
+        for value in _list(source.get("spells"))
+        if (entry := _entry(value, kind="spell"))
+    ]
+    companions = [
+        entry
+        for value in _list(source.get("companions"))
+        if (entry := _entry(value, kind="monster"))
+    ]
+    for entry in companions:
+        row = entry["raw"]
+        entry.update(
+            armor_class=_integer(row.get("armorClass") or row.get("ac"), minimum=1)
+            or 10,
+            max_hp=_integer(
+                row.get("maxHp") or row.get("baseHp") or row.get("hp"), minimum=1
+            )
+            or 1,
+            current_hp=_integer(row.get("hp")) or 1,
+            speed=str(row.get("speed") or ""),
+            abilities={
+                ability: _integer(_dict(row.get(ability)).get("score"))
+                for ability in ABILITIES
+            },
+            attacks=_list(row.get("attacks")),
+        )
+    fields["spell_slots"] = {
+        key: value
+        for key, raw_value in _dict(source.get("spellSlots")).items()
+        if (value := _integer(raw_value, minimum=0)) is not None
+    }
+    return CahPreview(
+        fields=fields,
+        collections={
+            "notes": notes,
+            "features": _feature_entries(source),
+            "spells": spells,
+            "companions": companions,
+        },
+        inventory=_inventory_entries(source),
+        warnings=warnings,
     )
-    return CahPreview(fields=fields, warnings=warnings)

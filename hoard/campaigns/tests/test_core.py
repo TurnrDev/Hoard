@@ -40,12 +40,18 @@ class CoreModelTests(TestCase):
     def test_campaign_calendar_defaults_and_rollover(self) -> None:
         self.assertEqual(self.campaign.calendar_era_abbreviation, "PD")
         self.assertEqual(self.campaign.calendar_era_name, "Powder Dynasty")
-        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (81, 137))
+        self.assertEqual(
+            (self.campaign.calendar_year, self.campaign.calendar_day), (81, 137)
+        )
         self.campaign.calendar_year, self.campaign.calendar_day = 81, 365
         self.campaign.adjust_calendar_day(1)
-        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (82, 1))
+        self.assertEqual(
+            (self.campaign.calendar_year, self.campaign.calendar_day), (82, 1)
+        )
         self.campaign.adjust_calendar_day(-1)
-        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (81, 365))
+        self.assertEqual(
+            (self.campaign.calendar_year, self.campaign.calendar_day), (81, 365)
+        )
 
     def test_campaign_calendar_cannot_precede_first_day(self) -> None:
         self.campaign.calendar_year, self.campaign.calendar_day = 1, 1
@@ -85,13 +91,13 @@ class CoreModelTests(TestCase):
         )
         self.assertEqual(preview.fields["name"], "Hero")
         self.assertEqual(preview.fields["strength"], 14)
-        self.assertNotIn("base_ac", preview.fields)
+        self.assertEqual(preview.fields["base_ac"], 12)
         self.assertNotIn("ac_bonus", preview.fields)
-        self.assertTrue(any("Base HP" in warning for warning in preview.warnings))
+        self.assertEqual(preview.warnings, [])
 
     def test_cah_parser_uses_required_race_name(self) -> None:
         preview = parse_cah(
             b'{"jsonType":"character","race":{"raceId":"fallback"},'
             b'"requiredRace":"{\\"name\\": \\"Displayed race\\"}"}'
         )
-        self.assertEqual(preview.fields["race"], "Displayed race")
+        self.assertEqual(preview.fields["race"], "Displayed Race")
