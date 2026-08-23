@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { formatGoldValue } from "../money";
+import { formatCoinPouch } from "../display";
 import GmCoinForm from "../components/GmCoinForm.vue";
 import GmCalendarCard from "../components/GmCalendarCard.vue";
 import GmItemForm from "../components/GmItemForm.vue";
@@ -164,9 +165,7 @@ useCampaignRefresh(load);
               <v-card-text>
                 <div class="text-overline">Party coin</div>
                 <div class="money-line mt-3">
-                  {{ campaign.party_money.pp }} pp · {{ campaign.party_money.gp }} gp ·
-                  {{ campaign.party_money.ep }} ep · {{ campaign.party_money.sp }} sp ·
-                  {{ campaign.party_money.cp }} cp
+                  {{ formatCoinPouch(campaign.party_money) }}
                 </div>
               </v-card-text>
             </v-col>

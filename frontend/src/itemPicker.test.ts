@@ -73,6 +73,6 @@ describe("item picker filters", () => {
   });
 
   it("summarises provenance and usable facts", () => {
-    expect(itemSummary(sword)).toBe("5e · dmg · rare · 250 gp · 3 pounds");
+    expect(itemSummary(sword)).toBe("5e · dmg · rare · 250 GP · 3 pounds");
   });
 });

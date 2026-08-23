@@ -59,10 +59,10 @@ async function submit() {
       Level {{ level }} · {{ sharedExperience.toLocaleString() }} shared XP
     </v-card-subtitle>
     <v-card-text>
-      <v-text-field
+      <v-number-input
         v-model.number="amount"
-        type="number"
-        min="1"
+        control-variant="split"
+        :min="1"
         label="Total encounter XP"
       />
       <v-sheet

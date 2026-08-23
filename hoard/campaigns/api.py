@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import models
 from django.db import transaction as db_transaction
 from django.db.models import Prefetch, Q, Sum
 from django.db.models.fields.json import KeyTextTransform
@@ -290,6 +291,19 @@ def _calendar_data(campaign: Campaign) -> dict[str, int | str]:
         "era_name": campaign.calendar_era_name,
         "year": campaign.calendar_year,
         "day": campaign.calendar_day,
+    }
+
+
+def _field_metadata(model: type[models.Model]) -> dict[str, object]:
+    return {
+        field.name: {
+            "label": str(field.verbose_name),
+            "choices": [
+                {"value": value, "label": str(label)}
+                for value, label in field.flatchoices
+            ],
+        }
+        for field in model._meta.concrete_fields
     }
 
 
@@ -624,6 +638,7 @@ def _transaction_data(
     return {
         "id": posted.pk,
         "ledger": posted._meta.model_name.removesuffix("transaction"),
+        "ledger_label": str(posted._meta.verbose_name),
         "description": posted.description,
         "created_at": posted.occurred_at.isoformat(),
         "occurred_at": posted.occurred_at.isoformat(),
@@ -704,6 +719,16 @@ def context_detail(request, context_id: int):
 @contexts.get("/{context_id}/calendar/")
 def calendar_detail(request, context_id: int):
     return _calendar_data(_context_access(request, context_id).campaign)
+
+
+@api.get("/contexts/{context_id}/metadata/")
+def context_metadata(request, context_id: int):
+    _context_access(request, context_id)
+    return {
+        "campaign": _field_metadata(Campaign),
+        "character": _field_metadata(Character),
+        "money_entry": _field_metadata(MoneyEntry),
+    }
 
 
 @contexts.post("/{context_id}/calendar/adjust/")
@@ -1206,6 +1231,7 @@ def cah_commit(request, context_id: int, payload: CahCommit):
 
     def import_collection(name: str) -> bool:
         return collections.get(name, True)
+
     target = _character(context, payload.character_id) if payload.character_id else None
     if target:
         if not (context.kind == CampaignContext.Kind.GM or _is_owner(context, target)):
@@ -1255,7 +1281,9 @@ def cah_commit(request, context_id: int, payload: CahCommit):
             target.notes.all().delete()
             CharacterNote.objects.bulk_create(
                 [
-                    CharacterNote(character=target, title=row["title"], body=row["body"])
+                    CharacterNote(
+                        character=target, title=row["title"], body=row["body"]
+                    )
                     for row in draft["collections"]["notes"]
                 ]
             )

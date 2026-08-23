@@ -25,6 +25,7 @@ import CharacterImportMenu from "../components/CharacterImportMenu.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import type { PickerCandidate } from "../itemPicker";
 import { formatGoldValue } from "../money";
+import { displayCoin, displayIdentifier, formatCoinPouch } from "../display";
 
 const route = useRoute();
 const router = useRouter();
@@ -90,7 +91,10 @@ const healthPreview = computed(() => {
   }
   return `Temporary ${beforeTemporary} + ${healthAmount.value} = ${beforeTemporary + healthAmount.value}`;
 });
-const denominations = ["cp", "sp", "ep", "gp", "pp"];
+const denominations = ["cp", "sp", "ep", "gp", "pp"].map((value) => ({
+  title: displayCoin(value),
+  value,
+}));
 const xpThresholds = [
   0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000,
   140000, 165000, 195000, 225000, 265000, 305000, 355000,
@@ -210,20 +214,30 @@ const skillColumns = computed(() => [
   ),
   skillGroups.value.filter((ability) => ["wisdom", "charisma"].includes(ability.key)),
 ]);
-const displayName = (value: string) =>
-  value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const displayName = displayIdentifier;
 const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
 const formatXp = (value: number) => `${value.toLocaleString()} XP`;
+const formatSpellSlots = (slots: Record<string, number>) => {
+  const values = Object.entries(slots).filter(([, count]) => count > 0);
+  return values.length
+    ? values.map(([level, count]) => `Level ${level}: ${count}`).join(" · ")
+    : "No spell slots";
+};
 const activityAmount = (transaction: LedgerTransaction) =>
   transaction.entries
     .filter((entry) => entry.account_name === character.value?.name)
     .map(
       (entry) =>
         `${entry.amount > 0 ? "+" : ""}${entry.amount} ${
-          entry.item_name ?? entry.denomination ?? "XP"
+          entry.item_name ??
+          (entry.denomination ? displayCoin(entry.denomination) : "XP")
         }`,
     )
     .join(" · ");
+const activityDescription = (transaction: LedgerTransaction) =>
+  transaction.description ||
+  transaction.ledger_label ||
+  displayIdentifier(transaction.ledger);
 const experienceProgress = computed(() => {
   const level = character.value?.sheet.level ?? 1;
   const current = character.value?.experience ?? 0;
@@ -569,9 +583,7 @@ useCampaignRefresh(load);
               <v-card-text>
                 <div class="text-overline">Coin pouch</div>
                 <div class="money-line mt-3">
-                  {{ character.money.pp }} pp · {{ character.money.gp }} gp ·
-                  {{ character.money.ep }} ep · {{ character.money.sp }} sp ·
-                  {{ character.money.cp }} cp
+                  {{ formatCoinPouch(character.money) }}
                 </div>
               </v-card-text>
             </v-col>
@@ -750,14 +762,36 @@ useCampaignRefresh(load);
             <v-table
               v-if="character.inventory.length"
               density="compact"
+              class="a11y-table"
             >
+              <caption class="visually-hidden">{{ character.name }} inventory</caption>
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Quantity</th>
-                  <th>Weight</th>
-                  <th>Value</th>
-                  <th class="text-right">Actions</th>
+                  <th scope="col">Item</th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    Quantity
+                  </th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    Weight
+                  </th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    Value
+                  </th>
+                  <th
+                    scope="col"
+                    class="text-right"
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -765,19 +799,19 @@ useCampaignRefresh(load);
                   v-for="entry in inventoryRows"
                   :key="entry.item_id"
                 >
-                  <td>{{ entry.name }}</td>
-                  <td>{{ entry.quantity }}</td>
-                  <td>
+                  <th scope="row">{{ entry.name }}</th>
+                  <td class="a11y-number">{{ entry.quantity.toLocaleString() }}</td>
+                  <td class="a11y-number">
                     {{
                       entry.item?.equipment.weight_amount
                         ? `${entry.item.equipment.weight_amount} ${entry.item.equipment.weight_unit}`
                         : "—"
                     }}
                   </td>
-                  <td>
+                  <td class="a11y-number">
                     {{
                       entry.item?.equipment.cost_amount
-                        ? `${entry.item.equipment.cost_amount} ${entry.item.equipment.cost_currency}`
+                        ? `${entry.item.equipment.cost_amount} ${displayCoin(entry.item.equipment.cost_currency)}`
                         : "—"
                     }}
                   </td>
@@ -789,6 +823,7 @@ useCampaignRefresh(load);
                           icon="mdi-dots-horizontal"
                           size="small"
                           variant="text"
+                          :aria-label="`Actions for ${entry.name}`"
                         />
                       </template>
                       <v-list density="compact">
@@ -891,7 +926,7 @@ useCampaignRefresh(load);
           <v-expansion-panel :title="`Spells (${character.spells.length})`">
             <v-expansion-panel-text>
               <div class="text-caption mb-2">
-                Slots: {{ character.sheet.spell_slots }}
+                Slots: {{ formatSpellSlots(character.sheet.spell_slots) }}
               </div>
               <v-list density="compact">
                 <v-list-item
@@ -937,7 +972,7 @@ useCampaignRefresh(load);
               >
                 <span>{{ new Date(transaction.created_at).toLocaleString() }}</span>
                 <strong>{{ activityAmount(transaction) }}</strong>
-                <span>{{ transaction.description || transaction.ledger }}</span>
+                <span>{{ activityDescription(transaction) }}</span>
                 <span>{{ transaction.actor ? `by ${transaction.actor}` : "—" }}</span>
               </div>
             </template>
@@ -964,10 +999,10 @@ useCampaignRefresh(load);
             label="Item"
             no-data-text="No campaign items available."
           />
-          <v-text-field
+          <v-number-input
             v-model.number="grantQuantity"
-            type="number"
-            min="1"
+            control-variant="split"
+            :min="1"
             label="Quantity"
           />
         </v-card-text>
@@ -1015,20 +1050,26 @@ useCampaignRefresh(load);
           </template>
           <template v-else>
             <v-row>
-              <v-col>
+              <v-col
+                cols="12"
+                sm="6"
+              >
                 <v-select
                   v-model="denomination"
                   :items="denominations"
                   label="Source denomination"
                 />
-                <v-text-field
+                <v-number-input
                   v-model.number="amount"
-                  type="number"
-                  min="1"
+                  control-variant="split"
+                  :min="1"
                   label="Source coins"
                 />
               </v-col>
-              <v-col>
+              <v-col
+                cols="12"
+                sm="6"
+              >
                 <v-select
                   v-model="exchangeTargetDenomination"
                   :items="denominations"
@@ -1056,12 +1097,6 @@ useCampaignRefresh(load);
             label="Note (optional)"
             rows="2"
           />
-          <v-alert
-            type="info"
-            variant="tonal"
-          >
-            {{ healthPreview }}
-          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -1112,10 +1147,10 @@ useCampaignRefresh(load);
             :items="destinationOptions"
             label="Transfer to"
           />
-          <v-text-field
+          <v-number-input
             v-model.number="itemActionQuantity"
-            type="number"
-            min="1"
+            control-variant="split"
+            :min="1"
             :max="selectedInventoryItem.quantity"
             label="Quantity"
           />
@@ -1160,27 +1195,34 @@ useCampaignRefresh(load);
               { title: 'Correction', value: 'correction' },
             ]"
           />
-          <v-text-field
+          <v-number-input
             v-if="healthReason !== 'correction'"
             v-model.number="healthAmount"
-            type="number"
-            min="1"
+            control-variant="split"
+            :min="1"
             label="Amount"
           />
           <template v-else>
-            <v-text-field
+            <v-number-input
               v-model.number="healthCurrent"
-              type="number"
-              min="0"
+              control-variant="split"
+              :min="0"
               label="Correct current HP"
             />
-            <v-text-field
+            <v-number-input
               v-model.number="healthTemporary"
-              type="number"
-              min="0"
+              control-variant="split"
+              :min="0"
               label="Correct temporary HP"
             />
           </template>
+          <v-alert
+            type="info"
+            variant="tonal"
+            class="mb-4"
+          >
+            {{ healthPreview }}
+          </v-alert>
           <v-textarea
             v-model="healthDescription"
             label="Reason (optional)"

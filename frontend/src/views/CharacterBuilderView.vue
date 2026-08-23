@@ -22,6 +22,7 @@ import CompendiumChoicePicker, {
   type CompendiumChoice,
 } from "../components/CompendiumChoicePicker.vue";
 import CompendiumEntryPicker from "../components/CompendiumEntryPicker.vue";
+import { displayIdentifier } from "../display";
 
 type ClassLevel = {
   level: number;
@@ -40,6 +41,12 @@ const abilities = [
   "charisma",
 ] as const;
 const equipmentCategories = ["armor", "weapons", "tools"] as const;
+const proficiencyOptions = [
+  { title: "No proficiency", value: "none" },
+  { title: "Half proficiency", value: "half" },
+  { title: "Proficient", value: "proficient" },
+  { title: "Expertise", value: "expertise" },
+];
 
 const route = useRoute();
 const router = useRouter();
@@ -637,20 +644,20 @@ onMounted(load);
               cols="6"
               sm="4"
             >
-              <v-text-field
+              <v-number-input
                 v-model.number="form[ability]"
-                type="number"
+                control-variant="stacked"
                 :label="`${ability} raw`"
               />
-              <v-text-field
+              <v-number-input
                 v-model.number="form.ability_bonuses[ability]"
-                type="number"
+                control-variant="stacked"
                 label="Ancestry adjustment"
                 density="compact"
               />
-              <v-text-field
+              <v-number-input
                 v-model.number="form.ability_score_adjustments[ability]"
-                type="number"
+                control-variant="stacked"
                 label="Custom override"
                 density="compact"
               />
@@ -782,8 +789,8 @@ onMounted(load);
             >
               <v-select
                 v-model="form.skill_proficiencies[skill]"
-                :label="skill.replaceAll('_', ' ')"
-                :items="['none', 'half', 'proficient', 'expertise']"
+                :label="displayIdentifier(skill)"
+                :items="proficiencyOptions"
                 :loading="draftLoading"
                 :disabled="draftLoading"
               />
@@ -795,7 +802,7 @@ onMounted(load);
             :key="category"
             v-model="form.equipment_proficiencies[category]"
             :items="ruleSuggestions(equipmentSuggestionKey(category))"
-            :label="category"
+            :label="displayIdentifier(category)"
             multiple
             chips
             :loading="draftLoading || ruleChoicesLoading"
@@ -813,10 +820,10 @@ onMounted(load);
           />
         </template>
         <template v-else-if="step === 5">
-          <v-text-field
+          <v-number-input
             v-model.number="form.base_hp"
-            type="number"
-            min="1"
+            control-variant="split"
+            :min="1"
             label="Base HP (hit-die pool before ability modifiers)"
           />
           <v-select
@@ -826,9 +833,9 @@ onMounted(load);
             :loading="draftLoading"
             :disabled="draftLoading"
           />
-          <v-text-field
+          <v-number-input
             v-model.number="form.hp_adjustment"
-            type="number"
+            control-variant="split"
             label="HP-only adjustment"
           />
           <v-sheet

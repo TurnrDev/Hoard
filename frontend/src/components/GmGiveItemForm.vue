@@ -81,10 +81,10 @@ onMounted(async () => {
         :candidates="candidates"
         label="Item to grant"
       />
-      <v-text-field
+      <v-number-input
         v-model.number="quantity"
-        type="number"
-        min="1"
+        control-variant="split"
+        :min="1"
         label="Quantity"
       />
       <v-textarea

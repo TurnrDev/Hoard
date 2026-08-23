@@ -37,6 +37,36 @@ class CoreModelTests(TestCase):
                 campaign=self.campaign, user=self.user, kind=CampaignContext.Kind.GM
             )
 
+    def test_campaign_context_role_is_immutable(self) -> None:
+        context = CampaignContext.objects.create(
+            campaign=self.campaign, user=self.user, kind=CampaignContext.Kind.GM
+        )
+
+        context.kind = CampaignContext.Kind.PC
+
+        with self.assertRaises(ValidationError):
+            context.save()
+
+    def test_character_requires_a_player_context(self) -> None:
+        gm_context = CampaignContext.objects.create(
+            campaign=self.campaign, user=self.user, kind=CampaignContext.Kind.GM
+        )
+
+        with self.assertRaises(ValidationError):
+            Character.objects.create(
+                campaign=self.campaign,
+                context=gm_context,
+                name="GM character",
+                race="Human",
+                character_class="Fighter",
+                strength=10,
+                dexterity=10,
+                constitution=10,
+                intelligence=10,
+                wisdom=10,
+                charisma=10,
+            )
+
     def test_campaign_calendar_defaults_and_rollover(self) -> None:
         self.assertEqual(self.campaign.calendar_era_abbreviation, "PD")
         self.assertEqual(self.campaign.calendar_era_name, "Powder Dynasty")

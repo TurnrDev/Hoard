@@ -11,6 +11,7 @@ import {
 import type { PickerCandidate } from "../itemPicker";
 import CalculationBreakdown from "./CalculationBreakdown.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
+import { displayIdentifier } from "../display";
 
 const props = defineProps<{
   contextId: number;
@@ -69,7 +70,7 @@ type CalculationRow = {
 type CalculationGroup = { key: string; label: string; rows: CalculationRow[] };
 
 function title(value: string): string {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return displayIdentifier(value);
 }
 
 function isCalculation(value: unknown): value is Calculation {
@@ -387,14 +388,22 @@ async function cancel(): Promise<void> {
             <h3 class="text-h6 mb-3">Character changes</h3>
             <v-table
               density="compact"
-              class="import-fields-table"
+              class="a11y-table import-fields-table"
             >
+              <caption class="visually-hidden">
+                Character fields available to import
+              </caption>
               <thead>
                 <tr>
-                  <th class="checkbox-column">Import</th>
-                  <th>Field</th>
-                  <th>Before</th>
-                  <th>Import value</th>
+                  <th
+                    scope="col"
+                    class="checkbox-column"
+                  >
+                    Import
+                  </th>
+                  <th scope="col">Field</th>
+                  <th scope="col">Before</th>
+                  <th scope="col">Import value</th>
                 </tr>
               </thead>
               <tbody>
@@ -409,7 +418,7 @@ async function cancel(): Promise<void> {
                       :aria-label="`Import ${title(change.field)}`"
                     />
                   </td>
-                  <th>{{ title(change.field) }}</th>
+                  <th scope="row">{{ title(change.field) }}</th>
                   <td class="text-medium-emphasis">
                     {{
                       change.field === "skill_proficiencies"
@@ -425,10 +434,10 @@ async function cancel(): Promise<void> {
                         density="compact"
                         hide-details
                       />
-                      <v-text-field
+                      <v-number-input
                         v-else-if="typeof change.after === 'number'"
                         :model-value="change.after"
-                        type="number"
+                        control-variant="stacked"
                         density="compact"
                         hide-details
                         @update:model-value="setNumberField(change, $event)"
@@ -579,10 +588,10 @@ async function cancel(): Promise<void> {
                     cols="12"
                     sm="3"
                   >
-                    <v-text-field
+                    <v-number-input
                       v-model.number="line.quantity"
-                      type="number"
-                      min="1"
+                      control-variant="stacked"
+                      :min="1"
                       density="compact"
                       label="Quantity"
                     />

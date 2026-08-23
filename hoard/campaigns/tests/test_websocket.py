@@ -236,11 +236,21 @@ class ContextSocketTests(TransactionTestCase):
             is_active=True,
             is_build_complete=True,
         )
-        CharacterClassLevel.objects.create(character=character, level=1, class_name="Fighter")
-        CharacterLevelProgress.objects.create(character=character, level=1, is_complete=True)
-        CharacterLevelProgress.objects.create(character=character, level=2, is_complete=False)
-        repository = CompendiumRepository.objects.create(identifier="level-test", name="Level test")
-        source = CompendiumSource.objects.create(repository=repository, identifier="5e", name="5e")
+        CharacterClassLevel.objects.create(
+            character=character, level=1, class_name="Fighter"
+        )
+        CharacterLevelProgress.objects.create(
+            character=character, level=1, is_complete=True
+        )
+        CharacterLevelProgress.objects.create(
+            character=character, level=2, is_complete=False
+        )
+        repository = CompendiumRepository.objects.create(
+            identifier="level-test", name="Level test"
+        )
+        source = CompendiumSource.objects.create(
+            repository=repository, identifier="5e", name="5e"
+        )
         self.campaign.compendium_sources.add(source)
         fighter = CompendiumEntry.objects.create(
             source=source,
@@ -254,7 +264,11 @@ class ContextSocketTests(TransactionTestCase):
         definition = async_to_sync(self.socket_request)(
             player,
             context.pk,
-            {"type": "characters.level_up.definition", "request_id": "level-definition", "character_id": character.pk},
+            {
+                "type": "characters.level_up.definition",
+                "request_id": "level-definition",
+                "character_id": character.pk,
+            },
         )
         completed = async_to_sync(self.socket_request)(
             player,

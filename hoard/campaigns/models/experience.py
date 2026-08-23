@@ -54,6 +54,10 @@ class ExperienceTransaction(LedgerTransaction):
         "self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversal"
     )
 
+    class Meta:
+        verbose_name = "Experience"
+        verbose_name_plural = "Experience"
+
 
 class ExperienceEntry(ImmutableLedgerEntry):
     transaction_id: int

@@ -246,6 +246,7 @@ useCampaignRefresh(load);
         <v-btn
           icon="mdi-close"
           variant="text"
+          aria-label="Dismiss error message"
           @click="error = ''"
         />
       </template>

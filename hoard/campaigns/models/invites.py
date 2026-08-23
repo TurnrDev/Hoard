@@ -42,3 +42,7 @@ class InvitationEvent(CampaignDatedEvent):
         CampaignInvitation, on_delete=models.PROTECT, related_name="events"
     )
     reason = models.CharField(max_length=20, choices=Reason.choices)
+
+    class Meta:
+        verbose_name = "Invitation Change"
+        verbose_name_plural = "Invitation Changes"

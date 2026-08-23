@@ -1,4 +1,5 @@
 import type { Item } from "./api";
+import { displayCoin } from "./display";
 
 export type PickerCandidate = { item: Item; quantity?: number };
 export type PickerFilters = {
@@ -101,7 +102,7 @@ export function itemSummary(item: Item): string {
       : "Campaign custom",
     item.equipment.rarity,
     item.equipment.cost_amount && item.equipment.cost_currency
-      ? `${item.equipment.cost_amount} ${item.equipment.cost_currency}`
+      ? `${item.equipment.cost_amount} ${displayCoin(item.equipment.cost_currency)}`
       : null,
     item.equipment.weight_amount && item.equipment.weight_unit
       ? `${item.equipment.weight_amount} ${item.equipment.weight_unit}`

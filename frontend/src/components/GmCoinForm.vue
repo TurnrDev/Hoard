@@ -67,7 +67,7 @@ onMounted(async () => {
         color="primary"
         class="mr-2"
       >
-        mdi-coins
+        mdi-cash-multiple
       </v-icon>
       Coins
     </v-card-title>

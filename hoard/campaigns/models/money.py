@@ -44,6 +44,10 @@ class MoneyTransaction(LedgerTransaction):
         "self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversal"
     )
 
+    class Meta:
+        verbose_name = "Coins"
+        verbose_name_plural = "Coins"
+
 
 class MoneyEntry(ImmutableLedgerEntry):
     transaction_id: int
@@ -62,7 +66,9 @@ class MoneyEntry(ImmutableLedgerEntry):
     account = models.ForeignKey(
         MoneyAccount, on_delete=models.PROTECT, related_name="entries"
     )
-    denomination = models.CharField(max_length=2, choices=Denomination.choices)
+    denomination = models.CharField(
+        "Denomination", max_length=2, choices=Denomination.choices
+    )
 
     class Meta:
         constraints = [

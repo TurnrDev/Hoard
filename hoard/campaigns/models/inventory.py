@@ -41,6 +41,10 @@ class InventoryTransaction(LedgerTransaction):
         "self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversal"
     )
 
+    class Meta:
+        verbose_name = "Inventory"
+        verbose_name_plural = "Inventory"
+
 
 class InventoryEntry(ImmutableLedgerEntry):
     transaction = models.ForeignKey(

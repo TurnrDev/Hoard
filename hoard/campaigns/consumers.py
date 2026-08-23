@@ -29,7 +29,6 @@ from hoard.compendium.models import (
 from hoard.compendium.tasks import import_campaign_repository
 
 from .models import (
-    CalendarEvent,
     CampaignContext,
     CampaignInvitation,
     CampaignLevelEvent,
@@ -41,7 +40,6 @@ from .models import (
     HealthTransaction,
     InvitationEvent,
     MembershipEvent,
-    format_campaign_date,
 )
 from .realtime import campaign_group_name, notify_campaign_changed
 from .services import (
@@ -113,7 +111,7 @@ def _class_subclasses(
     # normal default of class level 3. Classes that differ carry an explicit value.
     try:
         unlock_level = int(selection_level) if selection_level is not None else 3
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         unlock_level = 3
     unlock_level = min(20, max(1, unlock_level))
 
@@ -187,9 +185,7 @@ def _builder_entry_data(entry: CompendiumEntry) -> dict[str, object]:
     return {key: value for key, value in normalized.items() if value}
 
 
-def _level_up_rules(
-    entry: CompendiumEntry, class_level: int
-) -> dict[str, object]:
+def _level_up_rules(entry: CompendiumEntry, class_level: int) -> dict[str, object]:
     """Extract only the choices and gains relevant to one class level."""
     data = entry.data if isinstance(entry.data, dict) else {}
     stats = _unwrapped(data.get("stats"))
@@ -208,11 +204,18 @@ def _level_up_rules(
         if isinstance(descriptions, list):
             for item in descriptions:
                 item = _unwrapped(item)
-                if isinstance(item, dict) and int(_unwrapped(item.get("level")) or 1) <= class_level:
+                if (
+                    isinstance(item, dict)
+                    and int(_unwrapped(item.get("level")) or 1) <= class_level
+                ):
                     candidate = _unwrapped(item.get("description"))
                     if isinstance(candidate, str):
                         description = candidate
-        return (name.strip() if isinstance(name, str) else "", identifier if isinstance(identifier, str) else "", description)
+        return (
+            name.strip() if isinstance(name, str) else "",
+            identifier if isinstance(identifier, str) else "",
+            description,
+        )
 
     gains: list[dict[str, object]] = []
     prompts: list[dict[str, object]] = []
@@ -222,12 +225,21 @@ def _level_up_rules(
         if isinstance(features, list):
             for row in features:
                 row = _unwrapped(row)
-                if not isinstance(row, dict) or int(_unwrapped(row.get("level")) or 1) != class_level:
+                if (
+                    not isinstance(row, dict)
+                    or int(_unwrapped(row.get("level")) or 1) != class_level
+                ):
                     continue
                 name, identifier, description = detail(row)
                 if name and (identifier or name) not in seen:
                     seen.add(identifier or name)
-                    gains.append({"name": name, "identifier": identifier or name, "description": description})
+                    gains.append(
+                        {
+                            "name": name,
+                            "identifier": identifier or name,
+                            "description": description,
+                        }
+                    )
         selectable = _unwrapped(source.get("selectableFeatures"))
         if not isinstance(selectable, list):
             continue
@@ -240,7 +252,10 @@ def _level_up_rules(
             if isinstance(amounts, list):
                 for amount_row in amounts:
                     amount_row = _unwrapped(amount_row)
-                    if isinstance(amount_row, dict) and int(_unwrapped(amount_row.get("level")) or 0) == class_level:
+                    if (
+                        isinstance(amount_row, dict)
+                        and int(_unwrapped(amount_row.get("level")) or 0) == class_level
+                    ):
                         amount = int(_unwrapped(amount_row.get("amount")) or 0)
             if not amount:
                 continue
@@ -250,11 +265,25 @@ def _level_up_rules(
                 for option in available:
                     name, identifier, description = detail(option)
                     if name:
-                        options.append({"name": name, "identifier": identifier or name, "description": description})
-            prompts.append({"identifier": str(_unwrapped(row.get("id")) or f"class-choice-{index}"), "name": str(_unwrapped(row.get("name")) or "Class choice"), "amount": amount, "options": options})
+                        options.append(
+                            {
+                                "name": name,
+                                "identifier": identifier or name,
+                                "description": description,
+                            }
+                        )
+            prompts.append(
+                {
+                    "identifier": str(
+                        _unwrapped(row.get("id")) or f"class-choice-{index}"
+                    ),
+                    "name": str(_unwrapped(row.get("name")) or "Class choice"),
+                    "amount": amount,
+                    "options": options,
+                }
+            )
     feature_asi = any(
-        "ability score improvement" in str(gain["name"]).casefold()
-        for gain in gains
+        "ability score improvement" in str(gain["name"]).casefold() for gain in gains
     )
     default_asi_levels = {4, 8, 12, 16, 19}
     class_name = entry.name.casefold()
@@ -316,7 +345,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.calendar.get": self._calendar_get,
             "campaign.calendar.adjust": self._calendar_adjust,
             "campaign.members.list": self._member_list,
-            "campaign.members.update": self._member_update,
             "campaign.members.deactivate": self._member_deactivate,
             "campaign.invites.list": self._invite_list,
             "campaign.invites.create": self._invite_create,
@@ -587,24 +615,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         context = self._context()
         _gm(context)
         amount = self._integer(content, "amount")
-        before = (
-            context.campaign.calendar_era_abbreviation,
-            context.campaign.calendar_year,
-            context.campaign.calendar_day,
-        )
         context.campaign.adjust_calendar_day(amount)
         context.campaign.full_clean()
         context.campaign.save(update_fields=("calendar_year", "calendar_day"))
-        CalendarEvent.objects.create(
-            campaign=context.campaign,
-            created_by=context,
-            before_era_abbreviation=before[0],
-            before_year=before[1],
-            before_day=before[2],
-            after_era_abbreviation=context.campaign.calendar_era_abbreviation,
-            after_year=context.campaign.calendar_year,
-            after_day=context.campaign.calendar_day,
-        )
         notify_campaign_changed(context.campaign_id)
         return _calendar_data(context.campaign)
 
@@ -625,52 +638,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 campaign=context.campaign
             ).select_related("user")
         ]
-
-    @database_sync_to_async
-    def _member_update(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import _gm
-
-        context = self._context()
-        _gm(context)
-        candidate = CampaignContext.objects.filter(
-            pk=self._integer(content, "member_id"),
-            campaign=context.campaign,
-            is_active=True,
-        ).first()
-        if candidate is None:
-            raise HttpError(404, "Member not found.")
-        make_gm = content.get("is_game_master")
-        if not isinstance(make_gm, bool):
-            raise ValueError("is_game_master must be true or false.")
-        kind = CampaignContext.Kind.GM if make_gm else CampaignContext.Kind.PC
-        if candidate.kind != kind:
-            before = {"kind": candidate.kind, "is_active": candidate.is_active}
-            if make_gm:
-                candidate, _ = CampaignContext.objects.update_or_create(
-                    campaign=context.campaign,
-                    user=candidate.user,
-                    kind=CampaignContext.Kind.GM,
-                    defaults={"is_active": True},
-                )
-            else:
-                candidate.is_active = False
-                candidate.save(update_fields=("is_active",))
-            MembershipEvent.objects.create(
-                campaign=context.campaign,
-                created_by=context,
-                subject=candidate,
-                subject_user=candidate.user,
-                reason=MembershipEvent.Reason.ROLE_CHANGED,
-                before=before,
-                after={"kind": candidate.kind, "is_active": candidate.is_active},
-            )
-        notify_campaign_changed(context.campaign_id)
-        return {
-            "id": candidate.pk,
-            "username": candidate.user.get_username(),
-            "is_game_master": make_gm,
-            "is_active": candidate.is_active,
-        }
 
     @database_sync_to_async
     def _member_deactivate(self, content: dict[str, object]) -> None:
@@ -1289,7 +1256,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
         character = _editable_sheet_character(context, character_id)
         if not character.is_player_character or not character.is_active:
-            raise ValidationError("Level-up is only available for active player characters.")
+            raise ValidationError(
+                "Level-up is only available for active player characters."
+            )
         progress = character.level_progress.filter(
             level=context.campaign.level, is_complete=False
         ).first()
@@ -1307,7 +1276,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 if isinstance(value, int) and value > 0:
                     return value
                 if isinstance(value, str):
-                    digits = "".join(character for character in value if character.isdigit())
+                    digits = "".join(
+                        character for character in value if character.isdigit()
+                    )
                     if digits:
                         return int(digits)
         return 8
@@ -1317,7 +1288,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import _character_data
 
         context = self._context()
-        character, _ = self._pending_level_up(context, self._integer(content, "character_id"))
+        character, _ = self._pending_level_up(
+            context, self._integer(content, "character_id")
+        )
         classes = list(
             CompendiumEntry.objects.filter(
                 kind=CompendiumEntry.Kind.CLASS,
@@ -1374,7 +1347,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             for entry in entries.order_by("name")[:100]
         ]
 
-    def _level_up_data(self, context, character, entry: CompendiumEntry) -> dict[str, object]:
+    def _level_up_data(
+        self, context, character, entry: CompendiumEntry
+    ) -> dict[str, object]:
         existing = character.class_levels.filter(class_entry=entry).count()
         class_level = existing + 1
         rules = _level_up_rules(entry, class_level)
@@ -1398,7 +1373,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 "hit_die": self._hit_die(entry),
                 "average_hp": self._hit_die(entry) // 2 + 1,
                 "subclass_required": needs_subclass,
-                "subclasses": entry_data.get("subclasses", []) if needs_subclass else [],
+                "subclasses": entry_data.get("subclasses", [])
+                if needs_subclass
+                else [],
             },
             **rules,
         }
@@ -1419,36 +1396,64 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import _character_data
 
         context = self._context()
-        character, _ = self._pending_level_up(context, self._integer(content, "character_id"))
-        entry = self._enabled_builder_entry(context, self._integer(content, "class_entry_id"), "class")
+        character, _ = self._pending_level_up(
+            context, self._integer(content, "character_id")
+        )
+        entry = self._enabled_builder_entry(
+            context, self._integer(content, "class_entry_id"), "class"
+        )
         before = _character_data(character)["sheet"]
         hp_increase = self._nonnegative_integer(content, "hp_increase")
         adjustments = content.get("ability_adjustments", {})
-        if not isinstance(adjustments, dict) or set(adjustments) - {
-            "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
-        } or not all(isinstance(value, int) and not isinstance(value, bool) for value in adjustments.values()):
+        if (
+            not isinstance(adjustments, dict)
+            or set(adjustments)
+            - {
+                "strength",
+                "dexterity",
+                "constitution",
+                "intelligence",
+                "wisdom",
+                "charisma",
+            }
+            or not all(
+                isinstance(value, int) and not isinstance(value, bool)
+                for value in adjustments.values()
+            )
+        ):
             raise ValidationError("Ability adjustments are invalid.")
         original_base_hp = character.base_hp
         original_adjustments = character.ability_score_adjustments
         character.base_hp += hp_increase
         character.ability_score_adjustments = {
             **original_adjustments,
-            **{key: int(original_adjustments.get(key, 0)) + value for key, value in adjustments.items()},
+            **{
+                key: int(original_adjustments.get(key, 0)) + value
+                for key, value in adjustments.items()
+            },
         }
         after = _character_data(character)["sheet"]
         character.base_hp = original_base_hp
         character.ability_score_adjustments = original_adjustments
-        return {"rules": self._level_up_data(context, character, entry), "before": before, "after": after}
+        return {
+            "rules": self._level_up_data(context, character, entry),
+            "before": before,
+            "after": after,
+        }
 
     @database_sync_to_async
     def _level_up_complete(self, content: dict[str, object]) -> dict[str, object]:
         from .api import _character_data
 
         context = self._context()
-        character, progress = self._pending_level_up(context, self._integer(content, "character_id"))
+        character, progress = self._pending_level_up(
+            context, self._integer(content, "character_id")
+        )
         if character.class_levels.filter(level=context.campaign.level).exists():
             raise ValidationError("This campaign level already has a class allocation.")
-        entry = self._enabled_builder_entry(context, self._integer(content, "class_entry_id"), "class")
+        entry = self._enabled_builder_entry(
+            context, self._integer(content, "class_entry_id"), "class"
+        )
         method = self._string(content, "hp_method", required=True)
         if method not in {"roll", "average"}:
             raise ValidationError("HP method must be roll or average.")
@@ -1459,9 +1464,22 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if method == "average" and hp_increase != hit_die // 2 + 1:
             raise ValidationError("HP average does not match the selected class.")
         adjustments = content.get("ability_adjustments", {})
-        if not isinstance(adjustments, dict) or set(adjustments) - {
-            "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
-        } or not all(isinstance(value, int) and not isinstance(value, bool) for value in adjustments.values()):
+        if (
+            not isinstance(adjustments, dict)
+            or set(adjustments)
+            - {
+                "strength",
+                "dexterity",
+                "constitution",
+                "intelligence",
+                "wisdom",
+                "charisma",
+            }
+            or not all(
+                isinstance(value, int) and not isinstance(value, bool)
+                for value in adjustments.values()
+            )
+        ):
             raise ValidationError("Ability adjustments are invalid.")
         choices = content.get("choices", [])
         if not isinstance(choices, list):
@@ -1471,7 +1489,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         subclass_name = self._string(content, "subclass_name", maximum=200)
         rule_data = self._level_up_data(context, character, entry)
         class_data = rule_data["class"]
-        if class_data["subclass_required"] and not (subclass_identifier or subclass_name):
+        if class_data["subclass_required"] and not (
+            subclass_identifier or subclass_name
+        ):
             raise ValidationError("Choose a subclass or provide a custom override.")
         submitted_choices = {
             str(row.get("identifier")): row
@@ -1485,7 +1505,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             if not isinstance(selected, list) or not isinstance(custom, list):
                 raise ValidationError("Level-up choices must use lists of values.")
             if len(selected) < int(prompt["amount"]) and not custom:
-                raise ValidationError(f"Choose {prompt['name']} or provide a custom override.")
+                raise ValidationError(
+                    f"Choose {prompt['name']} or provide a custom override."
+                )
         asi_choice = self._string(content, "asi_choice")
         adjustment_total = sum(adjustments.values())
         feat_entry = None
@@ -1494,18 +1516,37 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             if asi_choice not in {"scores", "feat"}:
                 raise ValidationError("Choose ability scores or a feat for this ASI.")
             if asi_choice == "scores":
-                if adjustment_total != 2 or any(value < 0 or value > 2 for value in adjustments.values()):
-                    raise ValidationError("An ASI must distribute exactly two points, with no score receiving more than two.")
+                if adjustment_total != 2 or any(
+                    value < 0 or value > 2 for value in adjustments.values()
+                ):
+                    raise ValidationError(
+                        "An ASI must distribute exactly two points, with no score receiving more than two."
+                    )
             else:
                 if adjustment_total:
-                    raise ValidationError("A feat cannot also spend ASI ability points.")
+                    raise ValidationError(
+                        "A feat cannot also spend ASI ability points."
+                    )
                 feat_entry_id = content.get("feat_entry_id")
-                if isinstance(feat_entry_id, int) and not isinstance(feat_entry_id, bool):
-                    feat_entry = self._enabled_builder_entry(context, feat_entry_id, "feat")
+                if isinstance(feat_entry_id, int) and not isinstance(
+                    feat_entry_id, bool
+                ):
+                    feat_entry = self._enabled_builder_entry(
+                        context, feat_entry_id, "feat"
+                    )
                 if feat_entry is None and not feat_override:
-                    raise ValidationError("Choose a feat or provide a custom feat override.")
-        elif adjustment_total or asi_choice or content.get("feat_entry_id") or feat_override:
-            raise ValidationError("This class level does not grant an ability score improvement.")
+                    raise ValidationError(
+                        "Choose a feat or provide a custom feat override."
+                    )
+        elif (
+            adjustment_total
+            or asi_choice
+            or content.get("feat_entry_id")
+            or feat_override
+        ):
+            raise ValidationError(
+                "This class level does not grant an ability score improvement."
+            )
         with transaction.atomic():
             CharacterClassLevel.objects.create(
                 character=character,
@@ -1519,10 +1560,19 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             character.base_hp += hp_increase
             character.ability_score_adjustments = {
                 **character.ability_score_adjustments,
-                **{key: int(character.ability_score_adjustments.get(key, 0)) + value for key, value in adjustments.items()},
+                **{
+                    key: int(character.ability_score_adjustments.get(key, 0)) + value
+                    for key, value in adjustments.items()
+                },
             }
             character.character_class = self._class_summary(character)
-            character.save(update_fields=("base_hp", "ability_score_adjustments", "character_class"))
+            character.save(
+                update_fields=(
+                    "base_hp",
+                    "ability_score_adjustments",
+                    "character_class",
+                )
+            )
             for row in choices:
                 if not isinstance(row, dict):
                     raise ValidationError("Each level-up choice must be an object.")
@@ -1556,7 +1606,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             progress.hp_base_increase = hp_increase
             progress.is_complete = True
             progress.completed_at = timezone.now()
-            progress.save(update_fields=("hp_method", "hp_base_increase", "is_complete", "completed_at"))
+            progress.save(
+                update_fields=(
+                    "hp_method",
+                    "hp_base_increase",
+                    "is_complete",
+                    "completed_at",
+                )
+            )
             post_health_transaction(
                 character,
                 reason=HealthTransaction.Reason.HEALING,
@@ -1703,7 +1760,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 history = history.filter(character__context__user=context.user)
             rows.extend(self._character_history_data(posted) for posted in history)
         if ledger in ("all", "audit"):
-            audit_models = [CalendarEvent, CampaignLevelEvent]
+            audit_models = [CampaignLevelEvent]
             if context.kind == CampaignContext.Kind.GM:
                 audit_models.extend((InvitationEvent, MembershipEvent))
             for model in audit_models:
@@ -1953,20 +2010,26 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         overrides = content.get("fields", {})
         excluded_fields = content.get("excluded_fields", [])
         if not isinstance(overrides, dict) or not isinstance(excluded_fields, list):
-            raise ValidationError("Import overrides must contain fields and exclusions.")
+            raise ValidationError(
+                "Import overrides must contain fields and exclusions."
+            )
         available_fields = set(draft["fields"])
         if set(overrides) - available_fields or any(
             not isinstance(name, str) or name not in available_fields
             for name in excluded_fields
         ):
-            raise ValidationError("An import override targets a field not in this preview.")
+            raise ValidationError(
+                "An import override targets a field not in this preview."
+            )
         for name in excluded_fields:
             draft["fields"].pop(name, None)
         draft["fields"].update(overrides)
         collection_choices = content.get("collections", {})
-        if not isinstance(collection_choices, dict) or set(collection_choices) - set(
-            draft["collections"]
-        ) or not all(isinstance(value, bool) for value in collection_choices.values()):
+        if (
+            not isinstance(collection_choices, dict)
+            or set(collection_choices) - set(draft["collections"])
+            or not all(isinstance(value, bool) for value in collection_choices.values())
+        ):
             raise ValidationError("Import collection choices are invalid.")
         imported_current = draft["fields"].pop("current_hp", before_current)
         imported_temporary = draft["fields"].pop("temporary_hp", before_temporary)
@@ -2258,6 +2321,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         return {
             "id": event.pk,
             "ledger": "health",
+            "ledger_label": str(event._meta.verbose_name),
             "character_id": event.character_id,
             "character_name": event.character.name,
             "reason": event.reason,
@@ -2277,6 +2341,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         return {
             "id": event.pk,
             "ledger": "character",
+            "ledger_label": str(event._meta.verbose_name),
             "character_id": event.character_id,
             "character_name": event.character.name,
             "reason": event.reason,
@@ -2288,24 +2353,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     @classmethod
     def _audit_data(cls, event) -> dict[str, object]:
-        description = event._meta.verbose_name.title()
+        description = str(event._meta.verbose_name)
         changes: dict[str, object] = {}
-        if isinstance(event, CalendarEvent):
-            changes = {
-                "calendar": {
-                    "before": format_campaign_date(
-                        event.before_era_abbreviation,
-                        event.before_year,
-                        event.before_day,
-                    ),
-                    "after": format_campaign_date(
-                        event.after_era_abbreviation,
-                        event.after_year,
-                        event.after_day,
-                    ),
-                }
-            }
-        elif isinstance(event, CampaignLevelEvent):
+        if isinstance(event, CampaignLevelEvent):
             changes = {
                 "level": {
                     "before": event.previous_level,
@@ -2320,6 +2370,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         return {
             "id": event.pk,
             "ledger": f"audit.{event._meta.model_name}",
+            "ledger_label": str(event._meta.verbose_name),
             "reason": getattr(event, "reason", event._meta.model_name),
             "description": description,
             "changes": changes,

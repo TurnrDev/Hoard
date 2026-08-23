@@ -14,7 +14,6 @@ from .core import (
 )
 from .experience import ExperienceAccount, ExperienceEntry, ExperienceTransaction
 from .history import (
-    CalendarEvent,
     CampaignLevelEvent,
     CharacterHistory,
     HealthTransaction,
@@ -38,7 +37,6 @@ __all__ = [
     "CampaignDatedEvent",
     "CampaignInvitation",
     "CampaignLevelEvent",
-    "CalendarEvent",
     "CampaignContext",
     "Character",
     "CharacterChoice",

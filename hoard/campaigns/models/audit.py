@@ -27,15 +27,23 @@ class CampaignDatedEvent(models.Model):
     campaign_id: int
     created_by_id: int | None
 
-    campaign = models.ForeignKey("campaigns.Campaign", on_delete=models.CASCADE)
+    campaign = models.ForeignKey(
+        "campaigns.Campaign", verbose_name="Campaign", on_delete=models.CASCADE
+    )
     created_by = models.ForeignKey(
         "campaigns.CampaignContext", null=True, blank=True, on_delete=models.SET_NULL
     )
-    occurred_at = models.DateTimeField(default=timezone.now, editable=False)
-    actor_username = models.CharField(max_length=150, blank=True)
-    campaign_era_abbreviation = models.CharField(max_length=20, null=True, blank=True)
-    campaign_year = models.PositiveIntegerField(null=True, blank=True)
-    campaign_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    occurred_at = models.DateTimeField(
+        "Occurred At", default=timezone.now, editable=False
+    )
+    actor_username = models.CharField("Actor Username", max_length=150, blank=True)
+    campaign_era_abbreviation = models.CharField(
+        "Campaign Era Abbreviation", max_length=20, null=True, blank=True
+    )
+    campaign_year = models.PositiveIntegerField("Campaign Year", null=True, blank=True)
+    campaign_day = models.PositiveSmallIntegerField(
+        "Campaign Day", null=True, blank=True
+    )
 
     class Meta:
         abstract = True

@@ -9,6 +9,7 @@ import {
   type LedgerTransaction,
 } from "../api";
 import { useCampaignRefresh } from "../realtime";
+import { displayCoin, displayIdentifier } from "../display";
 
 const campaignId = Number(useRoute().params.id);
 const campaign = ref<Campaign>();
@@ -47,7 +48,10 @@ function amount(transaction: LedgerTransaction): string {
   }
   return transaction.entries
     .filter((entry) => entry.amount > 0)
-    .map((entry) => `${entry.amount} ${entry.item_name ?? entry.denomination ?? "XP"}`)
+    .map(
+      (entry) =>
+        `${entry.amount} ${entry.item_name ?? (entry.denomination ? displayCoin(entry.denomination) : "XP")}`,
+    )
     .join(" · ");
 }
 
@@ -55,7 +59,7 @@ function typeIcon(transaction: LedgerTransaction): string {
   return (
     {
       experience: "mdi-star-four-points",
-      money: "mdi-coins",
+      money: "mdi-cash-multiple",
       inventory: "mdi-package-variant",
       health: "mdi-heart-pulse",
       character: "mdi-account-edit-outline",
@@ -120,18 +124,19 @@ useCampaignRefresh(load);
       {{ error }}
     </v-alert>
     <v-card>
-      <v-table class="ledger-table">
+      <v-table class="a11y-table ledger-table">
+        <caption class="visually-hidden">Immutable campaign audit history</caption>
         <thead>
           <tr>
-            <th>Real datetime</th>
-            <th>Campaign date</th>
-            <th>Type</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Amount</th>
-            <th>Description</th>
-            <th>By</th>
-            <th />
+            <th scope="col">Real datetime</th>
+            <th scope="col">Campaign date</th>
+            <th scope="col">Type</th>
+            <th scope="col">From</th>
+            <th scope="col">To</th>
+            <th scope="col">Amount</th>
+            <th scope="col">Description</th>
+            <th scope="col">By</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -139,7 +144,9 @@ useCampaignRefresh(load);
             v-for="transaction in transactions"
             :key="`${transaction.ledger}-${transaction.id}`"
           >
-            <td>{{ new Date(transaction.occurred_at).toLocaleString() }}</td>
+            <th scope="row">
+              {{ new Date(transaction.occurred_at).toLocaleString() }}
+            </th>
             <td>{{ transaction.campaign_date ?? "Campaign date unavailable" }}</td>
             <td>
               <v-icon
@@ -147,7 +154,7 @@ useCampaignRefresh(load);
                 size="small"
                 color="primary"
               />
-              {{ transaction.ledger }}
+              {{ transaction.ledger_label ?? displayIdentifier(transaction.ledger) }}
             </td>
             <td>{{ names(transaction, false) }}</td>
             <td>{{ names(transaction, true) }}</td>
@@ -168,6 +175,7 @@ useCampaignRefresh(load);
                 icon="mdi-undo"
                 size="small"
                 variant="text"
+                :aria-label="`Reverse ${transaction.ledger_label ?? displayIdentifier(transaction.ledger)} transaction`"
                 @click="reversing = transaction"
               />
             </td>

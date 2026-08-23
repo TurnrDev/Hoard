@@ -4,7 +4,9 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("campaigns", "0006_alter_character_character_class_alter_character_race")]
+    dependencies = [
+        ("campaigns", "0006_alter_character_character_class_alter_character_race")
+    ]
 
     operations = [
         migrations.AddField(

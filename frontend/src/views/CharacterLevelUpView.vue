@@ -14,6 +14,7 @@ import {
   type LevelUpRules,
 } from "../api";
 import CompendiumEntryPicker from "../components/CompendiumEntryPicker.vue";
+import { displayIdentifier } from "../display";
 
 const route = useRoute();
 const router = useRouter();
@@ -562,32 +563,58 @@ onMounted(load);
           </v-alert>
           <template v-else-if="preview">
             <h2 class="text-h6 mb-3">Changes to apply</h2>
-            <v-table density="compact">
+            <v-table
+              density="compact"
+              class="a11y-table"
+            >
+              <caption class="visually-hidden">Level-up changes to apply</caption>
               <thead>
                 <tr>
-                  <th>Value</th>
-                  <th>Before</th>
-                  <th>After</th>
+                  <th scope="col">Value</th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    Before
+                  </th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    After
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Maximum HP</td>
-                  <td>{{ preview.before.max_hp }}</td>
-                  <td>{{ preview.after.max_hp }}</td>
+                  <th scope="row">Maximum HP</th>
+                  <td class="a11y-number">
+                    {{ preview.before.max_hp.toLocaleString() }}
+                  </td>
+                  <td class="a11y-number">
+                    {{ preview.after.max_hp.toLocaleString() }}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Proficiency bonus</td>
-                  <td>{{ preview.before.proficiency_bonus }}</td>
-                  <td>{{ preview.after.proficiency_bonus }}</td>
+                  <th scope="row">Proficiency bonus</th>
+                  <td class="a11y-number">
+                    {{ preview.before.proficiency_bonus.toLocaleString() }}
+                  </td>
+                  <td class="a11y-number">
+                    {{ preview.after.proficiency_bonus.toLocaleString() }}
+                  </td>
                 </tr>
                 <tr
                   v-for="ability in abilities"
                   :key="ability"
                 >
-                  <td>{{ ability }}</td>
-                  <td>{{ preview.before.abilities[ability]?.score }}</td>
-                  <td>{{ preview.after.abilities[ability]?.score }}</td>
+                  <th scope="row">{{ displayIdentifier(ability) }}</th>
+                  <td class="a11y-number">
+                    {{ preview.before.abilities[ability]?.score }}
+                  </td>
+                  <td class="a11y-number">
+                    {{ preview.after.abilities[ability]?.score }}
+                  </td>
                 </tr>
               </tbody>
             </v-table>

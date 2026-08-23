@@ -160,4 +160,6 @@ class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(self.character.name, "Adjusted import")
         self.assertEqual(self.character.background, "")
         self.assertEqual(self.character.languages, ["Common", "Choose 1"])
-        self.assertEqual(list(self.character.notes.values_list("title", flat=True)), ["Keep"])
+        self.assertEqual(
+            list(self.character.notes.values_list("title", flat=True)), ["Keep"]
+        )

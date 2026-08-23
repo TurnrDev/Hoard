@@ -7,6 +7,7 @@ import {
   itemSummary,
   type PickerCandidate,
 } from "../itemPicker";
+import { displayIdentifier } from "../display";
 
 const props = withDefaults(
   defineProps<{
@@ -122,38 +123,39 @@ function facts(item: Item): string[] {
 <template>
   <div :class="['item-picker-field', { 'mb-4': !compact }]">
     <div class="text-subtitle-2 mb-1">{{ label }}</div>
-    <v-btn
-      block
-      variant="outlined"
-      class="justify-start text-none"
-      :disabled="disabled || loading"
-      :loading="loading"
-      @click="show"
-    >
-      <v-icon start>mdi-package-variant</v-icon>
-      <span
-        v-if="selected"
-        class="text-truncate"
+    <div class="d-flex align-center ga-1">
+      <v-btn
+        block
+        variant="outlined"
+        class="justify-start text-none"
+        :disabled="disabled || loading"
+        :loading="loading"
+        @click="show"
       >
-        {{ selected.item.name }}
-        <span class="text-medium-emphasis">— {{ itemSummary(selected.item) }}</span>
-      </span>
-      <span
-        v-else
-        class="text-medium-emphasis"
-      >
-        Choose an item
-      </span>
-      <template #append>
-        <v-btn
+        <v-icon start>mdi-package-variant</v-icon>
+        <span
           v-if="selected"
-          icon="mdi-close"
-          size="x-small"
-          variant="text"
-          @click.stop="clear"
-        />
-      </template>
-    </v-btn>
+          class="text-truncate"
+        >
+          {{ selected.item.name }}
+          <span class="text-medium-emphasis">— {{ itemSummary(selected.item) }}</span>
+        </span>
+        <span
+          v-else
+          class="text-medium-emphasis"
+        >
+          Choose an item
+        </span>
+      </v-btn>
+      <v-btn
+        v-if="selected"
+        icon="mdi-close"
+        size="small"
+        variant="text"
+        :aria-label="`Clear selected item: ${selected.item.name}`"
+        @click="clear"
+      />
+    </div>
   </div>
 
   <v-dialog
@@ -268,10 +270,12 @@ function facts(item: Item): string[] {
             cols="6"
             md="3"
           >
-            <v-text-field
+            <v-number-input
               v-model.number="filters.minCost"
-              type="number"
-              min="0"
+              control-variant="stacked"
+              :min="0"
+              :step="0.01"
+              :precision="2"
               label="Min cost (gp)"
               clearable
             />
@@ -280,10 +284,12 @@ function facts(item: Item): string[] {
             cols="6"
             md="3"
           >
-            <v-text-field
+            <v-number-input
               v-model.number="filters.maxCost"
-              type="number"
-              min="0"
+              control-variant="stacked"
+              :min="0"
+              :step="0.01"
+              :precision="2"
               label="Max cost (gp)"
               clearable
             />
@@ -292,10 +298,12 @@ function facts(item: Item): string[] {
             cols="6"
             md="3"
           >
-            <v-text-field
+            <v-number-input
               v-model.number="filters.minWeight"
-              type="number"
-              min="0"
+              control-variant="stacked"
+              :min="0"
+              :step="0.001"
+              :precision="3"
               label="Min weight"
               clearable
             />
@@ -304,10 +312,12 @@ function facts(item: Item): string[] {
             cols="6"
             md="3"
           >
-            <v-text-field
+            <v-number-input
               v-model.number="filters.maxWeight"
-              type="number"
-              min="0"
+              control-variant="stacked"
+              :min="0"
+              :step="0.001"
+              :precision="3"
               label="Max weight"
               clearable
             />
@@ -417,17 +427,17 @@ function facts(item: Item): string[] {
           <v-list-item
             v-if="detailItem.equipment.category"
             title="Category"
-            :subtitle="detailItem.equipment.category"
+            :subtitle="displayIdentifier(detailItem.equipment.category)"
           />
           <v-list-item
             v-if="detailItem.equipment.item_type"
             title="Type"
-            :subtitle="detailItem.equipment.item_type"
+            :subtitle="displayIdentifier(detailItem.equipment.item_type)"
           />
           <v-list-item
             v-if="detailItem.equipment.rarity"
             title="Rarity"
-            :subtitle="detailItem.equipment.rarity"
+            :subtitle="displayIdentifier(detailItem.equipment.rarity)"
           />
           <v-list-item
             v-if="detailItem.equipment.is_magic !== null"

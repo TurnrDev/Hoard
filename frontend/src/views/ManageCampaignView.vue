@@ -12,13 +12,13 @@ import {
   removeMember,
   resendInvitation,
   revokeInvitation,
-  updateMember,
   type Campaign,
   type CampaignInvitation,
   type CampaignMember,
   type Character,
 } from "../api";
 import { useCampaignRefresh } from "../realtime";
+import { displayIdentifier } from "../display";
 
 const route = useRoute();
 const router = useRouter();
@@ -127,16 +127,6 @@ async function revoke(invitation: CampaignInvitation): Promise<void> {
   }
 }
 
-async function toggleGm(member: CampaignMember): Promise<void> {
-  try {
-    await updateMember(campaignId, member.id, !member.is_game_master);
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to update member.";
-  }
-}
-
 async function deactivate(member: CampaignMember): Promise<void> {
   try {
     await removeMember(campaignId, member.id);
@@ -229,15 +219,10 @@ useCampaignRefresh(load);
                 </v-list-item-subtitle>
                 <template #append>
                   <v-btn
-                    icon="mdi-shield-account"
-                    variant="text"
-                    :disabled="!member.is_active"
-                    @click="toggleGm(member)"
-                  />
-                  <v-btn
                     icon="mdi-account-remove"
                     variant="text"
                     :disabled="!member.is_active"
+                    :aria-label="`Deactivate ${member.username}`"
                     @click="deactivate(member)"
                   />
                 </template>
@@ -249,19 +234,21 @@ useCampaignRefresh(load);
                 v-for="invitation in invitations"
                 :key="invitation.id"
                 :title="invitation.email || 'Shareable link'"
-                :subtitle="`${invitation.status} · expires ${new Date(invitation.expires_at).toLocaleString()}`"
+                :subtitle="`${displayIdentifier(invitation.status)} · expires ${new Date(invitation.expires_at).toLocaleString()}`"
               >
                 <template #append>
                   <v-btn
                     v-if="invitation.status === 'pending'"
                     icon="mdi-email-sync-outline"
                     variant="text"
+                    :aria-label="`Resend invitation to ${invitation.email || 'shareable link'}`"
                     @click="resend(invitation)"
                   />
                   <v-btn
                     v-if="invitation.status === 'pending'"
                     icon="mdi-link-off"
                     variant="text"
+                    :aria-label="`Revoke invitation to ${invitation.email || 'shareable link'}`"
                     @click="revoke(invitation)"
                   />
                 </template>
@@ -332,6 +319,7 @@ useCampaignRefresh(load);
                     v-if="!character.is_archived"
                     icon="mdi-archive"
                     variant="text"
+                    :aria-label="`Archive ${character.name}`"
                     @click="archive(character)"
                   />
                 </template>

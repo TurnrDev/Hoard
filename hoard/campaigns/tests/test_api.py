@@ -77,6 +77,24 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         )
         self.assertEqual(set(contexts), {"gm", "pc"})
 
+    def test_metadata_exposes_explicit_field_and_choice_labels(self) -> None:
+        self.client.force_login(self.player_user)
+        response = self.client.get(f"/api/contexts/{self.pc.pk}/metadata/")
+
+        self.assertEqual(response.status_code, 200)
+        metadata = response.json()
+        self.assertEqual(metadata["character"]["temporary_hp"]["label"], "Temporary HP")
+        self.assertEqual(
+            metadata["money_entry"]["denomination"]["choices"],
+            [
+                {"value": "cp", "label": "Copper"},
+                {"value": "sp", "label": "Silver"},
+                {"value": "ep", "label": "Electrum"},
+                {"value": "gp", "label": "Gold"},
+                {"value": "pp", "label": "Platinum"},
+            ],
+        )
+
     def test_players_can_view_the_calendar_but_only_gms_can_adjust_it(self) -> None:
         visible = self.socket_request(
             self.player_user, self.pc.pk, "campaign.calendar.get"
@@ -242,7 +260,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
                                 "raw_rules": "x" * 1_100_000,
                             }
                         ]
-                    }
+                    },
                 }
             },
         )

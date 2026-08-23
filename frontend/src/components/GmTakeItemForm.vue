@@ -89,10 +89,10 @@ onMounted(async () => {
         label="Item in inventory"
         no-data-text="This character has no recorded items."
       />
-      <v-text-field
+      <v-number-input
         v-model.number="quantity"
-        type="number"
-        min="1"
+        control-variant="split"
+        :min="1"
         label="Quantity"
       />
       <v-textarea

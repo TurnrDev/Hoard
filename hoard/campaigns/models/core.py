@@ -43,14 +43,18 @@ XP_LEVEL_THRESHOLDS = (
 
 
 class Campaign(models.Model):
-    name = models.CharField(max_length=200)
-    calendar_era_abbreviation = models.CharField(max_length=20, default="PD")
-    calendar_era_name = models.CharField(max_length=100, default="Powder Dynasty")
-    calendar_year = models.PositiveIntegerField(default=81)
-    calendar_day = models.PositiveSmallIntegerField(default=137)
-    use_shared_exp = models.BooleanField(default=True)
-    shared_experience = models.PositiveIntegerField(default=0)
-    level = models.PositiveSmallIntegerField(default=1)
+    name = models.CharField("Campaign Name", max_length=200)
+    calendar_era_abbreviation = models.CharField(
+        "Calendar Era Abbreviation", max_length=20, default="PD"
+    )
+    calendar_era_name = models.CharField(
+        "Calendar Era Name", max_length=100, default="Powder Dynasty"
+    )
+    calendar_year = models.PositiveIntegerField("Calendar Year", default=81)
+    calendar_day = models.PositiveSmallIntegerField("Calendar Day", default=137)
+    use_shared_exp = models.BooleanField("Use Shared Experience", default=True)
+    shared_experience = models.PositiveIntegerField("Shared Experience", default=0)
+    level = models.PositiveSmallIntegerField("Campaign Level", default=1)
     compendium_sources = models.ManyToManyField(
         "compendium.CompendiumSource", blank=True, related_name="enabled_campaigns"
     )
@@ -153,6 +157,22 @@ class CampaignContext(models.Model):
     def __str__(self) -> str:
         return f"{self.user} as {self.get_kind_display()} in {self.campaign}"
 
+    def clean(self) -> None:
+        super().clean()
+        if not self.pk:
+            return
+        original_kind = (
+            type(self).objects.filter(pk=self.pk).values_list("kind", flat=True).first()
+        )
+        if original_kind is not None and original_kind != self.kind:
+            raise ValidationError(
+                {"kind": "A campaign context's role cannot be changed."}
+            )
+
+    def save(self, *args, **kwargs) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
 
 @dataclass(frozen=True)
 class MoneyBalance:
@@ -187,13 +207,13 @@ class Character(models.Model):
         on_delete=models.SET_NULL,
         related_name="character",
     )
-    is_active = models.BooleanField(default=False)
-    is_archived = models.BooleanField(default=False)
-    is_build_complete = models.BooleanField(default=True)
-    archived_at = models.DateTimeField(null=True, blank=True)
-    name = models.CharField(max_length=200)
+    is_active = models.BooleanField("Is Active", default=False)
+    is_archived = models.BooleanField("Is Archived", default=False)
+    is_build_complete = models.BooleanField("Is Build Complete", default=True)
+    archived_at = models.DateTimeField("Archived At", null=True, blank=True)
+    name = models.CharField("Character Name", max_length=200)
     race = models.CharField(max_length=100, blank=True)
-    character_class = models.CharField(max_length=100, blank=True)
+    character_class = models.CharField("Class", max_length=100, blank=True)
     background = models.CharField(max_length=100, blank=True)
     race_entry = models.ForeignKey(
         "compendium.CompendiumEntry",
@@ -212,31 +232,37 @@ class Character(models.Model):
     subrace_identifier = models.CharField(max_length=200, blank=True)
     subrace_name = models.CharField(max_length=200, blank=True)
     alignment = models.CharField(max_length=100, blank=True)
-    personality_traits = models.TextField(blank=True)
+    personality_traits = models.TextField("Personality Traits", blank=True)
     ideals = models.TextField(blank=True)
     bonds = models.TextField(blank=True)
     flaws = models.TextField(blank=True)
     about = models.TextField(blank=True)
     languages = models.JSONField(default=list, blank=True)
-    equipment_proficiencies = models.JSONField(default=dict, blank=True)
-    ability_bonuses = models.JSONField(default=dict, blank=True)
-    ability_score_adjustments = models.JSONField(default=dict, blank=True)
-    strength = models.PositiveSmallIntegerField()
-    dexterity = models.PositiveSmallIntegerField()
-    constitution = models.PositiveSmallIntegerField()
-    intelligence = models.PositiveSmallIntegerField()
-    wisdom = models.PositiveSmallIntegerField()
-    charisma = models.PositiveSmallIntegerField()
-    base_hp = models.PositiveSmallIntegerField(default=1)
-    hp_ability = models.CharField(max_length=20, default="constitution")
-    hp_adjustment = models.SmallIntegerField(default=0)
-    current_hp = models.IntegerField(default=1)
-    temporary_hp = models.IntegerField(default=0)
-    base_ac = models.PositiveSmallIntegerField(default=10)
-    ac_adjustment = models.SmallIntegerField(default=0)
+    equipment_proficiencies = models.JSONField(
+        "Equipment Proficiencies", default=dict, blank=True
+    )
+    ability_bonuses = models.JSONField("Ability Bonuses", default=dict, blank=True)
+    ability_score_adjustments = models.JSONField(
+        "Ability Score Adjustments", default=dict, blank=True
+    )
+    strength = models.PositiveSmallIntegerField("Strength")
+    dexterity = models.PositiveSmallIntegerField("Dexterity")
+    constitution = models.PositiveSmallIntegerField("Constitution")
+    intelligence = models.PositiveSmallIntegerField("Intelligence")
+    wisdom = models.PositiveSmallIntegerField("Wisdom")
+    charisma = models.PositiveSmallIntegerField("Charisma")
+    base_hp = models.PositiveSmallIntegerField("Base HP", default=1)
+    hp_ability = models.CharField("HP Ability", max_length=20, default="constitution")
+    hp_adjustment = models.SmallIntegerField("HP Adjustment", default=0)
+    current_hp = models.IntegerField("Current HP", default=1)
+    temporary_hp = models.IntegerField("Temporary HP", default=0)
+    base_ac = models.PositiveSmallIntegerField("Base AC", default=10)
+    ac_adjustment = models.SmallIntegerField("AC Adjustment", default=0)
     speed = models.CharField(max_length=100, blank=True)
     spell_slots = models.JSONField(default=dict, blank=True)
-    proficiency_bonus_adjustment = models.SmallIntegerField(default=0)
+    proficiency_bonus_adjustment = models.SmallIntegerField(
+        "Proficiency Bonus Adjustment", default=0
+    )
     strength_modifier_adjustment = models.SmallIntegerField(default=0)
     dexterity_modifier_adjustment = models.SmallIntegerField(default=0)
     constitution_modifier_adjustment = models.SmallIntegerField(default=0)
@@ -269,6 +295,10 @@ class Character(models.Model):
             )
         if self.context_id and self.context.kind != CampaignContext.Kind.PC:
             raise ValidationError({"context": "Only a PC context may own a character."})
+
+    def save(self, *args, **kwargs) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
 
     @property
     def is_player_character(self) -> bool:

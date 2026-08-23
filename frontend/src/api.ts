@@ -220,6 +220,7 @@ export type LedgerEntry = {
 export type LedgerTransaction = {
   id: number;
   ledger: string;
+  ledger_label?: string;
   description: string;
   created_at: string;
   occurred_at: string;
@@ -377,15 +378,6 @@ export const disableCompendiumSource = (id: number, sourceId: number) =>
 export const getCompendiumRepositories = (id: number) => {
   return compendiumRequest<CompendiumRepository[]>(id, "compendium.repositories.list");
 };
-export const updateMember = (
-  campaignId: number,
-  memberId: number,
-  isGameMaster: boolean,
-) =>
-  contextRequest<CampaignMember>(campaignId, "campaign.members.update", {
-    member_id: memberId,
-    is_game_master: isGameMaster,
-  });
 export const removeMember = (campaignId: number, memberId: number) =>
   contextRequest<void>(campaignId, "campaign.members.deactivate", {
     member_id: memberId,

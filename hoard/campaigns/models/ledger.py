@@ -9,7 +9,7 @@ from .audit import CampaignDatedEvent
 
 
 class LedgerTransaction(CampaignDatedEvent):
-    description = models.TextField(blank=True)
+    description = models.TextField("Description", blank=True)
 
     class Meta:
         abstract = True
