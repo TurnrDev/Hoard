@@ -37,6 +37,9 @@ const characters = ref<Character[]>([]);
 const items = ref<Item[]>([]);
 const error = ref("");
 const notice = ref("");
+if (typeof route.query.level_up_error === "string") {
+  error.value = route.query.level_up_error;
+}
 const grantItemId = ref<number>();
 const grantQuantity = ref(1);
 const itemAction = ref<"use" | "destroy" | "transfer">();
@@ -505,7 +508,7 @@ useCampaignRefresh(load);
       <template #append>
         <v-btn
           color="error"
-          :to="'/c/' + campaignId + '/characters/' + characterId + '/build'"
+          :to="'/c/' + campaignId + '/characters/' + characterId + '/level-up'"
         >
           Complete level-up
         </v-btn>

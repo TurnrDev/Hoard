@@ -187,6 +187,88 @@ def _builder_entry_data(entry: CompendiumEntry) -> dict[str, object]:
     return {key: value for key, value in normalized.items() if value}
 
 
+def _level_up_rules(
+    entry: CompendiumEntry, class_level: int
+) -> dict[str, object]:
+    """Extract only the choices and gains relevant to one class level."""
+    data = entry.data if isinstance(entry.data, dict) else {}
+    stats = _unwrapped(data.get("stats"))
+    sources = (data, stats if isinstance(stats, dict) else {})
+
+    def detail(value: object) -> tuple[str, str, str]:
+        value = _unwrapped(value)
+        if not isinstance(value, dict):
+            return "", "", ""
+        feat = _unwrapped(value.get("feat"))
+        row = feat if isinstance(feat, dict) else value
+        name = _unwrapped(row.get("name"))
+        identifier = _unwrapped(row.get("id"))
+        descriptions = _unwrapped(row.get("descriptionModels"))
+        description = ""
+        if isinstance(descriptions, list):
+            for item in descriptions:
+                item = _unwrapped(item)
+                if isinstance(item, dict) and int(_unwrapped(item.get("level")) or 1) <= class_level:
+                    candidate = _unwrapped(item.get("description"))
+                    if isinstance(candidate, str):
+                        description = candidate
+        return (name.strip() if isinstance(name, str) else "", identifier if isinstance(identifier, str) else "", description)
+
+    gains: list[dict[str, object]] = []
+    prompts: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for source in sources:
+        features = _unwrapped(source.get("features"))
+        if isinstance(features, list):
+            for row in features:
+                row = _unwrapped(row)
+                if not isinstance(row, dict) or int(_unwrapped(row.get("level")) or 1) != class_level:
+                    continue
+                name, identifier, description = detail(row)
+                if name and (identifier or name) not in seen:
+                    seen.add(identifier or name)
+                    gains.append({"name": name, "identifier": identifier or name, "description": description})
+        selectable = _unwrapped(source.get("selectableFeatures"))
+        if not isinstance(selectable, list):
+            continue
+        for index, row in enumerate(selectable):
+            row = _unwrapped(row)
+            if not isinstance(row, dict):
+                continue
+            amount = 0
+            amounts = _unwrapped(row.get("amountsPerLevel"))
+            if isinstance(amounts, list):
+                for amount_row in amounts:
+                    amount_row = _unwrapped(amount_row)
+                    if isinstance(amount_row, dict) and int(_unwrapped(amount_row.get("level")) or 0) == class_level:
+                        amount = int(_unwrapped(amount_row.get("amount")) or 0)
+            if not amount:
+                continue
+            options = []
+            available = _unwrapped(row.get("availableFeatures"))
+            if isinstance(available, list):
+                for option in available:
+                    name, identifier, description = detail(option)
+                    if name:
+                        options.append({"name": name, "identifier": identifier or name, "description": description})
+            prompts.append({"identifier": str(_unwrapped(row.get("id")) or f"class-choice-{index}"), "name": str(_unwrapped(row.get("name")) or "Class choice"), "amount": amount, "options": options})
+    feature_asi = any(
+        "ability score improvement" in str(gain["name"]).casefold()
+        for gain in gains
+    )
+    default_asi_levels = {4, 8, 12, 16, 19}
+    class_name = entry.name.casefold()
+    if class_name == "fighter":
+        default_asi_levels.update((6, 14))
+    elif class_name == "rogue":
+        default_asi_levels.add(10)
+    return {
+        "gains": gains,
+        "choices": prompts,
+        "ability_score_improvement": feature_asi or class_level in default_asi_levels,
+    }
+
+
 class HoardJsonWebsocketConsumer(AsyncJsonWebsocketConsumer):
     @classmethod
     async def encode_json(cls, content: object) -> str:
@@ -252,6 +334,11 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.builder.get": self._builder_get,
             "characters.builder.save": self._builder_save,
             "characters.builder.complete": self._builder_complete,
+            "characters.level_up.definition": self._level_up_definition,
+            "characters.level_up.class.get": self._level_up_class_get,
+            "characters.level_up.preview": self._level_up_preview,
+            "characters.level_up.complete": self._level_up_complete,
+            "characters.level_up.feats": self._level_up_feats,
             "characters.health.post": self._health_post,
             "characters.notes.create": self._sheet_change,
             "characters.notes.update": self._sheet_change,
@@ -1193,6 +1280,297 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                     if is_level_up
                     else "Completed character builder"
                 ),
+            )
+        notify_campaign_changed(context.campaign_id)
+        return _character_data(character)
+
+    def _pending_level_up(self, context, character_id: int):
+        from .api import _editable_sheet_character
+
+        character = _editable_sheet_character(context, character_id)
+        if not character.is_player_character or not character.is_active:
+            raise ValidationError("Level-up is only available for active player characters.")
+        progress = character.level_progress.filter(
+            level=context.campaign.level, is_complete=False
+        ).first()
+        if progress is None:
+            raise ValidationError("This character has no pending level-up.")
+        return character, progress
+
+    @staticmethod
+    def _hit_die(entry: CompendiumEntry) -> int:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        stats = _unwrapped(data.get("stats"))
+        for source in (data, stats if isinstance(stats, dict) else {}):
+            for key in ("hit_die", "hitDie", "hit_dice", "hitDice"):
+                value = _unwrapped(source.get(key))
+                if isinstance(value, int) and value > 0:
+                    return value
+                if isinstance(value, str):
+                    digits = "".join(character for character in value if character.isdigit())
+                    if digits:
+                        return int(digits)
+        return 8
+
+    @database_sync_to_async
+    def _level_up_definition(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data
+
+        context = self._context()
+        character, _ = self._pending_level_up(context, self._integer(content, "character_id"))
+        classes = list(
+            CompendiumEntry.objects.filter(
+                kind=CompendiumEntry.Kind.CLASS,
+                source__in=context.campaign.compendium_sources.all(),
+            )
+            .select_related("source", "source__repository")
+            .order_by("name", "pk")
+        )
+        entries_by_id = {entry.pk: entry for entry in classes}
+        entries_by_name = {entry.name.casefold(): entry for entry in classes}
+        preferred_class_ids: list[int] = []
+        for row in character.class_levels.order_by("-level"):
+            entry = entries_by_id.get(row.class_entry_id) or entries_by_name.get(
+                row.class_name.casefold()
+            )
+            if entry is not None and entry.pk not in preferred_class_ids:
+                preferred_class_ids.append(entry.pk)
+        return {
+            "character": _character_data(character),
+            "level": context.campaign.level,
+            "preferred_class_ids": preferred_class_ids,
+            "classes": [
+                {
+                    "id": entry.pk,
+                    "name": entry.name,
+                    "source": entry.source.name,
+                    "source_book": entry.source_book,
+                    "identifier": entry.source_identifier,
+                }
+                for entry in classes
+            ],
+        }
+
+    @database_sync_to_async
+    def _level_up_feats(self, content: dict[str, object]) -> list[dict[str, object]]:
+        context = self._context()
+        # The character guard prevents this from becoming a general large
+        # Compendium response and keeps the feat picker scoped to a level-up.
+        self._pending_level_up(context, self._integer(content, "character_id"))
+        query = self._string(content, "query")
+        entries = CompendiumEntry.objects.filter(
+            kind=CompendiumEntry.Kind.FEAT,
+            source__in=context.campaign.compendium_sources.all(),
+        ).select_related("source")
+        if query:
+            entries = entries.filter(name__icontains=query)
+        return [
+            {
+                "id": entry.pk,
+                "name": entry.name,
+                "source": entry.source.name,
+                "source_book": entry.source_book,
+            }
+            for entry in entries.order_by("name")[:100]
+        ]
+
+    def _level_up_data(self, context, character, entry: CompendiumEntry) -> dict[str, object]:
+        existing = character.class_levels.filter(class_entry=entry).count()
+        class_level = existing + 1
+        rules = _level_up_rules(entry, class_level)
+        entry_data = _builder_entry_data(entry)
+        subclass_level = entry_data.get("subclass_selection_level")
+        needs_subclass = (
+            isinstance(subclass_level, int)
+            and subclass_level == class_level
+            and not character.class_levels.filter(
+                class_entry=entry,
+                subclass_identifier__gt="",
+            ).exists()
+        )
+        return {
+            "class": {
+                "id": entry.pk,
+                "name": entry.name,
+                "source": entry.source.name,
+                "source_book": entry.source_book,
+                "class_level": class_level,
+                "hit_die": self._hit_die(entry),
+                "average_hp": self._hit_die(entry) // 2 + 1,
+                "subclass_required": needs_subclass,
+                "subclasses": entry_data.get("subclasses", []) if needs_subclass else [],
+            },
+            **rules,
+        }
+
+    @database_sync_to_async
+    def _level_up_class_get(self, content: dict[str, object]) -> dict[str, object]:
+        context = self._context()
+        character, _ = self._pending_level_up(
+            context, self._integer(content, "character_id")
+        )
+        entry = self._enabled_builder_entry(
+            context, self._integer(content, "class_entry_id"), "class"
+        )
+        return self._level_up_data(context, character, entry)
+
+    @database_sync_to_async
+    def _level_up_preview(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data
+
+        context = self._context()
+        character, _ = self._pending_level_up(context, self._integer(content, "character_id"))
+        entry = self._enabled_builder_entry(context, self._integer(content, "class_entry_id"), "class")
+        before = _character_data(character)["sheet"]
+        hp_increase = self._nonnegative_integer(content, "hp_increase")
+        adjustments = content.get("ability_adjustments", {})
+        if not isinstance(adjustments, dict) or set(adjustments) - {
+            "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
+        } or not all(isinstance(value, int) and not isinstance(value, bool) for value in adjustments.values()):
+            raise ValidationError("Ability adjustments are invalid.")
+        original_base_hp = character.base_hp
+        original_adjustments = character.ability_score_adjustments
+        character.base_hp += hp_increase
+        character.ability_score_adjustments = {
+            **original_adjustments,
+            **{key: int(original_adjustments.get(key, 0)) + value for key, value in adjustments.items()},
+        }
+        after = _character_data(character)["sheet"]
+        character.base_hp = original_base_hp
+        character.ability_score_adjustments = original_adjustments
+        return {"rules": self._level_up_data(context, character, entry), "before": before, "after": after}
+
+    @database_sync_to_async
+    def _level_up_complete(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data
+
+        context = self._context()
+        character, progress = self._pending_level_up(context, self._integer(content, "character_id"))
+        if character.class_levels.filter(level=context.campaign.level).exists():
+            raise ValidationError("This campaign level already has a class allocation.")
+        entry = self._enabled_builder_entry(context, self._integer(content, "class_entry_id"), "class")
+        method = self._string(content, "hp_method", required=True)
+        if method not in {"roll", "average"}:
+            raise ValidationError("HP method must be roll or average.")
+        hp_increase = self._positive_integer(content, "hp_increase", default=0)
+        hit_die = self._hit_die(entry)
+        if method == "roll" and hp_increase > hit_die:
+            raise ValidationError("HP roll cannot exceed the class hit die.")
+        if method == "average" and hp_increase != hit_die // 2 + 1:
+            raise ValidationError("HP average does not match the selected class.")
+        adjustments = content.get("ability_adjustments", {})
+        if not isinstance(adjustments, dict) or set(adjustments) - {
+            "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
+        } or not all(isinstance(value, int) and not isinstance(value, bool) for value in adjustments.values()):
+            raise ValidationError("Ability adjustments are invalid.")
+        choices = content.get("choices", [])
+        if not isinstance(choices, list):
+            raise ValidationError("Level-up choices must be a list.")
+        before = character_snapshot(character)
+        subclass_identifier = self._string(content, "subclass_identifier", maximum=200)
+        subclass_name = self._string(content, "subclass_name", maximum=200)
+        rule_data = self._level_up_data(context, character, entry)
+        class_data = rule_data["class"]
+        if class_data["subclass_required"] and not (subclass_identifier or subclass_name):
+            raise ValidationError("Choose a subclass or provide a custom override.")
+        submitted_choices = {
+            str(row.get("identifier")): row
+            for row in choices
+            if isinstance(row, dict) and isinstance(row.get("identifier"), str)
+        }
+        for prompt in rule_data["choices"]:
+            identifier = str(prompt["identifier"])
+            selected = submitted_choices.get(identifier, {}).get("values", [])
+            custom = submitted_choices.get(f"custom:{identifier}", {}).get("values", [])
+            if not isinstance(selected, list) or not isinstance(custom, list):
+                raise ValidationError("Level-up choices must use lists of values.")
+            if len(selected) < int(prompt["amount"]) and not custom:
+                raise ValidationError(f"Choose {prompt['name']} or provide a custom override.")
+        asi_choice = self._string(content, "asi_choice")
+        adjustment_total = sum(adjustments.values())
+        feat_entry = None
+        feat_override = self._string(content, "feat_override", maximum=200)
+        if rule_data["ability_score_improvement"]:
+            if asi_choice not in {"scores", "feat"}:
+                raise ValidationError("Choose ability scores or a feat for this ASI.")
+            if asi_choice == "scores":
+                if adjustment_total != 2 or any(value < 0 or value > 2 for value in adjustments.values()):
+                    raise ValidationError("An ASI must distribute exactly two points, with no score receiving more than two.")
+            else:
+                if adjustment_total:
+                    raise ValidationError("A feat cannot also spend ASI ability points.")
+                feat_entry_id = content.get("feat_entry_id")
+                if isinstance(feat_entry_id, int) and not isinstance(feat_entry_id, bool):
+                    feat_entry = self._enabled_builder_entry(context, feat_entry_id, "feat")
+                if feat_entry is None and not feat_override:
+                    raise ValidationError("Choose a feat or provide a custom feat override.")
+        elif adjustment_total or asi_choice or content.get("feat_entry_id") or feat_override:
+            raise ValidationError("This class level does not grant an ability score improvement.")
+        with transaction.atomic():
+            CharacterClassLevel.objects.create(
+                character=character,
+                level=context.campaign.level,
+                class_entry=entry,
+                class_name=entry.name,
+                subclass_identifier=subclass_identifier,
+                subclass_name=subclass_name,
+                is_override=bool(content.get("class_override")),
+            )
+            character.base_hp += hp_increase
+            character.ability_score_adjustments = {
+                **character.ability_score_adjustments,
+                **{key: int(character.ability_score_adjustments.get(key, 0)) + value for key, value in adjustments.items()},
+            }
+            character.character_class = self._class_summary(character)
+            character.save(update_fields=("base_hp", "ability_score_adjustments", "character_class"))
+            for row in choices:
+                if not isinstance(row, dict):
+                    raise ValidationError("Each level-up choice must be an object.")
+                identifier = str(row.get("identifier") or "").strip()
+                if not identifier:
+                    raise ValidationError("Each level-up choice needs an identifier.")
+                CharacterChoice.objects.update_or_create(
+                    character=character,
+                    level=context.campaign.level,
+                    identifier=identifier,
+                    defaults={
+                        "origin_entry": entry,
+                        "kind": str(row.get("kind") or "class_choice"),
+                        "values": row.get("values", []),
+                        "is_override": bool(row.get("is_override")),
+                    },
+                )
+            if rule_data["ability_score_improvement"] and asi_choice == "feat":
+                CharacterChoice.objects.update_or_create(
+                    character=character,
+                    level=context.campaign.level,
+                    identifier="asi-feat",
+                    defaults={
+                        "origin_entry": feat_entry,
+                        "kind": "feat",
+                        "values": [feat_entry.name if feat_entry else feat_override],
+                        "is_override": feat_entry is None,
+                    },
+                )
+            progress.hp_method = method
+            progress.hp_base_increase = hp_increase
+            progress.is_complete = True
+            progress.completed_at = timezone.now()
+            progress.save(update_fields=("hp_method", "hp_base_increase", "is_complete", "completed_at"))
+            post_health_transaction(
+                character,
+                reason=HealthTransaction.Reason.HEALING,
+                current_hp_delta=hp_increase,
+                description=f"Level {context.campaign.level} HP increase",
+                created_by=context,
+            )
+            character.refresh_from_db()
+            record_character_history(
+                character,
+                reason=CharacterHistory.Reason.LEVEL_UP,
+                before=before,
+                created_by=context,
+                description=f"Completed level {context.campaign.level} level up",
             )
         notify_campaign_changed(context.campaign_id)
         return _character_data(character)

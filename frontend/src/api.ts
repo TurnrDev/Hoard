@@ -734,3 +734,89 @@ export const completeCharacterBuilder = (contextId: number, characterId: number)
   contextRequest<Character>(contextId, "characters.builder.complete", {
     character_id: characterId,
   });
+
+export type LevelUpDefinition = {
+  character: Character;
+  level: number;
+  preferred_class_ids: number[];
+  classes: Array<
+    Pick<BuilderEntry, "id" | "name" | "source" | "source_book" | "identifier">
+  >;
+};
+export type LevelUpRules = {
+  class: {
+    id: number;
+    name: string;
+    source: string;
+    source_book: string;
+    class_level: number;
+    hit_die: number;
+    average_hp: number;
+    subclass_required: boolean;
+    subclasses: Array<{
+      identifier: string;
+      name: string;
+      source: string;
+      level: number;
+    }>;
+  };
+  gains: Array<{ name: string; identifier: string; description: string }>;
+  ability_score_improvement: boolean;
+  choices: Array<{
+    identifier: string;
+    name: string;
+    amount: number;
+    options: Array<{ name: string; identifier: string; description: string }>;
+  }>;
+};
+export type LevelUpPreview = {
+  rules: LevelUpRules;
+  before: Character["sheet"];
+  after: Character["sheet"];
+};
+export const getLevelUpDefinition = (contextId: number, characterId: number) =>
+  contextRequest<LevelUpDefinition>(contextId, "characters.level_up.definition", {
+    character_id: characterId,
+  });
+export const getLevelUpClass = (
+  contextId: number,
+  characterId: number,
+  classEntryId: number,
+) =>
+  contextRequest<LevelUpRules>(contextId, "characters.level_up.class.get", {
+    character_id: characterId,
+    class_entry_id: classEntryId,
+  });
+export const previewLevelUp = (
+  contextId: number,
+  characterId: number,
+  payload: {
+    class_entry_id: number;
+    hp_increase?: number;
+    ability_adjustments?: Record<string, number>;
+  },
+) =>
+  contextRequest<LevelUpPreview>(contextId, "characters.level_up.preview", {
+    character_id: characterId,
+    ...payload,
+  });
+export type LevelUpFeat = {
+  id: number;
+  name: string;
+  source: string;
+  source_book: string;
+};
+export const getLevelUpFeats = (contextId: number, characterId: number, query = "") =>
+  contextRequest<LevelUpFeat[]>(contextId, "characters.level_up.feats", {
+    character_id: characterId,
+    query,
+  });
+export const completeLevelUp = (
+  contextId: number,
+  characterId: number,
+  payload: Record<string, unknown>,
+) =>
+  contextRequest<Character>(contextId, "characters.level_up.complete", {
+    character_id: characterId,
+    ...payload,
+  });

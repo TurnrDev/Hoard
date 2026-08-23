@@ -10,7 +10,18 @@ from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
 from hoard.campaigns.consumers import ContextConsumer, UserConsumer
-from hoard.campaigns.models import Campaign, CampaignContext, Character
+from hoard.campaigns.models import (
+    Campaign,
+    CampaignContext,
+    Character,
+    CharacterClassLevel,
+    CharacterLevelProgress,
+)
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
+)
 from hoard.routing import websocket_urlpatterns
 
 
@@ -200,3 +211,73 @@ class ContextSocketTests(TransactionTestCase):
         self.assertTrue(character.is_active)
         self.assertTrue(character.is_build_complete)
         self.assertEqual(character.current_hp, character.max_hp)
+
+    def test_player_completes_only_the_pending_level_up(self) -> None:
+        player = get_user_model().objects.create_user(username="leveler")
+        context = CampaignContext.objects.create(
+            campaign=self.campaign, user=player, kind=CampaignContext.Kind.PC
+        )
+        self.campaign.level = 2
+        self.campaign.save(update_fields=("level",))
+        character = Character.objects.create(
+            campaign=self.campaign,
+            context=context,
+            name="Leveler",
+            race="Human",
+            character_class="Fighter 1",
+            strength=10,
+            dexterity=10,
+            constitution=14,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+            base_hp=10,
+            current_hp=10,
+            is_active=True,
+            is_build_complete=True,
+        )
+        CharacterClassLevel.objects.create(character=character, level=1, class_name="Fighter")
+        CharacterLevelProgress.objects.create(character=character, level=1, is_complete=True)
+        CharacterLevelProgress.objects.create(character=character, level=2, is_complete=False)
+        repository = CompendiumRepository.objects.create(identifier="level-test", name="Level test")
+        source = CompendiumSource.objects.create(repository=repository, identifier="5e", name="5e")
+        self.campaign.compendium_sources.add(source)
+        fighter = CompendiumEntry.objects.create(
+            source=source,
+            kind=CompendiumEntry.Kind.CLASS,
+            source_identifier="fighter",
+            name="Fighter",
+            source_book="PHB",
+            data={"hitDie": "d10"},
+        )
+
+        definition = async_to_sync(self.socket_request)(
+            player,
+            context.pk,
+            {"type": "characters.level_up.definition", "request_id": "level-definition", "character_id": character.pk},
+        )
+        completed = async_to_sync(self.socket_request)(
+            player,
+            context.pk,
+            {
+                "type": "characters.level_up.complete",
+                "request_id": "level-complete",
+                "character_id": character.pk,
+                "class_entry_id": fighter.pk,
+                "hp_method": "average",
+                "hp_increase": 6,
+                "ability_adjustments": {},
+                "asi_choice": "",
+                "choices": [],
+            },
+        )
+
+        self.assertEqual(definition["type"], "response")
+        self.assertEqual(definition["data"]["level"], 2)
+        self.assertEqual(completed["type"], "response")
+        character.refresh_from_db()
+        self.assertEqual(character.base_hp, 16)
+        self.assertEqual(character.current_hp, 16)
+        self.assertEqual(character.ability_score_adjustments, {})
+        self.assertTrue(character.level_progress.get(level=2).is_complete)
+        self.assertEqual(character.class_levels.count(), 2)

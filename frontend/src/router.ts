@@ -9,6 +9,7 @@ import LedgerView from "./views/LedgerView.vue";
 import LoginView from "./views/LoginView.vue";
 import InviteView from "./views/InviteView.vue";
 import CharacterBuilderView from "./views/CharacterBuilderView.vue";
+import CharacterLevelUpView from "./views/CharacterLevelUpView.vue";
 import ManageCampaignView from "./views/ManageCampaignView.vue";
 import { getSession } from "./api";
 
@@ -33,6 +34,11 @@ const router = createRouter({
     {
       path: "/c/:id/characters/:characterId/build",
       component: CharacterBuilderView,
+      props: true,
+    },
+    {
+      path: "/c/:id/characters/:characterId/level-up",
+      component: CharacterLevelUpView,
       props: true,
     },
     { path: "/c/:id/compendium", component: CompendiumView, props: true },

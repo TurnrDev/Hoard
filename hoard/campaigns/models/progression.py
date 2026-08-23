@@ -54,6 +54,8 @@ class CharacterLevelProgress(models.Model):
     level = models.PositiveSmallIntegerField()
     is_complete = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
+    hp_method = models.CharField(max_length=12, blank=True)
+    hp_base_increase = models.PositiveSmallIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ("level",)

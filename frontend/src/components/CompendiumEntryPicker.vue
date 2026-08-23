@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { BuilderEntry } from "../api";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     modelValue?: number;
     items?: BuilderEntry[];
@@ -9,8 +10,15 @@ withDefaults(
     loading?: boolean;
     disabled?: boolean;
     clearable?: boolean;
+    preferredIds?: number[];
   }>(),
-  { items: () => [], loading: false, disabled: false, clearable: false },
+  {
+    items: () => [],
+    loading: false,
+    disabled: false,
+    clearable: false,
+    preferredIds: () => [],
+  },
 );
 
 defineEmits<{ "update:modelValue": [value: number | undefined] }>();
@@ -29,12 +37,26 @@ function sourceTags(item: BuilderEntry): string[] {
       Boolean(value) && values.indexOf(value) === index,
   );
 }
+
+const orderedItems = computed(() => {
+  const preferred = new Set(props.preferredIds);
+  return [...props.items].sort(
+    (left, right) => Number(preferred.has(right.id)) - Number(preferred.has(left.id)),
+  );
+});
+
+function isFirstOther(item: BuilderEntry): boolean {
+  const firstOther = orderedItems.value.find(
+    (candidate) => !props.preferredIds.includes(candidate.id),
+  );
+  return Boolean(props.preferredIds.length && firstOther?.id === item.id);
+}
 </script>
 
 <template>
   <v-autocomplete
     :model-value="modelValue"
-    :items="items"
+    :items="orderedItems"
     :item-title="displayTitle"
     item-value="id"
     :label="label"
@@ -45,9 +67,18 @@ function sourceTags(item: BuilderEntry): string[] {
     auto-select-first
     @update:model-value="$emit('update:modelValue', $event ?? undefined)"
   >
-    <template #item="{ props, item }">
+    <template #item="{ props: itemProps, item }">
+      <v-list-subheader
+        v-if="item.raw.id === orderedItems[0]?.id && preferredIds.length"
+      >
+        Previously chosen classes
+      </v-list-subheader>
+      <v-divider v-if="isFirstOther(item.raw)" />
+      <v-list-subheader v-if="isFirstOther(item.raw)">
+        All enabled classes
+      </v-list-subheader>
       <v-list-item
-        v-bind="props"
+        v-bind="itemProps"
         :title="item.raw.name"
       >
         <template #subtitle>

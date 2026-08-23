@@ -6,8 +6,6 @@ let reconnectTimer: number | undefined;
 let shouldReconnect = false;
 const SOCKET_CONNECT_TIMEOUT_MS = 5_000;
 const SOCKET_CONNECT_POLL_MS = 50;
-const REQUEST_TIMEOUT_MS = 10_000;
-const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
 export const campaignRefreshRevision = ref(0);
 export type RepositoryImportEvent = {
   type:
@@ -29,7 +27,6 @@ const pendingRequests = new Map<
   {
     resolve: (data: unknown) => void;
     reject: (error: Error) => void;
-    timeout: number;
   }
 >();
 
@@ -58,7 +55,6 @@ function open(): void {
     ) {
       const pending = pendingRequests.get(message.request_id);
       if (pending) {
-        window.clearTimeout(pending.timeout);
         pendingRequests.delete(message.request_id);
         if (message.type === "response.error") {
           pending.reject(new Error(message.detail ?? "Campaign request failed."));
@@ -110,19 +106,13 @@ export function disconnectCampaignRealtime(): void {
 export async function campaignRequest<T>(
   type: string,
   payload: Record<string, unknown> = {},
-  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<T> {
   const connection = await readySocket();
   const requestId = crypto.randomUUID();
   return new Promise<T>((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      pendingRequests.delete(requestId);
-      reject(new Error(`The ${type} campaign request timed out.`));
-    }, timeoutMs);
     pendingRequests.set(requestId, {
       resolve: (data) => resolve(data as T),
       reject,
-      timeout,
     });
     connection.send(JSON.stringify({ type, request_id: requestId, ...payload }));
   });
@@ -131,7 +121,7 @@ export async function campaignRequest<T>(
 export const campaignImportRequest = <T>(
   type: string,
   payload: Record<string, unknown> = {},
-) => campaignRequest<T>(type, payload, IMPORT_REQUEST_TIMEOUT_MS);
+) => campaignRequest<T>(type, payload);
 
 async function oneShotRequest<T>(
   path: string,
@@ -141,13 +131,22 @@ async function oneShotRequest<T>(
   const connection = new WebSocket(socketUrl(path));
   const requestId = crypto.randomUUID();
   return new Promise<T>((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      connection.close();
-      reject(new Error("The WebSocket request timed out."));
-    }, REQUEST_TIMEOUT_MS);
+    let settled = false;
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const resolveOnce = (data: T) => {
+      if (settled) return;
+      settled = true;
+      resolve(data);
+    };
     connection.onerror = () => {
-      window.clearTimeout(timeout);
-      reject(new Error("Could not connect to the server."));
+      rejectOnce(new Error("Could not connect to the server."));
+    };
+    connection.onclose = () => {
+      rejectOnce(new Error("The WebSocket connection closed before completing."));
     };
     connection.onopen = () => {
       connection.send(JSON.stringify({ type, request_id: requestId, ...payload }));
@@ -160,10 +159,8 @@ async function oneShotRequest<T>(
         detail?: unknown;
       };
       if (message.request_id !== requestId) return;
-      window.clearTimeout(timeout);
-      connection.close();
       if (message.type === "response.error") {
-        reject(
+        rejectOnce(
           new Error(
             typeof message.detail === "string"
               ? message.detail
@@ -171,8 +168,9 @@ async function oneShotRequest<T>(
           ),
         );
       } else {
-        resolve(message.data as T);
+        resolveOnce(message.data as T);
       }
+      connection.close();
     };
   });
 }
@@ -214,7 +212,6 @@ async function readySocket(): Promise<WebSocket> {
 
 function rejectPendingRequests(detail: string): void {
   for (const pending of pendingRequests.values()) {
-    window.clearTimeout(pending.timeout);
     pending.reject(new Error(detail));
   }
   pendingRequests.clear();
