@@ -572,11 +572,6 @@ onMounted(load);
               </thead>
               <tbody>
                 <tr>
-                  <td>Base HP</td>
-                  <td>{{ preview.before.base_hp }}</td>
-                  <td>{{ preview.after.base_hp }}</td>
-                </tr>
-                <tr>
                   <td>Maximum HP</td>
                   <td>{{ preview.before.max_hp }}</td>
                   <td>{{ preview.after.max_hp }}</td>
