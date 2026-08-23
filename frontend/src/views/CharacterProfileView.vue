@@ -21,7 +21,6 @@ import { useCampaignRefresh } from "../realtime";
 import { exchangedCoinAmount } from "../coinExchange";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import CalculationBreakdown from "../components/CalculationBreakdown.vue";
-import CharacterImportMenu from "../components/CharacterImportMenu.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import type { PickerCandidate } from "../itemPicker";
 import { formatGoldValue } from "../money";
@@ -69,6 +68,7 @@ const moneyDescription = ref("");
 const addItemOpen = ref(false);
 const activity = ref<LedgerTransaction[]>([]);
 const healthOpen = ref(false);
+const hpAdjustmentOpen = ref(false);
 const healthReason = ref<"damage" | "healing" | "temporary" | "correction">("damage");
 const healthAmount = ref(1);
 const healthCurrent = ref(0);
@@ -154,6 +154,14 @@ const canAct = computed(
     ownCharacter.value && character.value?.is_active && !character.value.is_archived,
 );
 const canEdit = computed(() => ownCharacter.value || campaign.value?.is_game_master);
+const canDamage = computed(() => {
+  const sheet = character.value?.sheet;
+  return Boolean(sheet && (sheet.current_hp > 0 || sheet.temporary_hp > 0));
+});
+const canHeal = computed(() => {
+  const sheet = character.value?.sheet;
+  return Boolean(sheet && sheet.current_hp < sheet.max_hp);
+});
 const skillAbilities: Record<string, string> = {
   acrobatics: "dexterity",
   animal_handling: "wisdom",
@@ -409,7 +417,38 @@ function openHealth(): void {
   if (!character.value) return;
   healthCurrent.value = character.value.sheet.current_hp;
   healthTemporary.value = character.value.sheet.temporary_hp;
+  healthAmount.value = 1;
+  healthDescription.value = "";
   healthOpen.value = true;
+}
+
+function openHealthFor(
+  reason: "damage" | "healing" | "temporary" | "correction",
+): void {
+  healthReason.value = reason;
+  openHealth();
+}
+
+function openHpAdjustment(): void {
+  healthAmount.value = 1;
+  hpAdjustmentOpen.value = true;
+}
+
+async function submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
+  if (!character.value) return;
+  try {
+    await postHealth(campaignId, {
+      character_id: character.value.id,
+      reason,
+      current_hp_delta:
+        reason === "damage" ? -Math.abs(healthAmount.value) : healthAmount.value,
+    });
+    hpAdjustmentOpen.value = false;
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to update HP.";
+  }
 }
 
 async function saveHealth(): Promise<void> {
@@ -464,41 +503,36 @@ useCampaignRefresh(load);
     class="page-shell"
     v-if="character"
   >
-    <header class="page-heading">
-      <div>
+    <header class="page-heading character-profile-heading">
+      <div class="character-profile-heading__details">
         <div class="text-overline text-secondary">Character profile</div>
         <h1>{{ character.name }}</h1>
         <p>{{ character.race }} · {{ character.class }}</p>
       </div>
-      <div class="d-flex ga-2">
-        <v-btn
-          v-if="canEdit"
-          :to="`/c/${campaignId}/characters/${characterId}/build?mode=edit`"
-        >
-          Edit character
-        </v-btn>
-        <v-btn
-          v-if="canEdit"
-          color="error"
-          variant="text"
-          @click="archive"
-        >
-          Archive
-        </v-btn>
-        <CharacterImportMenu
-          v-if="ownCharacter"
-          :context-id="campaignId"
-          :character-id="characterId"
-          :items="items"
-          @completed="load"
-          @error="(message) => (error = message)"
-        />
-        <v-btn
-          :to="`/c/${campaignId}/characters`"
-          prepend-icon="mdi-account-group-outline"
-        >
-          Roster
-        </v-btn>
+      <div class="d-flex ga-2 character-profile-heading__actions">
+        <v-menu v-if="canEdit">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon="mdi-dots-vertical"
+              variant="text"
+              aria-label="Character actions"
+            />
+          </template>
+          <v-list density="compact">
+            <v-list-item
+              :to="`/c/${campaignId}/characters/${characterId}/build?mode=edit`"
+              prepend-icon="mdi-pencil"
+              title="Edit character"
+            />
+            <v-list-item
+              base-color="error"
+              prepend-icon="mdi-archive"
+              title="Archive character"
+              @click="archive"
+            />
+          </v-list>
+        </v-menu>
       </div>
     </header>
     <v-alert
@@ -572,6 +606,39 @@ useCampaignRefresh(load);
         md="7"
       >
         <v-card class="profile-card h-100 coin-summary-card">
+          <div
+            v-if="canAct"
+            class="coin-summary-card__actions"
+          >
+            <v-menu location="bottom end">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-dots-vertical"
+                  size="small"
+                  variant="text"
+                  aria-label="Coin actions"
+                />
+              </template>
+              <v-list density="compact">
+                <v-list-item
+                  title="Spend coins"
+                  prepend-icon="mdi-cash-minus"
+                  @click="openMoneyDialog('spend')"
+                />
+                <v-list-item
+                  title="Transfer coins"
+                  prepend-icon="mdi-cash-fast"
+                  @click="openMoneyDialog('transfer')"
+                />
+                <v-list-item
+                  title="Exchange coins"
+                  prepend-icon="mdi-swap-horizontal"
+                  @click="openMoneyDialog('exchange')"
+                />
+              </v-list>
+            </v-menu>
+          </div>
           <v-row
             no-gutters
             class="h-100"
@@ -594,38 +661,8 @@ useCampaignRefresh(load);
             >
               <v-card-text>
                 <div class="text-overline">Coin value</div>
-                <div class="d-flex align-center justify-space-between mt-3">
-                  <div class="text-h4">
-                    {{ formatGoldValue(character.money.gold_value) }} ¤
-                  </div>
-                  <v-menu v-if="canAct">
-                    <template #activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        icon="mdi-dots-horizontal"
-                        size="small"
-                        variant="text"
-                        aria-label="Coin actions"
-                      />
-                    </template>
-                    <v-list density="compact">
-                      <v-list-item
-                        title="Spend coins"
-                        prepend-icon="mdi-cash-minus"
-                        @click="openMoneyDialog('spend')"
-                      />
-                      <v-list-item
-                        title="Transfer coins"
-                        prepend-icon="mdi-cash-fast"
-                        @click="openMoneyDialog('transfer')"
-                      />
-                      <v-list-item
-                        title="Exchange coins"
-                        prepend-icon="mdi-swap-horizontal"
-                        @click="openMoneyDialog('exchange')"
-                      />
-                    </v-list>
-                  </v-menu>
+                <div class="text-h4 mt-3">
+                  {{ formatGoldValue(character.money.gold_value) }} ¤
                 </div>
               </v-card-text>
             </v-col>
@@ -639,38 +676,92 @@ useCampaignRefresh(load);
         >
           <v-col
             cols="12"
-            sm="4"
+            sm="6"
+            lg="3"
           >
-            <v-card class="profile-card">
+            <v-card
+              v-ripple="canEdit"
+              class="profile-card hp-card"
+              :class="{ 'hp-card--interactive': canEdit }"
+              :role="canEdit ? 'button' : undefined"
+              :tabindex="canEdit ? 0 : undefined"
+              @click="canEdit && openHpAdjustment()"
+              @keydown.enter="canEdit && openHpAdjustment()"
+              @keydown.space.prevent="canEdit && openHpAdjustment()"
+            >
               <v-card-text>
                 <div class="text-overline">HP</div>
-                <div class="text-h5">
-                  {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }}
+                <div class="hp-summary mt-3">
+                  <div class="text-h5 hp-value">
+                    {{ character.sheet.current_hp }}
+                    <template v-if="character.sheet.temporary_hp">
+                      + {{ character.sheet.temporary_hp }}
+                    </template>
+                    <span aria-hidden="true">/</span>
+                    <CalculationBreakdown
+                      label="Maximum HP"
+                      :calculation="character.sheet.hp_calculation"
+                      :activator-label="String(character.sheet.max_hp)"
+                    />
+                  </div>
                 </div>
-                <CalculationBreakdown
-                  label="Maximum HP"
-                  :calculation="character.sheet.hp_calculation"
-                />
-                <div class="text-caption">Temp {{ character.sheet.temporary_hp }}</div>
-                <CalculationBreakdown
-                  label="Armor class"
-                  :calculation="character.sheet.armor_class_calculation"
-                />
-                <v-btn
+                <div
                   v-if="canEdit"
-                  size="small"
-                  variant="text"
-                  class="mt-2"
-                  @click="openHealth"
+                  class="hp-actions"
+                  @click.stop
+                  @keydown.stop
                 >
-                  Change HP
-                </v-btn>
+                  <v-menu>
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-dots-vertical"
+                        size="small"
+                        variant="text"
+                        aria-label="More HP options"
+                      />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item
+                        prepend-icon="mdi-shield-plus-outline"
+                        title="Add temporary HP"
+                        @click="openHealthFor('temporary')"
+                      />
+                      <v-list-item
+                        prepend-icon="mdi-tune-variant"
+                        title="Advanced HP adjustment"
+                        @click="openHealthFor('damage')"
+                      />
+                    </v-list>
+                  </v-menu>
+                </div>
               </v-card-text>
             </v-card>
           </v-col>
           <v-col
             cols="12"
-            sm="4"
+            sm="6"
+            lg="3"
+          >
+            <v-card class="profile-card">
+              <v-card-text>
+                <div class="text-overline">Armor class</div>
+                <div class="text-h5 mt-3">
+                  <CalculationBreakdown
+                    label="Armor class"
+                    :calculation="character.sheet.armor_class_calculation"
+                    :activator-label="
+                      String(character.sheet.armor_class_calculation.value)
+                    "
+                  />
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col
+            cols="12"
+            sm="6"
+            lg="3"
           >
             <v-card class="profile-card">
               <v-card-text>
@@ -683,7 +774,8 @@ useCampaignRefresh(load);
           </v-col>
           <v-col
             cols="12"
-            sm="4"
+            sm="6"
+            lg="3"
           >
             <v-card class="profile-card">
               <v-card-text>
@@ -820,7 +912,7 @@ useCampaignRefresh(load);
                       <template #activator="{ props }">
                         <v-btn
                           v-bind="props"
-                          icon="mdi-dots-horizontal"
+                          icon="mdi-dots-vertical"
                           size="small"
                           variant="text"
                           :aria-label="`Actions for ${entry.name}`"
@@ -1175,6 +1267,42 @@ useCampaignRefresh(load);
                   ? "Destroy item"
                   : "Transfer item"
             }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog
+      v-model="hpAdjustmentOpen"
+      max-width="420"
+    >
+      <v-card title="Adjust HP">
+        <v-card-text>
+          <div class="text-body-1 mb-4">
+            Current HP: {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }}
+          </div>
+          <v-number-input
+            v-model.number="healthAmount"
+            control-variant="split"
+            :min="1"
+            label="Hit points"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="hpAdjustmentOpen = false">Cancel</v-btn>
+          <v-btn
+            color="error"
+            :disabled="healthAmount < 1 || !canDamage"
+            @click="submitHpAdjustment('damage')"
+          >
+            Damage
+          </v-btn>
+          <v-btn
+            color="primary"
+            :disabled="healthAmount < 1 || !canHeal"
+            @click="submitHpAdjustment('healing')"
+          >
+            Heal
           </v-btn>
         </v-card-actions>
       </v-card>

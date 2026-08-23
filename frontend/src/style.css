@@ -108,6 +108,24 @@ body {
   margin: 0;
 }
 
+@media (max-width: 599px) {
+  .character-profile-heading {
+    align-items: start;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .character-profile-heading__details {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .character-profile-heading__actions {
+    flex: 0 0 auto;
+    margin-top: 24px;
+  }
+}
+
 .ability {
   display: grid;
   gap: 2px;
@@ -352,6 +370,47 @@ body {
 
 .coin-value-pane {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.coin-summary-card {
+  position: relative;
+}
+
+.coin-summary-card__actions {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 1;
+}
+
+.hp-summary {
+  align-items: center;
+  display: flex;
+}
+
+.hp-value {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.hp-card--interactive {
+  cursor: pointer;
+}
+
+.hp-card--interactive:focus-visible {
+  outline: 3px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.hp-card {
+  position: relative;
+}
+
+.hp-actions {
+  position: absolute;
+  right: 8px;
+  top: 8px;
 }
 
 .inventory-card .v-table,

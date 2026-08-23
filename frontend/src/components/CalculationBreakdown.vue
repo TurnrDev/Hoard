@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { Calculation } from "../api";
 
-defineProps<{ calculation: Calculation; label?: string; expanded?: boolean }>();
+defineProps<{
+  calculation: Calculation;
+  label?: string;
+  expanded?: boolean;
+  activatorLabel?: string;
+}>();
 </script>
 
 <template>
@@ -37,8 +42,10 @@ defineProps<{ calculation: Calculation; label?: string; expanded?: boolean }>();
         v-bind="props"
         type="button"
         class="calculation-compact"
+        @click.stop
+        @keydown.stop
       >
-        {{ calculation.formula ?? calculation.value }}
+        {{ activatorLabel ?? calculation.formula ?? calculation.value }}
         <v-icon size="x-small">mdi-calculator-variant-outline</v-icon>
       </button>
     </template>
