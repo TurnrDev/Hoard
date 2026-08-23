@@ -4,6 +4,7 @@ import { contextPath, type ActingContext } from "../context";
 defineProps<{
   contextId: number;
   activeContext?: ActingContext;
+  hasIncompleteLevelUps?: boolean;
 }>();
 </script>
 
@@ -22,7 +23,14 @@ defineProps<{
       prepend-icon="mdi-account-group-outline"
       title="Characters"
       :to="`/c/${contextId}/characters`"
-    />
+    >
+      <template
+        v-if="hasIncompleteLevelUps"
+        #append
+      >
+        <v-icon color="error">mdi-alert-circle</v-icon>
+      </template>
+    </v-list-item>
     <v-list-item
       prepend-icon="mdi-book-open-variant-outline"
       title="Compendium"

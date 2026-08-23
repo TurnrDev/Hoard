@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import secrets
+from datetime import timedelta
 
+from asgiref.sync import ThreadSensitiveContext
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from ninja.errors import HttpError
 
 from hoard.compendium.ingest.repository import SUPPORTED_SOURCE_IDENTIFIERS
@@ -18,27 +28,193 @@ from hoard.compendium.models import (
 )
 from hoard.compendium.tasks import import_campaign_repository
 
-from .models import CampaignContext
+from .models import (
+    CalendarEvent,
+    CampaignContext,
+    CampaignInvitation,
+    CampaignLevelEvent,
+    Character,
+    CharacterChoice,
+    CharacterClassLevel,
+    CharacterHistory,
+    CharacterLevelProgress,
+    HealthTransaction,
+    InvitationEvent,
+    MembershipEvent,
+    format_campaign_date,
+)
 from .realtime import campaign_group_name, notify_campaign_changed
+from .services import (
+    accept_invitation,
+    approve_campaign_level,
+    create_invitation,
+    post_health_transaction,
+    register_and_accept,
+)
+from .services.history import character_snapshot, record_character_history
 
 logger = logging.getLogger(__name__)
+MAX_WEBSOCKET_RESPONSE_BYTES = settings.DAPHNE_WEBSOCKET_MAX_MESSAGE_SIZE - 65_536
 
 
-class CampaignConsumer(AsyncJsonWebsocketConsumer):
+def _unwrapped(value: object) -> object:
+    while isinstance(value, dict) and "value" in value:
+        value = value["value"]
+    return value
+
+
+def _choice_labels(value: object) -> list[str]:
+    """Extract compact labels from legacy and normalized rule payloads."""
+    value = _unwrapped(value)
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        return [label for row in value for label in _choice_labels(row)]
+    if not isinstance(value, dict):
+        return []
+    stats = _unwrapped(value.get("stats"))
+    if isinstance(stats, dict):
+        name = _unwrapped(stats.get("name"))
+        if isinstance(name, str) and name.strip():
+            return [name.strip()]
+        for key in ("options", "item"):
+            if key in stats:
+                labels = _choice_labels(stats[key])
+                if labels:
+                    return labels
+    name = _unwrapped(value.get("name"))
+    if isinstance(name, str) and name.strip():
+        return [name.strip()]
+    for key in ("options", "item"):
+        if key in value:
+            labels = _choice_labels(value[key])
+            if labels:
+                return labels
+    return []
+
+
+def _class_subclasses(
+    sources: tuple[dict[str, object], dict[str, object]], default_source: str
+) -> tuple[int, list[dict[str, object]]]:
+    """Return compact subclass metadata without returning the full class payload."""
+    selection_level: object = None
+    subclass_rows: object = None
+    for source in sources:
+        selection_level = selection_level or _unwrapped(
+            source.get("archetype_selection_level")
+            or source.get("subclass_selection_level")
+        )
+        subclass_rows = subclass_rows or _unwrapped(
+            source.get("archetypes")
+            or source.get("subclasses")
+            or source.get("csubclasses")
+        )
+    # RPG Companion omits the field for classes whose subclass choice uses its
+    # normal default of class level 3. Classes that differ carry an explicit value.
+    try:
+        unlock_level = int(selection_level) if selection_level is not None else 3
+    except (TypeError, ValueError):
+        unlock_level = 3
+    unlock_level = min(20, max(1, unlock_level))
+
+    subclasses: list[dict[str, object]] = []
+    if not isinstance(subclass_rows, list):
+        return unlock_level, subclasses
+    for row in subclass_rows:
+        row = _unwrapped(row)
+        if not isinstance(row, dict):
+            continue
+        stats = _unwrapped(row.get("stats"))
+        stats = stats if isinstance(stats, dict) else row
+        name = _unwrapped(stats.get("name"))
+        if not isinstance(name, str) or not name.strip():
+            continue
+        identifier = _unwrapped(stats.get("id"))
+        source = _unwrapped(stats.get("source"))
+        subclasses.append(
+            {
+                "identifier": identifier if isinstance(identifier, str) else "",
+                "name": name.strip(),
+                "source": source if isinstance(source, str) else default_source,
+                "level": unlock_level,
+            }
+        )
+    return unlock_level, subclasses
+
+
+def _builder_entry_data(entry: CompendiumEntry) -> dict[str, object]:
+    data = entry.data if isinstance(entry.data, dict) else {}
+    stats = _unwrapped(data.get("stats"))
+    sources = (data, stats if isinstance(stats, dict) else {})
+
+    def choices(*keys: str) -> list[str]:
+        labels = [
+            label
+            for source in sources
+            for key in keys
+            for label in _choice_labels(source.get(key))
+        ]
+        return list(dict.fromkeys(labels))
+
+    subchoice_keys = (
+        ("subraces", "subtypes", "choices")
+        if entry.kind == CompendiumEntry.Kind.RACE
+        else (
+            "archetypes",
+            "subclasses",
+            "csubclasses",
+            "subtypes",
+            "subTypes",
+            "choices",
+        )
+    )
+    normalized: dict[str, object] = {
+        "subchoices": choices(*subchoice_keys),
+        "starting_equipment": choices(
+            "starting_equipment", "startingEquipment", "selectable_equipments"
+        ),
+        "languages": choices("languages", "language_proficiencies"),
+        "skill_proficiencies": choices("skill_proficiencies"),
+        "armor_proficiencies": choices("armor_proficiencies"),
+        "weapon_proficiencies": choices("weapon_proficiencies"),
+        "tool_proficiencies": choices("tool_proficiencies"),
+    }
+    if entry.kind == CompendiumEntry.Kind.CLASS:
+        unlock_level, subclasses = _class_subclasses(sources, entry.source.name)
+        if subclasses:
+            normalized["subclasses"] = subclasses
+            normalized["subclass_selection_level"] = unlock_level
+    return {key: value for key, value in normalized.items() if value}
+
+
+class HoardJsonWebsocketConsumer(AsyncJsonWebsocketConsumer):
+    @classmethod
+    async def encode_json(cls, content: object) -> str:
+        return json.dumps(content, cls=DjangoJSONEncoder)
+
+
+class ContextConsumer(HoardJsonWebsocketConsumer):
     async def connect(self) -> None:
         user = self.scope["user"]
-        campaign_id = int(self.scope["url_route"]["kwargs"]["campaign_id"])
-        if not user.is_authenticated or not await self._has_active_context(
-            user.pk, campaign_id
-        ):
+        context_id = int(self.scope["url_route"]["kwargs"]["context_id"])
+        context_data = (
+            await self._active_context_data(user.pk, context_id)
+            if user.is_authenticated
+            else None
+        )
+        if context_data is None:
             await self.close(code=4403)
             return
-        self.campaign_id = campaign_id
-        self.group_name = campaign_group_name(campaign_id)
+        self.context_id, self.campaign_id = context_data
+        self.group_name = campaign_group_name(self.campaign_id)
+        self.request_tasks: set[asyncio.Task[None]] = set()
+        self.request_slots = asyncio.Semaphore(8)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code: int) -> None:
+        for task in tuple(getattr(self, "request_tasks", ())):
+            task.cancel()
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
@@ -46,10 +222,62 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
         message_type = content.get("type")
         if not isinstance(message_type, str):
             await self.send_json(
-                {"type": "error", "detail": "A message type is required."}
+                {
+                    "type": "error",
+                    "code": "missing_type",
+                    "detail": "A message type is required.",
+                }
             )
             return
         handlers = {
+            "campaign.get": self._campaign_get,
+            "campaign.calendar.get": self._calendar_get,
+            "campaign.calendar.adjust": self._calendar_adjust,
+            "campaign.members.list": self._member_list,
+            "campaign.members.update": self._member_update,
+            "campaign.members.deactivate": self._member_deactivate,
+            "campaign.invites.list": self._invite_list,
+            "campaign.invites.create": self._invite_create,
+            "campaign.invites.resend": self._invite_resend,
+            "campaign.invites.revoke": self._invite_revoke,
+            "campaign.level.status": self._level_status,
+            "campaign.level.approve": self._level_approve,
+            "characters.list": self._character_list,
+            "characters.get": self._character_get,
+            "characters.create": self._character_create,
+            "characters.update": self._character_update,
+            "characters.archive": self._character_archive,
+            "characters.builder.definition": self._builder_definition,
+            "characters.builder.entry.get": self._builder_entry_get,
+            "characters.builder.get": self._builder_get,
+            "characters.builder.save": self._builder_save,
+            "characters.builder.complete": self._builder_complete,
+            "characters.health.post": self._health_post,
+            "characters.notes.create": self._sheet_change,
+            "characters.notes.update": self._sheet_change,
+            "characters.notes.delete": self._sheet_change,
+            "characters.features.create": self._sheet_change,
+            "characters.features.update": self._sheet_change,
+            "characters.features.delete": self._sheet_change,
+            "characters.spells.create": self._sheet_change,
+            "characters.spells.update": self._sheet_change,
+            "characters.spells.delete": self._sheet_change,
+            "characters.loadout.create": self._sheet_change,
+            "characters.loadout.update": self._sheet_change,
+            "characters.loadout.delete": self._sheet_change,
+            "characters.companions.create": self._sheet_change,
+            "characters.companions.update": self._sheet_change,
+            "characters.companions.delete": self._sheet_change,
+            "characters.imports.cah.begin": self._cah_begin,
+            "characters.imports.cah.preview": self._cah_preview,
+            "characters.imports.cah.commit": self._cah_commit,
+            "characters.imports.cah.cancel": self._cah_cancel,
+            "transactions.list": self._transaction_list,
+            "inventory.transactions.create": self._inventory_transaction_create,
+            "money.transfers.create": self._money_transfer_create,
+            "money.exchanges.create": self._money_exchange_create,
+            "experience.shared_awards.create": self._shared_xp_create,
+            "transactions.reverse": self._transaction_reverse,
             "compendium.items.list": self._item_list,
             "compendium.items.create": self._item_create,
             "compendium.items.update": self._item_update,
@@ -62,10 +290,21 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
         }
         handler = handlers.get(message_type)
         if handler is not None:
-            await self._request_response(content, handler)
+            task = asyncio.create_task(
+                self._run_request(content, handler),
+                name=f"campaign-request:{message_type}",
+            )
+            self.request_tasks.add(task)
+            task.add_done_callback(self._request_finished)
             return
         if message_type != "compendium.repositories.import":
-            await self.send_json({"type": "error", "detail": "Unsupported message."})
+            await self.send_json(
+                {
+                    "type": "error",
+                    "code": "unsupported_message",
+                    "detail": "Unsupported message.",
+                }
+            )
             return
         repository_id = content.get("repository_id")
         ref = content.get("ref", "")
@@ -103,6 +342,27 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
             return
         await self.send_json({"type": "repository.import.started", "job_id": job_id})
 
+    async def _run_request(self, content: dict[str, object], handler) -> None:
+        started = asyncio.get_running_loop().time()
+        async with self.request_slots, ThreadSensitiveContext():
+            await self._request_response(content, handler)
+        elapsed = asyncio.get_running_loop().time() - started
+        if elapsed >= 1:
+            logger.warning(
+                "Campaign request %s took %.3f seconds.", content.get("type"), elapsed
+            )
+
+    def _request_finished(self, task: asyncio.Task[None]) -> None:
+        self.request_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.error(
+                "Unhandled error in campaign request task.",
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
     async def campaign_changed(self, event: dict[str, object]) -> None:
         await self.send_json({"type": "campaign.changed"})
 
@@ -119,42 +379,1261 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
         request_id = content.get("request_id")
         if not isinstance(request_id, str) or not request_id:
             await self.send_json(
-                {"type": "response.error", "detail": "A request ID is required."}
+                {
+                    "type": "response.error",
+                    "code": "missing_request_id",
+                    "detail": "A request ID is required.",
+                }
             )
             return
         try:
             data = await handler(content)
         except (HttpError, PermissionError, ValueError, ValidationError) as error:
-            detail = getattr(error, "message", None) or str(error)
+            field_errors = getattr(error, "message_dict", None)
+            detail = field_errors or getattr(error, "messages", None) or str(error)
+            if isinstance(error, HttpError):
+                code = f"http_{error.status_code}"
+            elif isinstance(error, PermissionError):
+                code = "forbidden"
+            elif isinstance(error, ValidationError):
+                code = "validation_error"
+            else:
+                code = "invalid_request"
             await self.send_json(
                 {
                     "type": "response.error",
                     "request_id": request_id,
+                    "code": code,
                     "detail": detail,
+                    "field_errors": field_errors,
                 }
             )
             return
         except Exception:
             logger.exception(
-                "Unable to process Compendium request %s.", content.get("type")
+                "Unable to process campaign request %s.", content.get("type")
             )
             await self.send_json(
                 {
                     "type": "response.error",
                     "request_id": request_id,
-                    "detail": "Unable to process the Compendium request.",
+                    "code": "server_error",
+                    "detail": "Unable to process the campaign request.",
                 }
             )
             return
-        await self.send_json(
-            {"type": "response", "request_id": request_id, "data": data}
+        response = {"type": "response", "request_id": request_id, "data": data}
+        encoded = await self.encode_json(response)
+        response_size = len(encoded.encode("utf-8"))
+        if response_size > MAX_WEBSOCKET_RESPONSE_BYTES:
+            logger.error(
+                "Campaign request %s produced an oversized WebSocket response "
+                "(%s bytes).",
+                content.get("type"),
+                response_size,
+            )
+            await self.send_json(
+                {
+                    "type": "response.error",
+                    "request_id": request_id,
+                    "code": "response_too_large",
+                    "detail": (
+                        "The campaign response was too large to send. "
+                        "Please narrow the request and try again."
+                    ),
+                }
+            )
+            return
+        await self.send(text_data=encoded)
+
+    @database_sync_to_async
+    def _active_context_data(self, user_id: int, context_id: int):
+        return (
+            CampaignContext.objects.filter(
+                pk=context_id, user_id=user_id, is_active=True
+            )
+            .values_list("pk", "campaign_id")
+            .first()
         )
 
     @database_sync_to_async
-    def _has_active_context(self, user_id: int, campaign_id: int) -> bool:
-        return CampaignContext.objects.filter(
-            user_id=user_id, campaign_id=campaign_id, is_active=True
+    def _campaign_get(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import (
+            _calendar_data,
+            _character_data,
+            _context_data,
+            _party_money,
+            _visible_characters,
+        )
+
+        context = self._context()
+        campaign = context.campaign
+        return {
+            **_context_data(context),
+            "id": campaign.pk,
+            "name": campaign.name,
+            "is_game_master": context.kind == CampaignContext.Kind.GM,
+            "use_shared_exp": campaign.use_shared_exp,
+            "shared_experience": campaign.shared_experience,
+            "level": campaign.level,
+            "eligible_level": Character.level_for_experience(
+                campaign.shared_experience
+            ),
+            "calendar": _calendar_data(campaign),
+            "party_money": _party_money(campaign),
+            "characters": [
+                _character_data(value) for value in _visible_characters(context)
+            ],
+            "incomplete_level_ups": self._incomplete_level_ups(campaign),
+        }
+
+    @database_sync_to_async
+    def _calendar_get(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _calendar_data
+
+        return _calendar_data(self._context().campaign)
+
+    @database_sync_to_async
+    def _calendar_adjust(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _calendar_data, _gm
+
+        context = self._context()
+        _gm(context)
+        amount = self._integer(content, "amount")
+        before = (
+            context.campaign.calendar_era_abbreviation,
+            context.campaign.calendar_year,
+            context.campaign.calendar_day,
+        )
+        context.campaign.adjust_calendar_day(amount)
+        context.campaign.full_clean()
+        context.campaign.save(update_fields=("calendar_year", "calendar_day"))
+        CalendarEvent.objects.create(
+            campaign=context.campaign,
+            created_by=context,
+            before_era_abbreviation=before[0],
+            before_year=before[1],
+            before_day=before[2],
+            after_era_abbreviation=context.campaign.calendar_era_abbreviation,
+            after_year=context.campaign.calendar_year,
+            after_day=context.campaign.calendar_day,
+        )
+        notify_campaign_changed(context.campaign_id)
+        return _calendar_data(context.campaign)
+
+    @database_sync_to_async
+    def _member_list(self, content: dict[str, object]) -> list[dict[str, object]]:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        return [
+            {
+                "id": candidate.pk,
+                "username": candidate.user.get_username(),
+                "is_game_master": candidate.kind == CampaignContext.Kind.GM,
+                "is_active": candidate.is_active,
+            }
+            for candidate in CampaignContext.objects.filter(
+                campaign=context.campaign
+            ).select_related("user")
+        ]
+
+    @database_sync_to_async
+    def _member_update(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        candidate = CampaignContext.objects.filter(
+            pk=self._integer(content, "member_id"),
+            campaign=context.campaign,
+            is_active=True,
+        ).first()
+        if candidate is None:
+            raise HttpError(404, "Member not found.")
+        make_gm = content.get("is_game_master")
+        if not isinstance(make_gm, bool):
+            raise ValueError("is_game_master must be true or false.")
+        kind = CampaignContext.Kind.GM if make_gm else CampaignContext.Kind.PC
+        if candidate.kind != kind:
+            before = {"kind": candidate.kind, "is_active": candidate.is_active}
+            if make_gm:
+                candidate, _ = CampaignContext.objects.update_or_create(
+                    campaign=context.campaign,
+                    user=candidate.user,
+                    kind=CampaignContext.Kind.GM,
+                    defaults={"is_active": True},
+                )
+            else:
+                candidate.is_active = False
+                candidate.save(update_fields=("is_active",))
+            MembershipEvent.objects.create(
+                campaign=context.campaign,
+                created_by=context,
+                subject=candidate,
+                subject_user=candidate.user,
+                reason=MembershipEvent.Reason.ROLE_CHANGED,
+                before=before,
+                after={"kind": candidate.kind, "is_active": candidate.is_active},
+            )
+        notify_campaign_changed(context.campaign_id)
+        return {
+            "id": candidate.pk,
+            "username": candidate.user.get_username(),
+            "is_game_master": make_gm,
+            "is_active": candidate.is_active,
+        }
+
+    @database_sync_to_async
+    def _member_deactivate(self, content: dict[str, object]) -> None:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        candidate = (
+            CampaignContext.objects.filter(
+                pk=self._integer(content, "member_id"),
+                campaign=context.campaign,
+                is_active=True,
+            )
+            .select_related("character")
+            .first()
+        )
+        if candidate is None:
+            raise HttpError(404, "Member not found.")
+        before = {"kind": candidate.kind, "is_active": candidate.is_active}
+        candidate.is_active = False
+        candidate.save(update_fields=("is_active",))
+        MembershipEvent.objects.create(
+            campaign=context.campaign,
+            created_by=context,
+            subject=candidate,
+            subject_user=candidate.user,
+            reason=MembershipEvent.Reason.DEACTIVATED,
+            before=before,
+            after={"kind": candidate.kind, "is_active": False},
+        )
+        character = getattr(candidate, "character", None)
+        if character:
+            character.is_active = False
+            character.is_archived = True
+            character.archived_at = timezone.now()
+            character.save(update_fields=("is_active", "is_archived", "archived_at"))
+        notify_campaign_changed(context.campaign_id)
+
+    @database_sync_to_async
+    def _invite_list(self, content: dict[str, object]) -> list[dict[str, object]]:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        return [
+            self._invitation_data(value) for value in context.campaign.invitations.all()
+        ]
+
+    @database_sync_to_async
+    def _invite_create(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        email = self._string(content, "email", maximum=254)
+        invitation, token = create_invitation(context, email)
+        link = self._invite_link(token)
+        if email:
+            send_mail(
+                f"Invitation to {context.campaign.name}",
+                f"Join the campaign: {link}",
+                None,
+                [email],
+            )
+        return {**self._invitation_data(invitation), "link": link}
+
+    @database_sync_to_async
+    def _invite_resend(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _gm
+        from .services.invitations import token_digest
+
+        context = self._context()
+        _gm(context)
+        invitation = context.campaign.invitations.filter(
+            pk=self._integer(content, "invitation_id"),
+            accepted_at__isnull=True,
+            revoked_at__isnull=True,
+        ).first()
+        if invitation is None:
+            raise HttpError(404, "Active invitation not found.")
+        token = secrets.token_urlsafe(32)
+        invitation.token_digest = token_digest(token)
+        invitation.expires_at = timezone.now() + timedelta(days=7)
+        invitation.save(update_fields=("token_digest", "expires_at"))
+        InvitationEvent.objects.create(
+            campaign=context.campaign,
+            invitation=invitation,
+            created_by=context,
+            reason=InvitationEvent.Reason.RESENT,
+        )
+        link = self._invite_link(token)
+        if invitation.delivery_email:
+            send_mail(
+                f"Invitation to {context.campaign.name}",
+                f"Join the campaign: {link}",
+                None,
+                [invitation.delivery_email],
+            )
+        return {**self._invitation_data(invitation), "link": link}
+
+    @database_sync_to_async
+    def _invite_revoke(self, content: dict[str, object]) -> None:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        invitation = context.campaign.invitations.filter(
+            pk=self._integer(content, "invitation_id"),
+            accepted_at__isnull=True,
+            revoked_at__isnull=True,
+        ).first()
+        if invitation is None:
+            raise HttpError(404, "Active invitation not found.")
+        invitation.revoked_at = timezone.now()
+        invitation.save(update_fields=("revoked_at",))
+        InvitationEvent.objects.create(
+            campaign=context.campaign,
+            invitation=invitation,
+            created_by=context,
+            reason=InvitationEvent.Reason.REVOKED,
+        )
+
+    @database_sync_to_async
+    def _level_status(self, content: dict[str, object]) -> dict[str, object]:
+        campaign = self._context().campaign
+        return {
+            "level": campaign.level,
+            "eligible_level": Character.level_for_experience(
+                campaign.shared_experience
+            ),
+            "can_approve": campaign.level
+            < Character.level_for_experience(campaign.shared_experience),
+            "incomplete": self._incomplete_level_ups(campaign),
+        }
+
+    @database_sync_to_async
+    def _level_approve(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
+        event = approve_campaign_level(context.campaign, created_by=context)
+        notify_campaign_changed(context.campaign_id)
+        return {
+            "previous_level": event.previous_level,
+            "next_level": event.next_level,
+            "occurred_at": event.occurred_at.isoformat(),
+            "campaign_date": event.campaign_date,
+        }
+
+    @database_sync_to_async
+    def _character_list(self, content: dict[str, object]) -> list[dict[str, object]]:
+        from .api import _character_data, _visible_characters
+
+        context = self._context()
+        return [_character_data(value) for value in _visible_characters(context)]
+
+    @database_sync_to_async
+    def _character_get(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character, _character_data, _visible_characters
+
+        context = self._context()
+        character = _character(context, self._integer(content, "character_id"))
+        if not _visible_characters(context).filter(pk=character.pk).exists():
+            raise HttpError(404, "Character not found.")
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _character_create(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data, _gm
+        from .services.health import create_health_baseline
+
+        context = self._context()
+        _gm(context)
+        fields = content.get("fields")
+        if not isinstance(fields, dict) or not fields.get("is_npc"):
+            raise ValidationError("Only NPC creation is available from this command.")
+        allowed = {
+            "name",
+            "race",
+            "character_class",
+            "strength",
+            "dexterity",
+            "constitution",
+            "intelligence",
+            "wisdom",
+            "charisma",
+        }
+        values = {key: value for key, value in fields.items() if key in allowed}
+        character = Character.objects.create(
+            campaign=context.campaign, is_active=True, is_build_complete=True, **values
+        )
+        create_health_baseline(character, created_by=context)
+        record_character_history(
+            character,
+            reason=CharacterHistory.Reason.CREATE,
+            before=None,
+            created_by=context,
+            description="Created NPC",
+        )
+        notify_campaign_changed(context.campaign_id)
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _character_update(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data, _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        before = character_snapshot(character)
+        fields = content.get("fields")
+        if not isinstance(fields, dict):
+            raise ValueError("fields must be an object.")
+        blocked = {"current_hp", "temporary_hp", "campaign", "context", "level"}
+        allowed = set(before) | {
+            "background_entry_id",
+            "race_entry_id",
+            "subrace_identifier",
+            "npc_level",
+            "spell_slots",
+            "proficiency_bonus_adjustment",
+        }
+        unknown = set(fields) - allowed
+        if unknown or set(fields) & blocked:
+            raise ValueError(
+                f"Unsupported character fields: {', '.join(sorted(unknown | (set(fields) & blocked)))}"
+            )
+        for key, value in fields.items():
+            setattr(character, key, value)
+        character.full_clean()
+        character.save()
+        record_character_history(
+            character,
+            reason=CharacterHistory.Reason.EDIT,
+            before=before,
+            created_by=context,
+        )
+        notify_campaign_changed(context.campaign_id)
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _character_archive(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data, _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        before = character_snapshot(character)
+        character.is_archived = True
+        character.is_active = False
+        character.archived_at = timezone.now()
+        character.save(update_fields=("is_archived", "is_active", "archived_at"))
+        record_character_history(
+            character,
+            reason=CharacterHistory.Reason.EDIT,
+            before=before,
+            created_by=context,
+            description="Archived character",
+        )
+        notify_campaign_changed(context.campaign_id)
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _builder_definition(self, content: dict[str, object]) -> dict[str, object]:
+        context = self._context()
+        entries = CompendiumEntry.objects.filter(
+            source__in=context.campaign.compendium_sources.all(),
+            kind__in=("race", "class", "background"),
+        ).values(
+            "pk",
+            "kind",
+            "source_identifier",
+            "name",
+            "source_book",
+            "source__identifier",
+            "source__name",
+            "source__repository__identifier",
+            "source__repository__name",
+            "source__repository__campaign_id",
+        )
+        entries = sorted(
+            entries,
+            key=lambda row: (
+                0
+                if row["source__repository__campaign_id"] == context.campaign_id
+                else 1
+                if row["source__repository__identifier"] == "default"
+                else 2,
+                row["pk"],
+            ),
+        )
+        grouped: dict[str, list[dict[str, object]]] = {
+            "race": [],
+            "class": [],
+            "background": [],
+        }
+        canonical: dict[tuple[object, ...], dict[str, object]] = {}
+        for entry in entries:
+            identity = (
+                entry["kind"],
+                entry["source__identifier"],
+                entry["source_identifier"],
+            )
+            if identity in canonical:
+                canonical[identity]["alias_ids"].append(entry["pk"])
+                continue
+            value = {
+                "id": entry["pk"],
+                "alias_ids": [],
+                "identifier": entry["source_identifier"],
+                "name": entry["name"],
+                "source": entry["source__name"],
+                "source_book": entry["source_book"],
+                "repository": entry["source__repository__name"],
+                "repository_identifier": entry["source__repository__identifier"],
+            }
+            canonical[identity] = value
+            grouped[entry["kind"]].append(value)
+        for values in grouped.values():
+            values.sort(key=lambda row: (str(row["name"]).lower(), row["id"]))
+        return {
+            **grouped,
+            "level": context.campaign.level,
+            "skills": [
+                "acrobatics",
+                "animal_handling",
+                "arcana",
+                "athletics",
+                "deception",
+                "history",
+                "insight",
+                "intimidation",
+                "investigation",
+                "medicine",
+                "nature",
+                "perception",
+                "performance",
+                "persuasion",
+                "religion",
+                "sleight_of_hand",
+                "stealth",
+                "survival",
+            ],
+        }
+
+    @database_sync_to_async
+    def _builder_entry_get(self, content: dict[str, object]) -> dict[str, object]:
+        context = self._context()
+        entry = (
+            CompendiumEntry.objects.filter(
+                pk=self._integer(content, "entry_id"),
+                kind__in=("race", "class", "background"),
+                source__in=context.campaign.compendium_sources.all(),
+            )
+            .select_related("source", "source__repository")
+            .first()
+        )
+        if entry is None:
+            raise ValidationError(
+                "The selected builder entry is not enabled for this campaign."
+            )
+        return {
+            "id": entry.pk,
+            "kind": entry.kind,
+            "identifier": entry.source_identifier,
+            "name": entry.name,
+            "source": entry.source.name,
+            "source_book": entry.source_book,
+            "repository": entry.source.repository.name,
+            "repository_identifier": entry.source.repository.identifier,
+            "data": _builder_entry_data(entry),
+        }
+
+    @database_sync_to_async
+    def _builder_get(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data, _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        return {
+            "character": _character_data(character),
+            "class_levels": [
+                {
+                    "level": row.level,
+                    "class_entry_id": row.class_entry_id,
+                    "class_name": row.class_name,
+                    "subclass_identifier": row.subclass_identifier,
+                    "subclass_name": row.subclass_name,
+                    "is_override": row.is_override,
+                }
+                for row in character.class_levels.all()
+            ],
+            "choices": [
+                {
+                    "level": row.level,
+                    "origin_entry_id": row.origin_entry_id,
+                    "identifier": row.identifier,
+                    "kind": row.kind,
+                    "values": row.values,
+                    "is_override": row.is_override,
+                }
+                for row in character.build_choices.all()
+            ],
+        }
+
+    @database_sync_to_async
+    def _builder_save(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import SKILL_NAMES, _character_data, _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        before = character_snapshot(character)
+        fields = content.get("fields", {})
+        if not isinstance(fields, dict):
+            raise ValueError("fields must be an object.")
+        builder_fields = {
+            "name",
+            "race",
+            "race_entry_id",
+            "subrace_identifier",
+            "subrace_name",
+            "background",
+            "background_entry_id",
+            "alignment",
+            "personality_traits",
+            "ideals",
+            "bonds",
+            "flaws",
+            "about",
+            "strength",
+            "dexterity",
+            "constitution",
+            "intelligence",
+            "wisdom",
+            "charisma",
+            "ability_bonuses",
+            "ability_score_adjustments",
+            "languages",
+            "equipment_proficiencies",
+            "skill_proficiencies",
+            "base_hp",
+            "hp_ability",
+            "hp_adjustment",
+        }
+        unknown = set(fields) - builder_fields
+        if unknown:
+            raise ValueError(
+                f"Unsupported builder fields: {', '.join(sorted(unknown))}"
+            )
+        skills = fields.get("skill_proficiencies")
+        if skills is not None and (
+            not isinstance(skills, dict)
+            or set(skills) - set(SKILL_NAMES)
+            or set(skills.values()) - {"none", "half", "proficient", "expertise"}
+        ):
+            raise ValidationError("Skill proficiencies contain an invalid choice.")
+        if "languages" in fields and not (
+            isinstance(fields["languages"], list)
+            and all(isinstance(value, str) for value in fields["languages"])
+        ):
+            raise ValidationError("Languages must be a list of names.")
+        if fields.get("hp_ability", "constitution") not in {
+            "strength",
+            "dexterity",
+            "constitution",
+            "intelligence",
+            "wisdom",
+            "charisma",
+        }:
+            raise ValidationError("HP ability is invalid.")
+        for field_name, kind in (
+            ("race_entry_id", "race"),
+            ("background_entry_id", "background"),
+        ):
+            if field_name in fields and fields[field_name] is not None:
+                entry = self._enabled_builder_entry(context, fields[field_name], kind)
+                fields[field_name] = entry.pk
+        for key, value in fields.items():
+            setattr(character, key, value)
+        class_levels = content.get("class_levels")
+        choices = content.get("choices")
+        with transaction.atomic():
+            character.full_clean()
+            character.save()
+            if isinstance(class_levels, list):
+                character.class_levels.all().delete()
+                for row in class_levels:
+                    if not isinstance(row, dict):
+                        raise ValueError("Each class level must be an object.")
+                    level = int(row.get("level", 0))
+                    if not 1 <= level <= context.campaign.level:
+                        raise ValueError("Class levels must match the campaign level.")
+                    entry_id = row.get("class_entry_id")
+                    entry = (
+                        self._enabled_builder_entry(context, entry_id, "class")
+                        if entry_id
+                        else None
+                    )
+                    CharacterClassLevel.objects.create(
+                        character=character,
+                        level=level,
+                        class_entry=entry,
+                        class_name=str(
+                            row.get("class_name") or (entry.name if entry else "")
+                        ),
+                        subclass_identifier=str(row.get("subclass_identifier") or ""),
+                        subclass_name=str(row.get("subclass_name") or ""),
+                        is_override=bool(row.get("is_override")),
+                    )
+                character.character_class = self._class_summary(character)
+                character.save(update_fields=("character_class",))
+            if isinstance(choices, list):
+                character.build_choices.all().delete()
+                for row in choices:
+                    if not isinstance(row, dict):
+                        raise ValueError("Each builder choice must be an object.")
+                    level = int(row.get("level", 1))
+                    if not 1 <= level <= context.campaign.level:
+                        raise ValueError("Choice levels must match the campaign level.")
+                    CharacterChoice.objects.create(
+                        character=character,
+                        level=level,
+                        origin_entry_id=row.get("origin_entry_id"),
+                        identifier=str(row.get("identifier") or ""),
+                        kind=str(row.get("kind") or "custom"),
+                        values=row.get("values", []),
+                        is_override=bool(row.get("is_override")),
+                    )
+            record_character_history(
+                character,
+                reason=CharacterHistory.Reason.OVERRIDE
+                if bool(content.get("is_override"))
+                else CharacterHistory.Reason.EDIT,
+                before=before,
+                created_by=context,
+                description=self._string(content, "description"),
+            )
+        notify_campaign_changed(context.campaign_id)
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _builder_complete(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character_data, _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        if not character.name.strip() or not character.race.strip():
+            raise ValidationError("Name and race are required.")
+        levels = list(character.class_levels.order_by("level"))
+        if [row.level for row in levels] != list(range(1, context.campaign.level + 1)):
+            raise ValidationError("Choose one class for every campaign level.")
+        if any(not row.class_name.strip() for row in levels):
+            raise ValidationError("Every campaign level requires a class choice.")
+        before = character_snapshot(character)
+        was_initial_build = not character.is_build_complete
+        was_imported = character.history.filter(
+            reason=CharacterHistory.Reason.IMPORT
         ).exists()
+        is_level_up = character.level_progress.filter(
+            level=context.campaign.level, is_complete=False
+        ).exists()
+        with transaction.atomic():
+            character.is_build_complete = True
+            character.character_class = self._class_summary(character)
+            character.save(update_fields=("is_build_complete", "character_class"))
+            for level in range(1, context.campaign.level + 1):
+                CharacterLevelProgress.objects.update_or_create(
+                    character=character,
+                    level=level,
+                    defaults={"is_complete": True, "completed_at": timezone.now()},
+                )
+            character = character.activate()
+            if (
+                was_initial_build
+                and not was_imported
+                and character.current_hp != character.max_hp
+            ):
+                post_health_transaction(
+                    character,
+                    reason=HealthTransaction.Reason.CORRECTION,
+                    current_hp=character.max_hp,
+                    temporary_hp=character.temporary_hp,
+                    description="Completed initial character build",
+                    created_by=context,
+                )
+                character.refresh_from_db()
+            record_character_history(
+                character,
+                reason=(
+                    CharacterHistory.Reason.LEVEL_UP
+                    if is_level_up
+                    else CharacterHistory.Reason.CREATE
+                ),
+                before=before,
+                created_by=context,
+                description=(
+                    f"Completed level {context.campaign.level} level up"
+                    if is_level_up
+                    else "Completed character builder"
+                ),
+            )
+        notify_campaign_changed(context.campaign_id)
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _health_post(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _character, _is_owner
+
+        context = self._context()
+        character = _character(context, self._integer(content, "character_id"))
+        if context.kind != CampaignContext.Kind.GM and not _is_owner(
+            context, character
+        ):
+            raise PermissionError("You may only change your own character's HP.")
+        posted = post_health_transaction(
+            character,
+            reason=self._string(content, "reason", required=True),
+            current_hp_delta=int(content.get("current_hp_delta", 0)),
+            temporary_hp_delta=int(content.get("temporary_hp_delta", 0)),
+            current_hp=content.get("current_hp")
+            if isinstance(content.get("current_hp"), int)
+            else None,
+            temporary_hp=content.get("temporary_hp")
+            if isinstance(content.get("temporary_hp"), int)
+            else None,
+            description=self._string(content, "description"),
+            created_by=context,
+        )
+        notify_campaign_changed(context.campaign_id)
+        return self._health_data(posted)
+
+    @database_sync_to_async
+    def _sheet_change(self, content: dict[str, object]) -> dict[str, object] | None:
+        from types import SimpleNamespace
+
+        from . import api
+
+        context = self._context()
+        character_id = self._integer(content, "character_id")
+        character = api._editable_sheet_character(context, character_id)
+        command = self._string(content, "type", required=True)
+        operation = command.rsplit(".", 1)[-1]
+        resource = command.split(".")[1]
+        functions = {
+            ("notes", "create"): api.note_create,
+            ("notes", "update"): api.note_update,
+            ("notes", "delete"): api.note_delete,
+            ("features", "create"): api.feature_create,
+            ("features", "update"): api.feature_update,
+            ("features", "delete"): api.feature_delete,
+            ("spells", "create"): api.spell_create,
+            ("spells", "update"): api.spell_update,
+            ("spells", "delete"): api.spell_delete,
+            ("loadout", "create"): api.loadout_create,
+            ("loadout", "update"): api.loadout_update,
+            ("loadout", "delete"): api.loadout_delete,
+            ("companions", "create"): api.companion_create,
+            ("companions", "update"): api.companion_update,
+            ("companions", "delete"): api.companion_delete,
+        }
+        handler = functions[(resource, operation)]
+        request = SimpleNamespace(auth=context.user)
+        if operation == "delete":
+            result = handler(
+                request,
+                context.pk,
+                character_id,
+                self._integer(content, "record_id"),
+            )
+        else:
+            fields = content.get("fields", {})
+            if not isinstance(fields, dict):
+                raise ValueError("fields must be an object.")
+            payload = api.SheetRecord(**fields)
+            arguments = [request, context.pk, character_id]
+            if operation == "update":
+                arguments.append(self._integer(content, "record_id"))
+            result = handler(*arguments, payload)
+        CharacterHistory.objects.create(
+            campaign=context.campaign,
+            character=character,
+            created_by=context,
+            reason=CharacterHistory.Reason.EDIT,
+            description=f"{operation.title()} {resource}",
+            changes={
+                "sheet": {
+                    "resource": resource,
+                    "operation": operation,
+                    "record_id": content.get("record_id"),
+                }
+            },
+        )
+        notify_campaign_changed(context.campaign_id)
+        if isinstance(result, tuple):
+            return result[1]
+        return result
+
+    @database_sync_to_async
+    def _transaction_list(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import TRANSACTION_MODELS, _history_data, _transaction_queryset
+
+        context = self._context()
+        ledger = self._string(content, "ledger") or "all"
+        rows: list[dict[str, object]] = []
+        if ledger in ("all", "inventory", "money", "experience"):
+            choices = (
+                TRANSACTION_MODELS.items()
+                if ledger == "all"
+                else ((ledger, TRANSACTION_MODELS[ledger]),)
+            )
+            for _, model in choices:
+                query = _transaction_queryset(model, context.campaign)
+                if context.kind != CampaignContext.Kind.GM:
+                    query = query.filter(
+                        entries__account__character__context__user=context.user
+                    ).distinct()
+                rows.extend(_history_data(posted) for posted in query)
+        if ledger in ("all", "health"):
+            health = HealthTransaction.objects.filter(
+                campaign=context.campaign
+            ).select_related("character", "created_by__user")
+            if context.kind != CampaignContext.Kind.GM:
+                health = health.filter(character__context__user=context.user)
+            rows.extend(self._health_data(posted) for posted in health)
+        if ledger in ("all", "character"):
+            history = CharacterHistory.objects.filter(
+                campaign=context.campaign
+            ).select_related("character", "created_by__user")
+            if context.kind != CampaignContext.Kind.GM:
+                history = history.filter(character__context__user=context.user)
+            rows.extend(self._character_history_data(posted) for posted in history)
+        if ledger in ("all", "audit"):
+            audit_models = [CalendarEvent, CampaignLevelEvent]
+            if context.kind == CampaignContext.Kind.GM:
+                audit_models.extend((InvitationEvent, MembershipEvent))
+            for model in audit_models:
+                events = model.objects.filter(campaign=context.campaign).select_related(
+                    "created_by__user"
+                )
+                rows.extend(self._audit_data(posted) for posted in events)
+        rows.sort(key=lambda row: str(row["occurred_at"]), reverse=True)
+        page = max(1, int(content.get("page", 1)))
+        page_size = min(100, max(1, int(content.get("page_size", 25))))
+        start = (page - 1) * page_size
+        return {
+            "count": len(rows),
+            "page": page,
+            "page_size": page_size,
+            "results": rows[start : start + page_size],
+        }
+
+    @database_sync_to_async
+    def _inventory_transaction_create(
+        self, content: dict[str, object]
+    ) -> dict[str, object]:
+        from types import SimpleNamespace
+
+        from .api import InventoryTransactionCreate, inventory_transaction_create
+
+        context = self._context()
+        payload = InventoryTransactionCreate(
+            from_character_id=content.get("from_character_id"),
+            to_character_id=content.get("to_character_id"),
+            item_id=self._integer(content, "item_id"),
+            quantity=self._integer(content, "quantity"),
+            description=self._string(content, "description"),
+        )
+        result = inventory_transaction_create(
+            SimpleNamespace(auth=context.user), context.pk, payload
+        )
+        return result[1] if isinstance(result, tuple) else result
+
+    @database_sync_to_async
+    def _money_transfer_create(self, content: dict[str, object]) -> dict[str, object]:
+        from types import SimpleNamespace
+
+        from .api import MoneyTransferCreate, money_transfer_create
+
+        context = self._context()
+        payload = MoneyTransferCreate(
+            from_character_id=content.get("from_character_id"),
+            to_character_id=content.get("to_character_id"),
+            amounts=content.get("amounts", {}),
+            description=self._string(content, "description"),
+        )
+        result = money_transfer_create(
+            SimpleNamespace(auth=context.user), context.pk, payload
+        )
+        return result[1] if isinstance(result, tuple) else result
+
+    @database_sync_to_async
+    def _money_exchange_create(self, content: dict[str, object]) -> dict[str, object]:
+        from types import SimpleNamespace
+
+        from .api import MoneyExchangeCreate, money_exchange_create
+
+        context = self._context()
+        payload = MoneyExchangeCreate(
+            character_id=self._integer(content, "character_id"),
+            given=content.get("given", {}),
+            received=content.get("received", {}),
+            description=self._string(content, "description"),
+        )
+        result = money_exchange_create(
+            SimpleNamespace(auth=context.user), context.pk, payload
+        )
+        return result[1] if isinstance(result, tuple) else result
+
+    @database_sync_to_async
+    def _shared_xp_create(self, content: dict[str, object]) -> dict[str, object]:
+        from types import SimpleNamespace
+
+        from .api import SharedXpAwardCreate, shared_xp_award_create
+
+        context = self._context()
+        payload = SharedXpAwardCreate(
+            amount=self._integer(content, "amount"),
+            description=self._string(content, "description"),
+        )
+        result = shared_xp_award_create(
+            SimpleNamespace(auth=context.user), context.pk, payload
+        )
+        return result[1] if isinstance(result, tuple) else result
+
+    @database_sync_to_async
+    def _transaction_reverse(self, content: dict[str, object]) -> dict[str, object]:
+        from types import SimpleNamespace
+
+        from .api import transaction_reverse
+
+        context = self._context()
+        return transaction_reverse(
+            SimpleNamespace(auth=context.user),
+            context.pk,
+            self._string(content, "ledger", required=True),
+            self._integer(content, "transaction_id"),
+        )
+
+    @database_sync_to_async
+    def _cah_begin(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        upload_id = secrets.token_urlsafe(24)
+        cache.set(
+            f"cah-upload:{upload_id}",
+            {
+                "user_id": context.user_id,
+                "context_id": context.pk,
+                "campaign_id": context.campaign_id,
+                "character_id": character.pk,
+            },
+            timeout=900,
+        )
+        return {
+            "upload_id": upload_id,
+            "upload_url": f"/api/uploads/character-imports/{upload_id}/",
+            "expires_in": 900,
+        }
+
+    @database_sync_to_async
+    def _cah_preview(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import (
+            _calculated_values,
+            _import_entry_index,
+            _match_import_entry,
+        )
+        from .services.cah import parse_cah
+
+        context = self._context()
+        upload_id = self._string(content, "upload_id", required=True)
+        metadata = cache.get(f"cah-upload:{upload_id}")
+        raw = cache.get(f"cah-upload-bytes:{upload_id}")
+        if (
+            not metadata
+            or metadata.get("context_id") != context.pk
+            or not isinstance(raw, bytes)
+        ):
+            raise ValidationError("This upload is missing, expired, or incomplete.")
+        preview = parse_cah(raw)
+        target = Character.objects.get(
+            pk=metadata["character_id"], campaign=context.campaign
+        )
+        entry_index = _import_entry_index(context.campaign)
+        inventory = [
+            {
+                **row,
+                "matched_item_id": _match_import_entry(
+                    context.campaign, row, entry_index
+                ),
+            }
+            for row in preview.inventory
+        ]
+        candidate = Character.objects.get(pk=target.pk)
+        for name, value in preview.fields.items():
+            if name not in {"current_hp", "temporary_hp"}:
+                setattr(candidate, name, value)
+        token = secrets.token_urlsafe(24)
+        cache.set(
+            f"cah-import:{context.user_id}:{token}",
+            {
+                "campaign_id": context.campaign_id,
+                "fields": preview.fields,
+                "collections": preview.collections,
+                "inventory": inventory,
+                "warnings": preview.warnings,
+            },
+            timeout=900,
+        )
+        cache.delete_many((f"cah-upload:{upload_id}", f"cah-upload-bytes:{upload_id}"))
+        # Keep complete source records in the server-side draft for commit. Raw 5e
+        # Companion records are highly repetitive and can make the public preview
+        # many times larger than the uploaded file, exceeding Daphne's frame limit.
+        public_inventory = [
+            {
+                **{key: value for key, value in row.items() if key != "raw"},
+                "suggested_item_id": row["matched_item_id"],
+            }
+            for row in inventory
+        ]
+        field_changes = [
+            {
+                "field": name,
+                "before": getattr(target, name, None),
+                "after": value,
+                "changed": getattr(target, name, None) != value,
+            }
+            for name, value in preview.fields.items()
+        ]
+        collection_managers = {
+            "notes": target.notes,
+            "features": target.features,
+            "spells": target.spells,
+            "companions": target.companions,
+        }
+        collection_changes = [
+            {
+                "collection": name,
+                "before_count": manager.count(),
+                "after_count": len(preview.collections[name]),
+                "names": [
+                    str(row.get("name") or row.get("title") or "Untitled")
+                    for row in preview.collections[name][:10]
+                ],
+                "remaining_count": max(0, len(preview.collections[name]) - 10),
+            }
+            for name, manager in collection_managers.items()
+            if manager.exists() or preview.collections[name]
+        ]
+        return {
+            "token": token,
+            "field_changes": field_changes,
+            "collection_changes": collection_changes,
+            "inventory": public_inventory,
+            "warnings": preview.warnings,
+            "calculated_before": _calculated_values(target),
+            "calculated_after": _calculated_values(candidate),
+        }
+
+    @database_sync_to_async
+    def _cah_commit(self, content: dict[str, object]) -> dict[str, object]:
+        from types import SimpleNamespace
+
+        from .api import CahCommit, cah_commit
+
+        context = self._context()
+        character_id = self._integer(content, "character_id")
+        character = Character.objects.get(pk=character_id, campaign=context.campaign)
+        before = character_snapshot(character)
+        before_current, before_temporary = character.current_hp, character.temporary_hp
+        token = self._string(content, "token", required=True)
+        cache_key = f"cah-import:{context.user_id}:{token}"
+        draft = cache.get(cache_key)
+        if not draft:
+            raise ValidationError("This import preview has expired or is invalid.")
+        draft = {**draft, "fields": dict(draft["fields"])}
+        overrides = content.get("fields", {})
+        excluded_fields = content.get("excluded_fields", [])
+        if not isinstance(overrides, dict) or not isinstance(excluded_fields, list):
+            raise ValidationError("Import overrides must contain fields and exclusions.")
+        available_fields = set(draft["fields"])
+        if set(overrides) - available_fields or any(
+            not isinstance(name, str) or name not in available_fields
+            for name in excluded_fields
+        ):
+            raise ValidationError("An import override targets a field not in this preview.")
+        for name in excluded_fields:
+            draft["fields"].pop(name, None)
+        draft["fields"].update(overrides)
+        collection_choices = content.get("collections", {})
+        if not isinstance(collection_choices, dict) or set(collection_choices) - set(
+            draft["collections"]
+        ) or not all(isinstance(value, bool) for value in collection_choices.values()):
+            raise ValidationError("Import collection choices are invalid.")
+        imported_current = draft["fields"].pop("current_hp", before_current)
+        imported_temporary = draft["fields"].pop("temporary_hp", before_temporary)
+        cache.set(cache_key, draft, timeout=900)
+        payload = CahCommit(
+            token=token,
+            character_id=character_id,
+            inventory=content.get("inventory", []),
+            collections=collection_choices,
+        )
+        cah_commit(SimpleNamespace(auth=context.user), context.pk, payload)
+        character.refresh_from_db()
+        if imported_current != before_current or imported_temporary != before_temporary:
+            post_health_transaction(
+                character,
+                reason=HealthTransaction.Reason.CORRECTION,
+                current_hp=imported_current,
+                temporary_hp=imported_temporary,
+                description="Imported from 5e Companion",
+                created_by=context,
+            )
+            character.refresh_from_db()
+        record_character_history(
+            character,
+            reason=CharacterHistory.Reason.IMPORT,
+            before=before,
+            created_by=context,
+            description="Imported from 5e Companion",
+        )
+        from .api import _character_data
+
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _cah_cancel(self, content: dict[str, object]) -> None:
+        upload_id = self._string(content, "upload_id")
+        if upload_id:
+            metadata = cache.get(f"cah-upload:{upload_id}")
+            if metadata and metadata.get("context_id") == self.context_id:
+                cache.delete_many(
+                    (f"cah-upload:{upload_id}", f"cah-upload-bytes:{upload_id}")
+                )
+        token = self._string(content, "token")
+        if token:
+            cache.delete(f"cah-import:{self.scope['user'].pk}:{token}")
 
     @database_sync_to_async
     def _item_list(self, content: dict[str, object]) -> dict[str, object]:
@@ -314,7 +1793,7 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
         context = (
             CampaignContext.objects.select_related("campaign", "user")
             .filter(
-                campaign_id=self.campaign_id,
+                pk=self.context_id,
                 user_id=self.scope["user"].pk,
                 is_active=True,
             )
@@ -323,6 +1802,152 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
         if context is None:
             raise PermissionError("No active campaign context.")
         return context
+
+    @staticmethod
+    def _incomplete_level_ups(campaign) -> list[dict[str, object]]:
+        return [
+            {
+                "character_id": row.character_id,
+                "character_name": row.character.name,
+                "level": row.level,
+            }
+            for row in CharacterLevelProgress.objects.filter(
+                character__campaign=campaign,
+                character__is_active=True,
+                character__is_archived=False,
+                is_complete=False,
+            ).select_related("character")
+        ]
+
+    @staticmethod
+    def _invitation_data(invitation: CampaignInvitation) -> dict[str, object]:
+        status = "pending"
+        if invitation.accepted_at:
+            status = "accepted"
+        elif invitation.revoked_at:
+            status = "revoked"
+        elif invitation.expires_at <= timezone.now():
+            status = "expired"
+        return {
+            "id": invitation.pk,
+            "email": invitation.delivery_email,
+            "created_at": invitation.created_at.isoformat(),
+            "expires_at": invitation.expires_at.isoformat(),
+            "accepted_at": invitation.accepted_at.isoformat()
+            if invitation.accepted_at
+            else None,
+            "status": status,
+        }
+
+    def _invite_link(self, token: str) -> str:
+        headers = dict(self.scope.get("headers", []))
+        origin = headers.get(b"origin", b"").decode().rstrip("/")
+        return f"{origin}/invites/{token}" if origin else f"/invites/{token}"
+
+    @staticmethod
+    def _enabled_builder_entry(context, entry_id, kind: str):
+        entry = CompendiumEntry.objects.filter(
+            pk=entry_id,
+            kind=kind,
+            source__in=context.campaign.compendium_sources.all(),
+        ).first()
+        if entry is None:
+            raise ValidationError(f"Selected {kind} is not enabled for this campaign.")
+        return entry
+
+    @staticmethod
+    def _class_summary(character: Character) -> str:
+        counts: dict[str, int] = {}
+        for row in character.class_levels.all():
+            counts[row.class_name] = counts.get(row.class_name, 0) + 1
+        return " / ".join(f"{name} {level}" for name, level in counts.items())
+
+    @staticmethod
+    def _event_metadata(event) -> dict[str, object]:
+        actor = None
+        if event.created_by_id:
+            actor = event.created_by.user.get_username()
+        elif event.actor_username:
+            actor = event.actor_username
+        return {
+            "occurred_at": event.occurred_at.isoformat(),
+            "campaign_date": event.campaign_date,
+            "actor": actor,
+        }
+
+    @classmethod
+    def _health_data(cls, event: HealthTransaction) -> dict[str, object]:
+        return {
+            "id": event.pk,
+            "ledger": "health",
+            "character_id": event.character_id,
+            "character_name": event.character.name,
+            "reason": event.reason,
+            "description": event.description,
+            "current_hp_delta": event.current_hp_delta,
+            "temporary_hp_delta": event.temporary_hp_delta,
+            "current_hp_before": event.current_hp_before,
+            "current_hp_after": event.current_hp_after,
+            "temporary_hp_before": event.temporary_hp_before,
+            "temporary_hp_after": event.temporary_hp_after,
+            "entries": [],
+            **cls._event_metadata(event),
+        }
+
+    @classmethod
+    def _character_history_data(cls, event: CharacterHistory) -> dict[str, object]:
+        return {
+            "id": event.pk,
+            "ledger": "character",
+            "character_id": event.character_id,
+            "character_name": event.character.name,
+            "reason": event.reason,
+            "description": event.description,
+            "changes": event.changes,
+            "entries": [],
+            **cls._event_metadata(event),
+        }
+
+    @classmethod
+    def _audit_data(cls, event) -> dict[str, object]:
+        description = event._meta.verbose_name.title()
+        changes: dict[str, object] = {}
+        if isinstance(event, CalendarEvent):
+            changes = {
+                "calendar": {
+                    "before": format_campaign_date(
+                        event.before_era_abbreviation,
+                        event.before_year,
+                        event.before_day,
+                    ),
+                    "after": format_campaign_date(
+                        event.after_era_abbreviation,
+                        event.after_year,
+                        event.after_day,
+                    ),
+                }
+            }
+        elif isinstance(event, CampaignLevelEvent):
+            changes = {
+                "level": {
+                    "before": event.previous_level,
+                    "after": event.next_level,
+                }
+            }
+        elif isinstance(event, MembershipEvent):
+            changes = {"membership": {"before": event.before, "after": event.after}}
+            description = event.get_reason_display()
+        elif isinstance(event, InvitationEvent):
+            description = event.get_reason_display()
+        return {
+            "id": event.pk,
+            "ledger": f"audit.{event._meta.model_name}",
+            "reason": getattr(event, "reason", event._meta.model_name),
+            "description": description,
+            "changes": changes,
+            "entries": [],
+            **cls._event_metadata(event),
+        }
 
     @staticmethod
     def _string(
@@ -389,3 +2014,161 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
             cache.delete(lock)
             raise
         return True
+
+
+class UserConsumer(HoardJsonWebsocketConsumer):
+    channel_layer_alias = "local"
+
+    async def connect(self) -> None:
+        if not self.scope["user"].is_authenticated:
+            await self.close(code=4401)
+            return
+        await self.accept()
+
+    async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
+        request_id = content.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            await self.send_json(
+                {
+                    "type": "response.error",
+                    "code": "missing_request_id",
+                    "detail": "A request ID is required.",
+                }
+            )
+            return
+        if content.get("type") != "user.contexts.list":
+            await self.send_json(
+                {
+                    "type": "response.error",
+                    "request_id": request_id,
+                    "code": "unsupported_message",
+                    "detail": "Unsupported message.",
+                }
+            )
+            return
+        data = await self._contexts()
+        await self.send_json(
+            {"type": "response", "request_id": request_id, "data": data}
+        )
+
+    @database_sync_to_async
+    def _contexts(self) -> list[dict[str, object]]:
+        from .api import _context_data
+
+        return [
+            _context_data(context)
+            for context in CampaignContext.objects.filter(
+                user=self.scope["user"], is_active=True
+            ).select_related("campaign", "character")
+        ]
+
+
+class InviteConsumer(HoardJsonWebsocketConsumer):
+    channel_layer_alias = "local"
+
+    async def connect(self) -> None:
+        self.token = self.scope["url_route"]["kwargs"]["token"]
+        if not await self._valid_token():
+            await self.close(code=4404)
+            return
+        await self.accept()
+
+    async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
+        request_id = content.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            await self.send_json(
+                {
+                    "type": "response.error",
+                    "code": "missing_request_id",
+                    "detail": "A request ID is required.",
+                }
+            )
+            return
+        handlers = {
+            "invite.inspect": self._inspect,
+            "invite.accept": self._accept,
+            "invite.register_and_accept": self._register,
+        }
+        handler = handlers.get(content.get("type"))
+        if handler is None:
+            await self.send_json(
+                {
+                    "type": "response.error",
+                    "request_id": request_id,
+                    "code": "unsupported_message",
+                    "detail": "Unsupported message.",
+                }
+            )
+            return
+        try:
+            data = await handler(content)
+        except (ValidationError, ValueError, PermissionError) as error:
+            field_errors = getattr(error, "message_dict", None)
+            detail = field_errors or getattr(error, "messages", None) or str(error)
+            code = (
+                "forbidden"
+                if isinstance(error, PermissionError)
+                else "validation_error"
+            )
+            await self.send_json(
+                {
+                    "type": "response.error",
+                    "request_id": request_id,
+                    "code": code,
+                    "detail": detail,
+                    "field_errors": field_errors,
+                }
+            )
+            return
+        await self.send_json(
+            {"type": "response", "request_id": request_id, "data": data}
+        )
+
+    @database_sync_to_async
+    def _valid_token(self) -> bool:
+        from .services.invitations import invitation_for_token
+
+        try:
+            invitation_for_token(self.token)
+        except ValidationError:
+            return False
+        return True
+
+    @database_sync_to_async
+    def _inspect(self, content: dict[str, object]) -> dict[str, object]:
+        from .services.invitations import invitation_for_token
+
+        invitation = invitation_for_token(self.token)
+        return {
+            "campaign_name": invitation.campaign.name,
+            "expires_at": invitation.expires_at.isoformat(),
+            "authenticated": self.scope["user"].is_authenticated,
+            "username": self.scope["user"].get_username()
+            if self.scope["user"].is_authenticated
+            else None,
+        }
+
+    @database_sync_to_async
+    def _accept(self, content: dict[str, object]) -> dict[str, object]:
+        if not self.scope["user"].is_authenticated:
+            raise PermissionError("Sign in before accepting this invitation.")
+        context = accept_invitation(self.token, self.scope["user"])
+        notify_campaign_changed(context.campaign_id)
+        return {"context_id": context.pk, "character_id": context.character.pk}
+
+    @database_sync_to_async
+    def _register(self, content: dict[str, object]) -> dict[str, object]:
+        username = str(content.get("username") or "").strip()
+        email = str(content.get("email") or "").strip()
+        password = str(content.get("password") or "")
+        if not username or not email or not password:
+            raise ValidationError("Username, email, and password are required.")
+        validate_password(password)
+        user, context = register_and_accept(self.token, username, email, password)
+        notify_campaign_changed(context.campaign_id)
+        return {
+            "user_id": user.pk,
+            "username": user.get_username(),
+            "context_id": context.pk,
+            "character_id": context.character.pk,
+        }

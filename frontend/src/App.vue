@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getCalendar, logout, type CampaignCalendar } from "./api";
+import { getCalendar, getCampaign, logout, type CampaignCalendar } from "./api";
 import { formatCampaignDate } from "./calendar";
 import NavigationMenu from "./components/NavigationMenu.vue";
 import { contextPath, contexts, rememberContext, type ActingContext } from "./context";
@@ -19,8 +19,12 @@ const isDesktop = ref(window.innerWidth >= 960);
 const busy = ref(false);
 const availableContexts = ref<ActingContext[]>([]);
 const calendar = ref<CampaignCalendar>();
+const incompleteLevelUps = ref<string[]>([]);
 let unsubscribeCampaignChanges: (() => void) | undefined;
 const contextId = computed(() => Number(route.params.id));
+const isPublicRoute = computed(
+  () => route.path === "/login" || route.path.startsWith("/invites/"),
+);
 const activeContext = computed(() =>
   availableContexts.value.find((context) => context.id === contextId.value),
 );
@@ -69,20 +73,29 @@ watch(
   (context) => {
     unsubscribeCampaignChanges?.();
     calendar.value = undefined;
+    incompleteLevelUps.value = [];
     if (!context) {
       disconnectCampaignRealtime();
       return;
     }
     const refreshCalendar = async (): Promise<void> => {
       try {
-        calendar.value = await getCalendar(context.id);
+        const [nextCalendar, campaign] = await Promise.all([
+          getCalendar(context.id),
+          getCampaign(context.id),
+        ]);
+        calendar.value = nextCalendar;
+        incompleteLevelUps.value = campaign.incomplete_level_ups.map(
+          (row) => row.character_name,
+        );
       } catch {
         calendar.value = undefined;
+        incompleteLevelUps.value = [];
       }
     };
     void refreshCalendar();
-    connectCampaignRealtime(context.campaign_id);
-    unsubscribeCampaignChanges = subscribeCampaignChanges(context.campaign_id, () => {
+    connectCampaignRealtime(context.id);
+    unsubscribeCampaignChanges = subscribeCampaignChanges(context.id, () => {
       void refreshCalendar();
       campaignRefreshRevision.value += 1;
     });
@@ -107,7 +120,7 @@ onBeforeUnmount(() => {
       class="app-bar"
     >
       <v-app-bar-nav-icon
-        v-if="$route.path !== '/login' && !isDesktop"
+        v-if="!isPublicRoute && !isDesktop"
         aria-label="Open navigation"
         @click="drawer = !drawer"
       />
@@ -127,7 +140,7 @@ onBeforeUnmount(() => {
         {{ title }}
       </span>
       <v-menu
-        v-if="$route.path !== '/login'"
+        v-if="!isPublicRoute"
         location="bottom end"
       >
         <template #activator="{ props }">
@@ -174,7 +187,7 @@ onBeforeUnmount(() => {
       </v-menu>
     </v-app-bar>
     <v-navigation-drawer
-      v-if="$route.path !== '/login' && isDesktop"
+      v-if="!isPublicRoute && isDesktop"
       permanent
       rail
       expand-on-hover
@@ -185,10 +198,11 @@ onBeforeUnmount(() => {
       <NavigationMenu
         :context-id="contextId"
         :active-context="activeContext"
+        :has-incomplete-level-ups="Boolean(incompleteLevelUps.length)"
       />
     </v-navigation-drawer>
     <v-navigation-drawer
-      v-if="$route.path !== '/login' && !isDesktop"
+      v-if="!isPublicRoute && !isDesktop"
       v-model="drawer"
       temporary
       width="360"
@@ -197,8 +211,22 @@ onBeforeUnmount(() => {
       <NavigationMenu
         :context-id="contextId"
         :active-context="activeContext"
+        :has-incomplete-level-ups="Boolean(incompleteLevelUps.length)"
       />
     </v-navigation-drawer>
-    <v-main><router-view @contexts-changed="loadContexts" /></v-main>
+    <v-main>
+      <v-alert
+        v-if="incompleteLevelUps.length"
+        type="error"
+        variant="flat"
+        prominent
+        title="Level-up incomplete"
+        class="ma-3"
+      >
+        {{ incompleteLevelUps.join(", ") }} still need to finish the approved group
+        level-up.
+      </v-alert>
+      <router-view @contexts-changed="loadContexts" />
+    </v-main>
   </v-app>
 </template>

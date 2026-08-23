@@ -10,7 +10,7 @@ describe("campaign calendar", () => {
         year: 81,
         day: 137,
       }),
-    ).toBe("PD81, 137th");
+    ).toBe("PD 81, 137th");
   });
 
   it("uses correct ordinal suffixes", () => {

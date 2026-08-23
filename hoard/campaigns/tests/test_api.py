@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import Client, TransactionTestCase, override_settings
 
 from hoard.campaigns.api import _item_data, _items
 from hoard.campaigns.models import (
@@ -18,8 +18,14 @@ from hoard.compendium.models import (
     CompendiumSource,
 )
 
+from .helpers import ContextSocketMixin
 
-class ContextApiTests(TestCase):
+
+@override_settings(
+    CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+)
+class ContextApiTests(ContextSocketMixin, TransactionTestCase):
     def setUp(self) -> None:
         self.campaign = Campaign.objects.create(name="Hoard")
         user_model = get_user_model()
@@ -64,91 +70,123 @@ class ContextApiTests(TestCase):
             user=self.player_user,
             kind=CampaignContext.Kind.GM,
         )
-        self.client.force_login(self.player_user)
-        response = self.client.get("/api/contexts/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual({row["kind"] for row in response.json()}, {"gm", "pc"})
+        contexts = list(
+            CampaignContext.objects.filter(user=self.player_user).values_list(
+                "kind", flat=True
+            )
+        )
+        self.assertEqual(set(contexts), {"gm", "pc"})
 
     def test_players_can_view_the_calendar_but_only_gms_can_adjust_it(self) -> None:
-        self.client.force_login(self.player_user)
-        visible = self.client.get(f"/api/contexts/{self.pc.pk}/calendar/")
-        self.assertEqual(visible.status_code, 200)
-        self.assertEqual(visible.json()["year"], 81)
-        forbidden = self.client.post(
-            f"/api/contexts/{self.pc.pk}/calendar/adjust/",
-            data=json.dumps({"amount": 1}),
-            content_type="application/json",
+        visible = self.socket_request(
+            self.player_user, self.pc.pk, "campaign.calendar.get"
         )
-        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(visible["data"]["year"], 81)
+        forbidden = self.socket_request(
+            self.player_user, self.pc.pk, "campaign.calendar.adjust", amount=1
+        )
+        self.assertEqual(forbidden["type"], "response.error")
 
-        self.client.force_login(self.gm_user)
         self.campaign.calendar_year, self.campaign.calendar_day = 81, 365
         self.campaign.save(update_fields=("calendar_year", "calendar_day"))
-        updated = self.client.post(
-            f"/api/contexts/{self.gm.pk}/calendar/adjust/",
-            data=json.dumps({"amount": 1}),
-            content_type="application/json",
+        updated = self.socket_request(
+            self.gm_user, self.gm.pk, "campaign.calendar.adjust", amount=1
         )
-        self.assertEqual(updated.status_code, 200)
-        self.assertEqual((updated.json()["year"], updated.json()["day"]), (82, 1))
+        self.assertEqual((updated["data"]["year"], updated["data"]["day"]), (82, 1))
 
     def test_calendar_rejects_decrement_before_first_day(self) -> None:
         self.campaign.calendar_year, self.campaign.calendar_day = 1, 1
         self.campaign.save(update_fields=("calendar_year", "calendar_day"))
-        self.client.force_login(self.gm_user)
-        response = self.client.post(
-            f"/api/contexts/{self.gm.pk}/calendar/adjust/",
-            data=json.dumps({"amount": -1}),
-            content_type="application/json",
+        response = self.socket_request(
+            self.gm_user, self.gm.pk, "campaign.calendar.adjust", amount=-1
         )
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response["type"], "response.error")
 
     def test_player_cannot_edit_another_character(self) -> None:
-        self.client.force_login(self.player_user)
-        response = self.client.patch(
-            f"/api/contexts/{self.pc.pk}/characters/{self.character.pk}/",
-            data=json.dumps({"base_hp": 20}),
-            content_type="application/json",
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.update",
+            character_id=self.character.pk,
+            fields={"base_hp": 20},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["type"], "response")
         self.character.refresh_from_db()
         self.assertEqual(self.character.base_hp, 20)
 
     def test_cah_preview_does_not_post_ledger_data(self) -> None:
-        self.client.force_login(self.player_user)
         fixture = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"
+        begun = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.imports.cah.begin",
+            character_id=self.character.pk,
+        )
+        self.client.force_login(self.player_user)
         upload = self.client.post(
-            f"/api/contexts/{self.pc.pk}/character-imports/cah/preview",
+            begun["data"]["upload_url"],
             {"file": SimpleUploadedFile("hero.cah", fixture.read_bytes())},
         )
-        self.assertEqual(upload.status_code, 200)
-        token = upload.json()["token"]
-        committed = self.client.post(
-            f"/api/contexts/{self.pc.pk}/character-imports/cah/commit",
-            data=json.dumps({"token": token, "character_id": self.character.pk}),
-            content_type="application/json",
+        self.assertEqual(upload.status_code, 204)
+        preview = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.imports.cah.preview",
+            upload_id=begun["data"]["upload_id"],
         )
-        self.assertEqual(committed.status_code, 200)
+        committed = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.imports.cah.commit",
+            token=preview["data"]["token"],
+            character_id=self.character.pk,
+        )
+        self.assertEqual(committed["type"], "response")
         self.character.refresh_from_db()
         self.assertTrue(self.character.name)
         self.assertGreater(self.character.max_hp, 0)
 
-    def test_transaction_response_has_an_immutable_timestamp(self) -> None:
-        self.client.force_login(self.gm_user)
-        response = self.client.post(
-            f"/api/contexts/{self.gm.pk}/inventory-transactions/",
-            data=json.dumps(
-                {
-                    "from_character_id": None,
-                    "to_character_id": self.character.pk,
-                    "item_id": self.item.pk,
-                    "quantity": 1,
-                }
-            ),
-            content_type="application/json",
+    def test_cah_byte_transfer_requires_csrf_and_is_single_use(self) -> None:
+        begun = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.imports.cah.begin",
+            character_id=self.character.pk,
         )
-        self.assertEqual(response.status_code, 201)
-        self.assertIn("created_at", response.json())
+        protected_client = Client(enforce_csrf_checks=True)
+        protected_client.force_login(self.player_user)
+        denied = protected_client.post(
+            begun["data"]["upload_url"],
+            {"file": SimpleUploadedFile("hero.cah", b"{}")},
+        )
+        self.assertEqual(denied.status_code, 403)
+
+        fixture = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"
+        self.client.force_login(self.player_user)
+        accepted = self.client.post(
+            begun["data"]["upload_url"],
+            {"file": SimpleUploadedFile("hero.cah", fixture.read_bytes())},
+        )
+        repeated = self.client.post(
+            begun["data"]["upload_url"],
+            {"file": SimpleUploadedFile("hero.cah", fixture.read_bytes())},
+        )
+        self.assertEqual(accepted.status_code, 204)
+        self.assertEqual(repeated.status_code, 404)
+
+    def test_transaction_response_has_an_immutable_timestamp(self) -> None:
+        response = self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "inventory.transactions.create",
+            from_character_id=None,
+            to_character_id=self.character.pk,
+            item_id=self.item.pk,
+            quantity=1,
+        )
+        self.assertEqual(response["type"], "response")
+        self.assertIn("occurred_at", response["data"])
+        self.assertEqual(response["data"]["campaign_date"], "PD 81, 137th")
 
     def test_item_data_includes_picker_equipment_metadata(self) -> None:
         self.item.source_book = "phb"
@@ -183,83 +221,199 @@ class ContextApiTests(TestCase):
         self.assertIn("data", item.source.get_deferred_fields())
         self.assertIn("data", item.source.repository.get_deferred_fields())
 
+    def test_builder_definition_is_lightweight_and_loads_selected_entry(self) -> None:
+        character_class = CompendiumEntry.objects.create(
+            source=self.source,
+            kind="class",
+            source_identifier="cleric",
+            name="Cleric",
+            source_book="PHB",
+            data={
+                "stats": {
+                    "archetype_selection_level": {"value": 2},
+                    "archetypes": {
+                        "value": [
+                            {
+                                "stats": {
+                                    "id": {"value": "life-domain"},
+                                    "name": {"value": "Life Domain"},
+                                    "source": {"value": "PHB"},
+                                },
+                                "raw_rules": "x" * 1_100_000,
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+
+        definition = self.socket_request(
+            self.player_user, self.pc.pk, "characters.builder.definition"
+        )
+
+        self.assertEqual(definition["type"], "response")
+        self.assertLess(len(json.dumps(definition).encode()), 100_000)
+        class_row = next(
+            row
+            for row in definition["data"]["class"]
+            if row["id"] == character_class.pk
+        )
+        self.assertNotIn("data", class_row)
+        self.assertEqual(class_row["source_book"], "PHB")
+        self.assertEqual(class_row["repository"], "Tests")
+
+        detail = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.builder.entry.get",
+            entry_id=character_class.pk,
+        )
+        self.assertEqual(detail["data"]["data"]["subchoices"], ["Life Domain"])
+        self.assertEqual(detail["data"]["data"]["subclass_selection_level"], 2)
+        self.assertEqual(
+            detail["data"]["data"]["subclasses"],
+            [
+                {
+                    "identifier": "life-domain",
+                    "name": "Life Domain",
+                    "source": "PHB",
+                    "level": 2,
+                }
+            ],
+        )
+        self.assertNotIn("raw_rules", json.dumps(detail))
+
+    def test_builder_definition_collapses_republished_system_entries(self) -> None:
+        canonical = CompendiumEntry.objects.create(
+            source=self.source,
+            kind="class",
+            source_identifier="ranger",
+            name="Ranger",
+            source_book="PHB",
+        )
+        dependency_repository = CompendiumRepository.objects.create(
+            identifier="github:example/setting", name="Setting dependency"
+        )
+        dependency_source = CompendiumSource.objects.create(
+            repository=dependency_repository, identifier="5e", name="5e"
+        )
+        self.campaign.compendium_sources.add(dependency_source)
+        CompendiumEntry.objects.create(
+            source=dependency_source,
+            kind="class",
+            source_identifier="ranger",
+            name="Ranger",
+            source_book="PHB",
+        )
+
+        definition = self.socket_request(
+            self.player_user, self.pc.pk, "characters.builder.definition"
+        )
+        rangers = [
+            row for row in definition["data"]["class"] if row["name"] == "Ranger"
+        ]
+
+        self.assertEqual(len(rangers), 1)
+        self.assertEqual(rangers[0]["id"], canonical.pk)
+        self.assertEqual(rangers[0]["source_book"], "PHB")
+        self.assertEqual(len(rangers[0]["alias_ids"]), 1)
+
+    def test_builder_class_defaults_subclass_selection_to_level_three(self) -> None:
+        character_class = CompendiumEntry.objects.create(
+            source=self.source,
+            kind="class",
+            source_identifier="ranger",
+            name="Ranger",
+            data={
+                "stats": {
+                    "archetypes": {
+                        "value": [
+                            {
+                                "stats": {
+                                    "id": {"value": "hunter"},
+                                    "name": {"value": "Hunter"},
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+
+        detail = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.builder.entry.get",
+            entry_id=character_class.pk,
+        )
+
+        self.assertEqual(detail["data"]["data"]["subclass_selection_level"], 3)
+        self.assertEqual(detail["data"]["data"]["subclasses"][0]["level"], 3)
+
     def test_money_transfer_accepts_multiple_denominations_as_one_transaction(
         self,
     ) -> None:
-        self.client.force_login(self.gm_user)
-        response = self.client.post(
-            f"/api/contexts/{self.gm.pk}/money-transfers/",
-            data=json.dumps(
-                {
-                    "from_character_id": None,
-                    "to_character_id": self.character.pk,
-                    "amounts": {"gp": 12, "sp": 4, "cp": 7},
-                    "description": "Quest reward",
-                }
-            ),
-            content_type="application/json",
+        response = self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "money.transfers.create",
+            from_character_id=None,
+            to_character_id=self.character.pk,
+            amounts={"gp": 12, "sp": 4, "cp": 7},
+            description="Quest reward",
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response["type"], "response")
         self.assertEqual(MoneyTransaction.objects.count(), 1)
-        self.assertEqual(response.json()["actor"], "gm")
+        self.assertEqual(response["data"]["actor"], "gm")
         self.assertEqual(self.character.money.gold, 12)
         self.assertEqual(self.character.money.silver, 4)
         self.assertEqual(self.character.money.copper, 7)
 
     def test_money_transfer_rejects_zero_negative_and_insufficient_take(self) -> None:
-        self.client.force_login(self.gm_user)
-        endpoint = f"/api/contexts/{self.gm.pk}/money-transfers/"
         for amounts in ({"gp": 0}, {"gp": -1}):
-            response = self.client.post(
-                endpoint,
-                data=json.dumps(
-                    {
-                        "from_character_id": None,
-                        "to_character_id": self.character.pk,
-                        "amounts": amounts,
-                    }
-                ),
-                content_type="application/json",
+            response = self.socket_request(
+                self.gm_user,
+                self.gm.pk,
+                "money.transfers.create",
+                from_character_id=None,
+                to_character_id=self.character.pk,
+                amounts=amounts,
             )
-            self.assertEqual(response.status_code, 422)
-        response = self.client.post(
-            endpoint,
-            data=json.dumps(
-                {
-                    "from_character_id": self.character.pk,
-                    "to_character_id": None,
-                    "amounts": {"gp": 1, "sp": 1},
-                }
-            ),
-            content_type="application/json",
+            self.assertEqual(response["type"], "response.error")
+        response = self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "money.transfers.create",
+            from_character_id=self.character.pk,
+            to_character_id=None,
+            amounts={"gp": 1, "sp": 1},
         )
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response["type"], "response.error")
 
     def test_character_transaction_filter_includes_actor(self) -> None:
-        self.client.force_login(self.gm_user)
-        self.client.post(
-            f"/api/contexts/{self.gm.pk}/money-transfers/",
-            data=json.dumps(
-                {
-                    "from_character_id": None,
-                    "to_character_id": self.character.pk,
-                    "amounts": {"gp": 1},
-                }
-            ),
-            content_type="application/json",
+        self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "money.transfers.create",
+            from_character_id=None,
+            to_character_id=self.character.pk,
+            amounts={"gp": 1},
         )
-        response = self.client.get(
-            f"/api/contexts/{self.gm.pk}/transactions/?character_id={self.character.pk}"
+        response = self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "transactions.list",
+            character_id=self.character.pk,
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["count"], 1)
-        self.assertEqual(response.json()["results"][0]["actor"], "gm")
+        self.assertEqual(response["data"]["count"], 1)
+        self.assertEqual(response["data"]["results"][0]["actor"], "gm")
 
     def test_player_cannot_award_shared_experience(self) -> None:
-        self.client.force_login(self.player_user)
-        response = self.client.post(
-            f"/api/contexts/{self.pc.pk}/shared-xp-awards/",
-            data=json.dumps({"amount": 100, "description": "No permission"}),
-            content_type="application/json",
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "experience.shared_awards.create",
+            amount=100,
+            description="No permission",
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response["type"], "response.error")

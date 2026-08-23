@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { initialiseCsrf, login } from "../api";
 
 const router = useRouter();
+const route = useRoute();
 const username = ref("");
 const password = ref("");
 const error = ref("");
@@ -29,7 +30,7 @@ async function submit(): Promise<void> {
       csrfReady.value = true;
     }
     await login(username.value, password.value);
-    await router.push("/");
+    await router.push(typeof route.query.next === "string" ? route.query.next : "/");
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : "Unable to sign in.";
   } finally {

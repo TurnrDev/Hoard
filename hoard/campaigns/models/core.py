@@ -50,6 +50,7 @@ class Campaign(models.Model):
     calendar_day = models.PositiveSmallIntegerField(default=137)
     use_shared_exp = models.BooleanField(default=True)
     shared_experience = models.PositiveIntegerField(default=0)
+    level = models.PositiveSmallIntegerField(default=1)
     compendium_sources = models.ManyToManyField(
         "compendium.CompendiumSource", blank=True, related_name="enabled_campaigns"
     )
@@ -188,11 +189,38 @@ class Character(models.Model):
     )
     is_active = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
+    is_build_complete = models.BooleanField(default=True)
     archived_at = models.DateTimeField(null=True, blank=True)
     name = models.CharField(max_length=200)
-    race = models.CharField(max_length=100)
-    character_class = models.CharField(max_length=100)
+    race = models.CharField(max_length=100, blank=True)
+    character_class = models.CharField(max_length=100, blank=True)
     background = models.CharField(max_length=100, blank=True)
+    race_entry = models.ForeignKey(
+        "compendium.CompendiumEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="race_characters",
+    )
+    background_entry = models.ForeignKey(
+        "compendium.CompendiumEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="background_characters",
+    )
+    subrace_identifier = models.CharField(max_length=200, blank=True)
+    subrace_name = models.CharField(max_length=200, blank=True)
+    alignment = models.CharField(max_length=100, blank=True)
+    personality_traits = models.TextField(blank=True)
+    ideals = models.TextField(blank=True)
+    bonds = models.TextField(blank=True)
+    flaws = models.TextField(blank=True)
+    about = models.TextField(blank=True)
+    languages = models.JSONField(default=list, blank=True)
+    equipment_proficiencies = models.JSONField(default=dict, blank=True)
+    ability_bonuses = models.JSONField(default=dict, blank=True)
+    ability_score_adjustments = models.JSONField(default=dict, blank=True)
     strength = models.PositiveSmallIntegerField()
     dexterity = models.PositiveSmallIntegerField()
     constitution = models.PositiveSmallIntegerField()
@@ -200,6 +228,8 @@ class Character(models.Model):
     wisdom = models.PositiveSmallIntegerField()
     charisma = models.PositiveSmallIntegerField()
     base_hp = models.PositiveSmallIntegerField(default=1)
+    hp_ability = models.CharField(max_length=20, default="constitution")
+    hp_adjustment = models.SmallIntegerField(default=0)
     current_hp = models.IntegerField(default=1)
     temporary_hp = models.IntegerField(default=0)
     base_ac = models.PositiveSmallIntegerField(default=10)
@@ -226,6 +256,7 @@ class Character(models.Model):
     wisdom_save_adjustment = models.SmallIntegerField(default=0)
     charisma_save_adjustment = models.SmallIntegerField(default=0)
     skill_proficiencies = models.JSONField(default=dict, blank=True)
+    npc_level = models.PositiveSmallIntegerField(default=1)
 
     class Meta:
         constraints = []
@@ -257,14 +288,26 @@ class Character(models.Model):
 
     @property
     def level(self) -> int:
-        return self.level_for_experience(self.experience)
+        return self.campaign.level if self.is_player_character else self.npc_level
 
     @property
     def max_hp(self) -> int:
-        return max(1, self.base_hp + self.ability_modifier("constitution") * self.level)
+        return max(
+            1,
+            self.base_hp
+            + self.ability_modifier(self.hp_ability) * self.level
+            + self.hp_adjustment,
+        )
+
+    def ability_score(self, ability: str) -> int:
+        return (
+            getattr(self, ability)
+            + int(self.ability_bonuses.get(ability, 0))
+            + int(self.ability_score_adjustments.get(ability, 0))
+        )
 
     def ability_modifier(self, ability: str) -> int:
-        return (getattr(self, ability) - 10) // 2 + getattr(
+        return (self.ability_score(ability) - 10) // 2 + getattr(
             self, f"{ability}_modifier_adjustment"
         )
 

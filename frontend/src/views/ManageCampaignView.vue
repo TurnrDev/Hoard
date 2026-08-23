@@ -2,15 +2,19 @@
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
-  addMember,
   archiveCharacter,
+  createInvitation,
   createCharacter,
   getCharacters,
   getCampaign,
+  getInvitations,
   getMembers,
   removeMember,
+  resendInvitation,
+  revokeInvitation,
   updateMember,
   type Campaign,
+  type CampaignInvitation,
   type CampaignMember,
   type Character,
 } from "../api";
@@ -21,9 +25,10 @@ const router = useRouter();
 const campaignId = Number(route.params.id);
 const campaign = ref<Campaign>();
 const members = ref<CampaignMember[]>([]);
+const invitations = ref<CampaignInvitation[]>([]);
 const characters = ref<Character[]>([]);
-const username = ref("");
-const makeGm = ref(false);
+const invitationEmail = ref("");
+const invitationLink = ref("");
 const characterName = ref("");
 const characterRace = ref("Human");
 const characterClass = ref("Fighter");
@@ -38,9 +43,10 @@ async function load(): Promise<void> {
       return;
     }
     campaign.value = next;
-    [members.value, characters.value] = await Promise.all([
+    [members.value, characters.value, invitations.value] = await Promise.all([
       getMembers(campaignId),
       getCharacters(campaignId),
+      getInvitations(campaignId),
     ]);
   } catch (exception) {
     error.value =
@@ -83,19 +89,41 @@ async function archive(character: Character): Promise<void> {
   }
 }
 
-async function createMember(): Promise<void> {
-  if (!username.value.trim()) return;
+async function invitePlayer(): Promise<void> {
   busy.value = true;
   try {
-    await addMember(campaignId, username.value.trim(), makeGm.value);
-    username.value = "";
-    makeGm.value = false;
+    const invitation = await createInvitation(campaignId, invitationEmail.value.trim());
+    invitationEmail.value = "";
+    invitationLink.value = invitation.link ?? "";
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error ? exception.message : "Unable to add member.";
+      exception instanceof Error ? exception.message : "Unable to invite player.";
   } finally {
     busy.value = false;
+  }
+}
+
+async function copyInvite(link: string): Promise<void> {
+  await navigator.clipboard.writeText(link);
+}
+
+async function resend(invitation: CampaignInvitation): Promise<void> {
+  try {
+    const updated = await resendInvitation(campaignId, invitation.id);
+    invitationLink.value = updated.link ?? "";
+    await load();
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : "Unable to resend.";
+  }
+}
+
+async function revoke(invitation: CampaignInvitation): Promise<void> {
+  try {
+    await revokeInvitation(campaignId, invitation.id);
+    await load();
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : "Unable to revoke.";
   }
 }
 
@@ -153,25 +181,37 @@ useCampaignRefresh(load);
           <v-card-text>
             <v-form
               class="d-flex ga-2 mb-4"
-              @submit.prevent="createMember"
+              @submit.prevent="invitePlayer"
             >
               <v-text-field
-                v-model="username"
-                label="Username"
-                hide-details
-              />
-              <v-checkbox
-                v-model="makeGm"
-                label="GM"
+                v-model="invitationEmail"
+                label="Email (optional)"
+                type="email"
                 hide-details
               />
               <v-btn
                 type="submit"
                 :loading="busy"
               >
-                Add
+                Invite player
               </v-btn>
             </v-form>
+            <v-alert
+              v-if="invitationLink"
+              type="success"
+              class="mb-4"
+            >
+              <div class="text-caption mb-1">Shareable invitation link</div>
+              <div class="d-flex align-center ga-2">
+                <code class="text-truncate">{{ invitationLink }}</code>
+                <v-btn
+                  size="small"
+                  @click="copyInvite(invitationLink)"
+                >
+                  Copy
+                </v-btn>
+              </div>
+            </v-alert>
             <v-list>
               <v-list-item
                 v-for="member in members"
@@ -199,6 +239,30 @@ useCampaignRefresh(load);
                     variant="text"
                     :disabled="!member.is_active"
                     @click="deactivate(member)"
+                  />
+                </template>
+              </v-list-item>
+            </v-list>
+            <div class="text-overline text-secondary mt-5">Invitations</div>
+            <v-list density="compact">
+              <v-list-item
+                v-for="invitation in invitations"
+                :key="invitation.id"
+                :title="invitation.email || 'Shareable link'"
+                :subtitle="`${invitation.status} · expires ${new Date(invitation.expires_at).toLocaleString()}`"
+              >
+                <template #append>
+                  <v-btn
+                    v-if="invitation.status === 'pending'"
+                    icon="mdi-email-sync-outline"
+                    variant="text"
+                    @click="resend(invitation)"
+                  />
+                  <v-btn
+                    v-if="invitation.status === 'pending'"
+                    icon="mdi-link-off"
+                    variant="text"
+                    @click="revoke(invitation)"
                   />
                 </template>
               </v-list-item>

@@ -7,6 +7,7 @@ let shouldReconnect = false;
 const SOCKET_CONNECT_TIMEOUT_MS = 5_000;
 const SOCKET_CONNECT_POLL_MS = 50;
 const REQUEST_TIMEOUT_MS = 10_000;
+const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
 export const campaignRefreshRevision = ref(0);
 export type RepositoryImportEvent = {
   type:
@@ -32,9 +33,9 @@ const pendingRequests = new Map<
   }
 >();
 
-function socketUrl(id: number): string {
+function socketUrl(path: string): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws/campaigns/${id}/`;
+  return `${protocol}//${window.location.host}${path}`;
 }
 
 function notify(id: number): void {
@@ -43,7 +44,7 @@ function notify(id: number): void {
 
 function open(): void {
   if (!campaignId) return;
-  socket = new WebSocket(socketUrl(campaignId));
+  socket = new WebSocket(socketUrl(`/ws/contexts/${campaignId}/`));
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data) as {
       type?: string;
@@ -109,14 +110,15 @@ export function disconnectCampaignRealtime(): void {
 export async function campaignRequest<T>(
   type: string,
   payload: Record<string, unknown> = {},
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<T> {
   const connection = await readySocket();
   const requestId = crypto.randomUUID();
   return new Promise<T>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingRequests.delete(requestId);
-      reject(new Error("The campaign request timed out."));
-    }, REQUEST_TIMEOUT_MS);
+      reject(new Error(`The ${type} campaign request timed out.`));
+    }, timeoutMs);
     pendingRequests.set(requestId, {
       resolve: (data) => resolve(data as T),
       reject,
@@ -125,6 +127,64 @@ export async function campaignRequest<T>(
     connection.send(JSON.stringify({ type, request_id: requestId, ...payload }));
   });
 }
+
+export const campaignImportRequest = <T>(
+  type: string,
+  payload: Record<string, unknown> = {},
+) => campaignRequest<T>(type, payload, IMPORT_REQUEST_TIMEOUT_MS);
+
+async function oneShotRequest<T>(
+  path: string,
+  type: string,
+  payload: Record<string, unknown> = {},
+): Promise<T> {
+  const connection = new WebSocket(socketUrl(path));
+  const requestId = crypto.randomUUID();
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      connection.close();
+      reject(new Error("The WebSocket request timed out."));
+    }, REQUEST_TIMEOUT_MS);
+    connection.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("Could not connect to the server."));
+    };
+    connection.onopen = () => {
+      connection.send(JSON.stringify({ type, request_id: requestId, ...payload }));
+    };
+    connection.onmessage = (event) => {
+      const message = JSON.parse(event.data) as {
+        type?: string;
+        request_id?: string;
+        data?: unknown;
+        detail?: unknown;
+      };
+      if (message.request_id !== requestId) return;
+      window.clearTimeout(timeout);
+      connection.close();
+      if (message.type === "response.error") {
+        reject(
+          new Error(
+            typeof message.detail === "string"
+              ? message.detail
+              : JSON.stringify(message.detail),
+          ),
+        );
+      } else {
+        resolve(message.data as T);
+      }
+    };
+  });
+}
+
+export const userRequest = <T>(type: string, payload: Record<string, unknown> = {}) =>
+  oneShotRequest<T>("/ws/user/", type, payload);
+
+export const inviteRequest = <T>(
+  token: string,
+  type: string,
+  payload: Record<string, unknown> = {},
+) => oneShotRequest<T>(`/ws/invites/${encodeURIComponent(token)}/`, type, payload);
 
 export async function startRepositoryImport(payload: {
   repositoryId: string;

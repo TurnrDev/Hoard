@@ -27,6 +27,24 @@ function names(transaction: LedgerTransaction, positive: boolean): string {
 }
 
 function amount(transaction: LedgerTransaction): string {
+  if (transaction.ledger === "health") {
+    return [
+      transaction.current_hp_delta
+        ? `${transaction.current_hp_delta > 0 ? "+" : ""}${transaction.current_hp_delta} HP`
+        : "",
+      transaction.temporary_hp_delta
+        ? `${transaction.temporary_hp_delta > 0 ? "+" : ""}${transaction.temporary_hp_delta} temp HP`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (transaction.ledger === "character") {
+    return `${Object.keys(transaction.changes ?? {}).length} field changes`;
+  }
+  if (transaction.ledger.startsWith("audit.")) {
+    return `${Object.keys(transaction.changes ?? {}).length} recorded changes`;
+  }
   return transaction.entries
     .filter((entry) => entry.amount > 0)
     .map((entry) => `${entry.amount} ${entry.item_name ?? entry.denomination ?? "XP"}`)
@@ -39,6 +57,8 @@ function typeIcon(transaction: LedgerTransaction): string {
       experience: "mdi-star-four-points",
       money: "mdi-coins",
       inventory: "mdi-package-variant",
+      health: "mdi-heart-pulse",
+      character: "mdi-account-edit-outline",
     }[transaction.ledger] ?? "mdi-book-open-variant"
   );
 }
@@ -46,6 +66,7 @@ function typeIcon(transaction: LedgerTransaction): string {
 function canReverse(transaction: LedgerTransaction): boolean {
   return Boolean(
     campaign.value?.is_game_master &&
+    ["inventory", "money", "experience"].includes(transaction.ledger) &&
     !transaction.is_reversed &&
     !transaction.reversal_of_id,
   );
@@ -102,7 +123,8 @@ useCampaignRefresh(load);
       <v-table class="ledger-table">
         <thead>
           <tr>
-            <th>When</th>
+            <th>Real datetime</th>
+            <th>Campaign date</th>
             <th>Type</th>
             <th>From</th>
             <th>To</th>
@@ -117,7 +139,8 @@ useCampaignRefresh(load);
             v-for="transaction in transactions"
             :key="`${transaction.ledger}-${transaction.id}`"
           >
-            <td>{{ new Date(transaction.created_at).toLocaleString() }}</td>
+            <td>{{ new Date(transaction.occurred_at).toLocaleString() }}</td>
+            <td>{{ transaction.campaign_date ?? "Campaign date unavailable" }}</td>
             <td>
               <v-icon
                 :icon="typeIcon(transaction)"

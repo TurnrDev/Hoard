@@ -82,6 +82,15 @@ TEMPLATES: list[dict[str, object]] = [
 WSGI_APPLICATION: str = "hoard.wsgi.application"
 ASGI_APPLICATION: str = "hoard.asgi.application"
 
+# Raw .cah bytes use HTTP, but structured rule and character responses can still
+# exceed Daphne's very small 1 MiB default. Keep the ceiling bounded and tunable.
+DAPHNE_WEBSOCKET_MAX_MESSAGE_SIZE = int(
+    os.environ.get("DAPHNE_WEBSOCKET_MAX_MESSAGE_SIZE", 16 * 1024 * 1024)
+)
+DAPHNE_WEBSOCKET_MAX_FRAME_SIZE = int(
+    os.environ.get("DAPHNE_WEBSOCKET_MAX_FRAME_SIZE", 16 * 1024 * 1024)
+)
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -96,7 +105,11 @@ CHANNEL_LAYERS = {
                 }
             ]
         },
-    }
+    },
+    # User and invite RPC sockets never broadcast between processes. Keeping
+    # them off Redis avoids leaving a blocking Redis receive behind when their
+    # deliberately short-lived connections close.
+    "local": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
 }
 
 CACHES = {
@@ -169,7 +182,7 @@ DJANGO_VITE: dict[str, dict[str, object]] = {
         "dev_mode": DEBUG,
         "dev_server_port": 5173,
         "manifest_path": FRONTEND_DIST_DIR / ".vite" / "manifest.json",
-    },
+    }
 }
 
 # Email

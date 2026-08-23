@@ -73,6 +73,16 @@ useCampaignRefresh(load);
     >
       {{ error }}
     </v-alert>
+    <v-alert
+      v-if="campaign?.is_game_master && campaign.incomplete_level_ups.length"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      title="Group level-up incomplete"
+    >
+      {{ campaign.incomplete_level_ups.map((row) => row.character_name).join(", ") }}
+      still need to complete level {{ campaign.level }}.
+    </v-alert>
     <v-row>
       <v-col
         v-for="character in playerCharacters"

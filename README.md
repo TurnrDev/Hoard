@@ -52,7 +52,7 @@ The installed Daphne integration makes the normal Django `runserver` command ser
 both HTTP and authenticated WebSocket connections at `ws://localhost:8000`. The
 Vite development server proxies both `/api` and `/ws` to that server, so opening
 either `http://localhost:8000` or `http://localhost:5173` works; the frontend
-automatically connects to the matching `/ws/campaigns/<campaign_id>/` endpoint.
+automatically connects to the matching `/ws/contexts/<context_id>/` endpoint.
 Use `--noreload` in development: Django's autoreloader restarts the ASGI process
 while browsers are reconnecting WebSockets, and also retains a supervisor process.
 Restart Django manually after changing Python code.
@@ -61,7 +61,7 @@ For a production ASGI process, point `REDIS_URL` at the shared Redis instance an
 run the ASGI server and a separate worker:
 
 ```sh
-uv run daphne hoard.asgi:application
+uv run daphne --websocket-max-message-size 16777216 --websocket-max-frame-size 16777216 hoard.asgi:application
 uv run celery -A hoard worker --loglevel=INFO
 ```
 
@@ -76,18 +76,17 @@ database name, user, and password all set to `hoard`. Override the
 
 ## Campaign API and Compendium
 
-The session-authenticated JSON API is rooted at `/api/campaigns/<campaign_id>/`.
-Campaign game masters can post ledger actions; campaign members can create
-shared Compendium entries. See [the API guide](docs/api.md) and the
-[Compendium guide](docs/compendium.md). Synchronise the community repository
+Campaign-domain commands use authenticated WebSockets; HTTP is retained only for
+Django session/CSRF operations and raw `.cah` upload bytes. See [the API
+guide](docs/api.md) and the [Compendium guide](docs/compendium.md). Synchronise the community repository
 directory and install its `default` repository with:
 
 ```sh
 uv run python manage.py update_compendium_registries
 ```
 
-The frontend login uses the same Django session as the API. Its additional API
-endpoints and role-scoped ledger history are documented in [the API guide](docs/api.md).
+The frontend login and sockets share the same Django session. Role-scoped commands
+and immutable history are documented in [the API guide](docs/api.md).
 
 ## AI Policy
 

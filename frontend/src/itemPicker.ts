@@ -55,6 +55,7 @@ export function itemMatchesFilters(item: Item, filters: PickerFilters): boolean 
     item.name,
     item.description,
     item.source_system,
+    item.source_repository,
     item.equipment.source_book,
     item.equipment.category,
     item.equipment.item_type,

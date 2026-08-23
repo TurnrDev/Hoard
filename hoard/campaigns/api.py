@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from collections import defaultdict
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -152,6 +153,7 @@ class CahCommit(Schema):
     token: str
     character_id: int | None = None
     inventory: list[dict[str, object]] = []
+    collections: dict[str, bool] = {}
 
 
 class SheetRecord(Schema):
@@ -303,24 +305,88 @@ def _money_data(character: Character) -> dict[str, int | str]:
 
 
 def _sheet_data(character: Character) -> dict[str, object]:
+    hp_modifier = character.ability_modifier(character.hp_ability)
     return {
         "level": character.level,
         "base_hp": character.base_hp,
         "max_hp": character.max_hp,
+        "hp_calculation": {
+            "value": character.max_hp,
+            "base": character.base_hp,
+            "components": [
+                {
+                    "label": f"{character.hp_ability.title()} modifier × level",
+                    "value": hp_modifier * character.level,
+                    "formula": f"{hp_modifier} × {character.level}",
+                    "source": "class",
+                },
+                {
+                    "label": "HP adjustment",
+                    "value": character.hp_adjustment,
+                    "source": "override" if character.hp_adjustment else "manual",
+                },
+            ],
+            "formula": f"{character.base_hp} + ({hp_modifier} × {character.level}) + {character.hp_adjustment}",
+        },
         "current_hp": character.current_hp,
         "temporary_hp": character.temporary_hp,
         "base_ac": character.base_ac,
         "ac_adjustment": character.ac_adjustment,
         "armor_class": character.base_ac + character.ac_adjustment,
+        "armor_class_calculation": {
+            "value": character.base_ac + character.ac_adjustment,
+            "base": character.base_ac,
+            "components": [
+                {
+                    "label": "Armor class adjustment",
+                    "value": character.ac_adjustment,
+                    "source": "override" if character.ac_adjustment else "manual",
+                }
+            ],
+        },
         "speed": character.speed,
         "spell_slots": character.spell_slots,
         "proficiency_bonus_adjustment": character.proficiency_bonus_adjustment,
         "proficiency_bonus": character.proficiency_bonus,
+        "proficiency_bonus_calculation": {
+            "value": character.proficiency_bonus,
+            "base": 2 + (character.level - 1) // 4,
+            "components": [
+                {
+                    "label": "Manual adjustment",
+                    "value": character.proficiency_bonus_adjustment,
+                    "source": "override",
+                }
+            ],
+        },
         "abilities": {
             ability: {
-                "score": getattr(character, ability),
+                "score": character.ability_score(ability),
+                "raw": getattr(character, ability),
+                "ancestry_bonus": int(character.ability_bonuses.get(ability, 0)),
+                "score_adjustment": int(
+                    character.ability_score_adjustments.get(ability, 0)
+                ),
                 "modifier": character.ability_modifier(ability),
                 "adjustment": getattr(character, f"{ability}_modifier_adjustment"),
+                "formula": {
+                    "value": character.ability_score(ability),
+                    "base": getattr(character, ability),
+                    "components": [
+                        {
+                            "label": "Ancestry bonus",
+                            "value": int(character.ability_bonuses.get(ability, 0)),
+                            "source": "compendium",
+                        },
+                        {
+                            "label": "Manual adjustment",
+                            "value": int(
+                                character.ability_score_adjustments.get(ability, 0)
+                            ),
+                            "source": "override",
+                        },
+                    ],
+                },
             }
             for ability in ABILITIES
         },
@@ -329,6 +395,26 @@ def _sheet_data(character: Character) -> dict[str, object]:
                 "proficient": getattr(character, f"{ability}_save_proficient"),
                 "adjustment": getattr(character, f"{ability}_save_adjustment"),
                 "bonus": character.saving_throw(ability),
+                "formula": {
+                    "value": character.saving_throw(ability),
+                    "base": character.ability_modifier(ability),
+                    "components": [
+                        {
+                            "label": "Proficiency bonus",
+                            "value": (
+                                character.proficiency_bonus
+                                if getattr(character, f"{ability}_save_proficient")
+                                else 0
+                            ),
+                            "source": "class",
+                        },
+                        {
+                            "label": "Manual adjustment",
+                            "value": getattr(character, f"{ability}_save_adjustment"),
+                            "source": "override",
+                        },
+                    ],
+                },
             }
             for ability in ABILITIES
         },
@@ -336,6 +422,18 @@ def _sheet_data(character: Character) -> dict[str, object]:
             skill: {
                 "proficiency": character.skill_proficiencies.get(skill, "none"),
                 "bonus": character.skill_bonus(skill, ability),
+                "formula": {
+                    "value": character.skill_bonus(skill, ability),
+                    "base": character.ability_modifier(ability),
+                    "components": [
+                        {
+                            "label": "Proficiency contribution",
+                            "value": character.skill_bonus(skill, ability)
+                            - character.ability_modifier(ability),
+                            "source": "class",
+                        }
+                    ],
+                },
             }
             for skill, ability in SKILL_ABILITIES.items()
         },
@@ -350,17 +448,34 @@ def _character_data(character: Character) -> dict[str, object]:
         "is_player_character": character.is_player_character,
         "is_active": character.is_active,
         "is_archived": character.is_archived,
-        "archived_at": character.archived_at,
+        "archived_at": (
+            character.archived_at.isoformat() if character.archived_at else None
+        ),
         "race": character.race,
+        "race_entry_id": character.race_entry_id,
         "class": character.character_class,
         "background": character.background,
+        "background_entry_id": character.background_entry_id,
+        "subrace": character.subrace_name,
+        "alignment": character.alignment,
+        "personality_traits": character.personality_traits,
+        "ideals": character.ideals,
+        "bonds": character.bonds,
+        "flaws": character.flaws,
+        "about": character.about,
+        "languages": character.languages,
+        "equipment_proficiencies": character.equipment_proficiencies,
+        "is_build_complete": character.is_build_complete,
+        "level_up_complete": not character.level_progress.filter(
+            level=character.level, is_complete=False
+        ).exists(),
         "sheet": _sheet_data(character),
-        "strength": character.strength,
-        "dexterity": character.dexterity,
-        "constitution": character.constitution,
-        "intelligence": character.intelligence,
-        "wisdom": character.wisdom,
-        "charisma": character.charisma,
+        "strength": character.ability_score("strength"),
+        "dexterity": character.ability_score("dexterity"),
+        "constitution": character.ability_score("constitution"),
+        "intelligence": character.ability_score("intelligence"),
+        "wisdom": character.ability_score("wisdom"),
+        "charisma": character.ability_score("charisma"),
         "experience": character.experience,
         "money": _money_data(character),
         "inventory": [
@@ -510,9 +625,15 @@ def _transaction_data(
         "id": posted.pk,
         "ledger": posted._meta.model_name.removesuffix("transaction"),
         "description": posted.description,
-        "created_at": posted.created_at,
+        "created_at": posted.occurred_at.isoformat(),
+        "occurred_at": posted.occurred_at.isoformat(),
+        "campaign_date": posted.campaign_date,
         "created_by_id": posted.created_by_id,
-        "actor": _actor_name(posted.created_by.user) if posted.created_by_id else None,
+        "actor": (
+            _actor_name(posted.created_by.user)
+            if posted.created_by_id
+            else posted.actor_username or None
+        ),
     }
 
 
@@ -971,28 +1092,45 @@ def _custom_source(campaign: Campaign) -> CompendiumSource:
     return source
 
 
-def _match_import_entry(campaign: Campaign, row: dict[str, object]) -> int | None:
-    entries = _available_entries(campaign, str(row["kind"]))
+def _import_entry_index(campaign: Campaign):
+    identifiers: dict[tuple[str, str], list[int]] = defaultdict(list)
+    names: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for entry in CompendiumEntry.objects.filter(
+        source__in=campaign.compendium_sources.all()
+    ).only("id", "kind", "source_identifier", "name"):
+        if entry.source_identifier:
+            identifiers[(entry.kind, entry.source_identifier)].append(entry.pk)
+        names[(entry.kind, entry.name.casefold())].append(entry.pk)
+    return identifiers, names
+
+
+def _match_import_entry(
+    campaign: Campaign,
+    row: dict[str, object],
+    index=None,
+) -> int | None:
+    identifiers, names = index or _import_entry_index(campaign)
+    kind = str(row["kind"])
     identifier = str(row.get("source_identifier") or "")
     if identifier:
-        matched = list(entries.filter(source_identifier=identifier)[:2])
+        matched = identifiers.get((kind, identifier), [])
         if len(matched) == 1:
-            return matched[0].pk
-    matched = list(entries.filter(name__iexact=str(row["name"]))[:2])
-    return matched[0].pk if len(matched) == 1 else None
+            return matched[0]
+    matched = names.get((kind, str(row["name"]).casefold()), [])
+    return matched[0] if len(matched) == 1 else None
 
 
 def _calculated_values(character: Character) -> dict[str, object]:
     sheet = _sheet_data(character)
     return {
-        "max_hp": sheet["max_hp"],
-        "armor_class": sheet["armor_class"],
-        "proficiency_bonus": sheet["proficiency_bonus"],
-        "ability_modifiers": {
-            ability: sheet["abilities"][ability]["modifier"] for ability in ABILITIES
+        "max_hp": sheet["hp_calculation"],
+        "armor_class": sheet["armor_class_calculation"],
+        "proficiency_bonus": sheet["proficiency_bonus_calculation"],
+        "ability_scores": {
+            ability: sheet["abilities"][ability]["formula"] for ability in ABILITIES
         },
-        "saves": {ability: sheet["saves"][ability]["bonus"] for ability in ABILITIES},
-        "skills": {skill: sheet["skills"][skill]["bonus"] for skill in SKILL_NAMES},
+        "saves": {ability: sheet["saves"][ability]["formula"] for ability in ABILITIES},
+        "skills": {skill: sheet["skills"][skill]["formula"] for skill in SKILL_NAMES},
     }
 
 
@@ -1015,8 +1153,12 @@ def cah_preview(
         context.kind == CampaignContext.Kind.GM or _is_owner(context, target)
     ):
         raise HttpError(403, "You may only import into your own character.")
+    entry_index = _import_entry_index(context.campaign)
     inventory = [
-        {**row, "matched_item_id": _match_import_entry(context.campaign, row)}
+        {
+            **row,
+            "matched_item_id": _match_import_entry(context.campaign, row, entry_index),
+        }
         for row in preview.inventory
     ]
     before = _calculated_values(target) if target else None
@@ -1060,6 +1202,10 @@ def cah_commit(request, context_id: int, payload: CahCommit):
     if not draft or draft["campaign_id"] != context.campaign_id:
         raise HttpError(422, "This import preview has expired or is invalid.")
     fields = draft["fields"]
+    collections = payload.collections
+
+    def import_collection(name: str) -> bool:
+        return collections.get(name, True)
     target = _character(context, payload.character_id) if payload.character_id else None
     if target:
         if not (context.kind == CampaignContext.Kind.GM or _is_owner(context, target)):
@@ -1100,55 +1246,65 @@ def cah_commit(request, context_id: int, payload: CahCommit):
             )
             target.activate()
     with db_transaction.atomic():
+        entry_index = _import_entry_index(context.campaign)
         for name, value in fields.items():
             setattr(target, name, value)
         target.full_clean()
         target.save()
-        target.notes.all().delete()
-        target.features.all().delete()
-        target.spells.all().delete()
-        target.loadout.all().delete()
-        target.companions.all().delete()
-        CharacterNote.objects.bulk_create(
-            [
-                CharacterNote(character=target, title=row["title"], body=row["body"])
-                for row in draft["collections"]["notes"]
-            ]
-        )
-        for row in draft["collections"]["features"]:
-            entry_id = _match_import_entry(context.campaign, {**row, "kind": "feat"})
-            CharacterFeature.objects.create(
-                character=target,
-                kind=row["kind"],
-                name=row["name"],
-                description=row["description"],
-                notes=row["notes"],
-                catalogue_entry_id=entry_id,
+        if import_collection("notes"):
+            target.notes.all().delete()
+            CharacterNote.objects.bulk_create(
+                [
+                    CharacterNote(character=target, title=row["title"], body=row["body"])
+                    for row in draft["collections"]["notes"]
+                ]
             )
-        for row in draft["collections"]["spells"]:
-            entry_id = _match_import_entry(context.campaign, {**row, "kind": "spell"})
-            CharacterSpell.objects.create(
-                character=target,
-                name=row["name"],
-                level=row["level"],
-                description=row["description"],
-                notes=row["notes"],
-                catalogue_entry_id=entry_id,
-            )
-        for row in draft["collections"]["companions"]:
-            entry_id = _match_import_entry(context.campaign, {**row, "kind": "monster"})
-            CharacterCompanion.objects.create(
-                character=target,
-                name=row["name"],
-                armor_class=row["armor_class"],
-                max_hp=row["max_hp"],
-                current_hp=row["current_hp"],
-                speed=row["speed"],
-                abilities=row["abilities"],
-                attacks=row["attacks"],
-                notes=row["description"],
-                monster_template_id=entry_id,
-            )
+        if import_collection("features"):
+            target.features.all().delete()
+            for row in draft["collections"]["features"]:
+                entry_id = _match_import_entry(
+                    context.campaign, {**row, "kind": "feat"}, entry_index
+                )
+                CharacterFeature.objects.create(
+                    character=target,
+                    kind=row["kind"],
+                    name=row["name"],
+                    description=row["description"],
+                    notes=row["notes"],
+                    catalogue_entry_id=entry_id,
+                )
+        if import_collection("spells"):
+            target.spells.all().delete()
+            for row in draft["collections"]["spells"]:
+                entry_id = _match_import_entry(
+                    context.campaign, {**row, "kind": "spell"}, entry_index
+                )
+                CharacterSpell.objects.create(
+                    character=target,
+                    name=row["name"],
+                    level=row["level"],
+                    description=row["description"],
+                    notes=row["notes"],
+                    catalogue_entry_id=entry_id,
+                )
+        if import_collection("companions"):
+            target.companions.all().delete()
+            for row in draft["collections"]["companions"]:
+                entry_id = _match_import_entry(
+                    context.campaign, {**row, "kind": "monster"}, entry_index
+                )
+                CharacterCompanion.objects.create(
+                    character=target,
+                    name=row["name"],
+                    armor_class=row["armor_class"],
+                    max_hp=row["max_hp"],
+                    current_hp=row["current_hp"],
+                    speed=row["speed"],
+                    abilities=row["abilities"],
+                    attacks=row["attacks"],
+                    notes=row["description"],
+                    monster_template_id=entry_id,
+                )
         draft_rows = {row["line_id"]: row for row in draft["inventory"]}
         for selected in payload.inventory:
             line = draft_rows.get(selected.get("line_id"))
@@ -1452,7 +1608,7 @@ def transaction_list(
                 entries__account__character__context__user=context.user
             ).distinct()
         rows.extend(query)
-    rows.sort(key=lambda posted: (posted.created_at, posted.pk), reverse=True)
+    rows.sort(key=lambda posted: (posted.occurred_at, posted.pk), reverse=True)
     start = (page - 1) * page_size
     return {
         "count": len(rows),
@@ -1476,7 +1632,7 @@ def transaction_reverse(
     original = get_object_or_404(model, pk=transaction_id, campaign=context.campaign)
     latest = (
         model.objects.filter(campaign=context.campaign)
-        .order_by("-created_at", "-pk")
+        .order_by("-occurred_at", "-pk")
         .first()
     )
     if latest is None or latest.pk != original.pk:
@@ -1594,4 +1750,4 @@ def managed_context_deactivate(request, context_id: int, managed_context_id: int
     return 204, None
 
 
-api.add_router("/contexts", contexts)
+# Campaign domain operations are exposed by the context WebSocket consumer.

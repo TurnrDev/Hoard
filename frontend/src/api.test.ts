@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { campaignRequest, ensureCampaignRealtime } from "./realtime";
 import {
   createInventoryTransaction,
   createMoneyExchange,
@@ -7,8 +8,16 @@ import {
   login,
 } from "./api";
 
+vi.mock("./realtime", () => ({
+  campaignRequest: vi.fn().mockResolvedValue({ id: 4, ledger: "test" }),
+  ensureCampaignRealtime: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("API client", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("uses the CSRF token when posting login credentials", async () => {
     const fetch = vi
@@ -36,14 +45,7 @@ describe("API client", () => {
     );
   });
 
-  it("posts an inventory move to its concrete resource", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 4, ledger: "inventory" }), {
-        status: 201,
-      }),
-    );
-    vi.stubGlobal("fetch", fetch);
-
+  it("sends inventory moves over the acting context socket", async () => {
     await createInventoryTransaction(8, {
       from_character_id: 2,
       to_character_id: null,
@@ -51,31 +53,16 @@ describe("API client", () => {
       quantity: 1,
     });
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/contexts/8/inventory-transactions/",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          from_character_id: 2,
-          to_character_id: null,
-          item_id: 3,
-          quantity: 1,
-        }),
-      }),
-    );
+    expect(ensureCampaignRealtime).toHaveBeenCalledWith(8);
+    expect(campaignRequest).toHaveBeenCalledWith("inventory.transactions.create", {
+      from_character_id: 2,
+      to_character_id: null,
+      item_id: 3,
+      quantity: 1,
+    });
   });
 
-  it("posts money transfers and exchanges to their concrete resources", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 4, ledger: "money" }), { status: 201 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 4, ledger: "money" }), { status: 201 }),
-      );
-    vi.stubGlobal("fetch", fetch);
-
+  it("sends money transfers and exchanges over the context socket", async () => {
     await createMoneyTransfer(8, {
       from_character_id: 2,
       to_character_id: null,
@@ -87,22 +74,15 @@ describe("API client", () => {
       received: { sp: 10 },
     });
 
-    expect(fetch).toHaveBeenNthCalledWith(
-      1,
-      "/api/contexts/8/money-transfers/",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          from_character_id: 2,
-          to_character_id: null,
-          amounts: { gp: 3, sp: 4, cp: 7 },
-        }),
-      }),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      "/api/contexts/8/money-exchanges/",
-      expect.objectContaining({ method: "POST" }),
-    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(1, "money.transfers.create", {
+      from_character_id: 2,
+      to_character_id: null,
+      amounts: { gp: 3, sp: 4, cp: 7 },
+    });
+    expect(campaignRequest).toHaveBeenNthCalledWith(2, "money.exchanges.create", {
+      character_id: 2,
+      given: { gp: 1 },
+      received: { sp: 10 },
+    });
   });
 });

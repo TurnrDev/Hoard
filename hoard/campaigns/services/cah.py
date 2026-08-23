@@ -150,6 +150,18 @@ def _inventory_entries(source: dict[str, Any]) -> list[dict[str, Any]]:
     return entries
 
 
+def _languages(*sources: dict[str, Any]) -> list[str]:
+    """Keep Companion language instructions (for example, ``Choose 1``) intact."""
+    values: list[str] = []
+    for source in sources:
+        for value in _list(source.get("languages")):
+            row = _dict(value)
+            label = row.get("proficiency") or row.get("name") or value
+            if isinstance(label, str) and label.strip():
+                values.append(label.strip())
+    return list(dict.fromkeys(values))
+
+
 def parse_cah(raw: bytes) -> CahPreview:
     """Parse supported sheet content while retaining import trace data per entry."""
     try:
@@ -194,6 +206,9 @@ def parse_cah(raw: bytes) -> CahPreview:
     )
     if background:
         fields["background"] = _name(background)
+    languages = _languages(required_race, required_background)
+    if languages:
+        fields["languages"] = languages
     jobs = _list(source.get("jobs"))
     if jobs and _dict(jobs[0]).get("jobId"):
         fields["character_class"] = _name(_dict(jobs[0])["jobId"])

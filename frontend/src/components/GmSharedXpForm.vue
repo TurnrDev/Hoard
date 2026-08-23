@@ -2,7 +2,12 @@
 import { computed, ref } from "vue";
 import { createSharedXpAward, type Character } from "../api";
 
-const props = defineProps<{ contextId: number; characters: Character[] }>();
+const props = defineProps<{
+  contextId: number;
+  characters: Character[];
+  level: number;
+  sharedExperience: number;
+}>();
 const emit = defineEmits<{ completed: [message: string] }>();
 const amount = ref(10);
 const description = ref("");
@@ -50,6 +55,9 @@ async function submit() {
       </v-icon>
       Give shared XP
     </v-card-title>
+    <v-card-subtitle>
+      Level {{ level }} · {{ sharedExperience.toLocaleString() }} shared XP
+    </v-card-subtitle>
     <v-card-text>
       <v-text-field
         v-model.number="amount"

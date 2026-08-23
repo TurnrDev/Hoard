@@ -14,8 +14,23 @@ const props = withDefaults(
     modelValue?: number;
     label?: string;
     noDataText?: string;
+    title?: string;
+    initialSearch?: string;
+    initialCategory?: string;
+    compact?: boolean;
+    disabled?: boolean;
+    loading?: boolean;
   }>(),
-  { label: "Item", noDataText: "No matching items." },
+  {
+    label: "Item",
+    noDataText: "No matching items.",
+    title: "Choose equipment",
+    initialSearch: "",
+    initialCategory: "",
+    compact: false,
+    disabled: false,
+    loading: false,
+  },
 );
 
 const emit = defineEmits<{
@@ -25,7 +40,15 @@ const open = ref(false);
 const detailItem = ref<Item>();
 const page = ref(1);
 const pageSize = 24;
-const filters = ref(defaultPickerFilters());
+
+function initialFilters() {
+  const value = defaultPickerFilters();
+  value.search = props.initialSearch;
+  value.category = props.initialCategory || null;
+  return value;
+}
+
+const filters = ref(initialFilters());
 
 const selected = computed(() =>
   props.candidates.find((candidate) => candidate.item.id === props.modelValue),
@@ -69,6 +92,11 @@ function choose(candidate: PickerCandidate): void {
   open.value = false;
 }
 
+function show(): void {
+  filters.value = initialFilters();
+  open.value = true;
+}
+
 function clear(): void {
   emit("update:modelValue", undefined);
 }
@@ -79,21 +107,28 @@ function resetFilters(): void {
 
 function facts(item: Item): string[] {
   return [
+    item.source_system,
+    item.equipment.source_book,
     item.equipment.category,
     item.equipment.item_type,
     item.equipment.rarity,
-  ].filter((fact): fact is string => Boolean(fact));
+  ].filter(
+    (fact, index, values): fact is string =>
+      Boolean(fact) && values.indexOf(fact) === index,
+  );
 }
 </script>
 
 <template>
-  <div class="item-picker-field mb-4">
+  <div :class="['item-picker-field', { 'mb-4': !compact }]">
     <div class="text-subtitle-2 mb-1">{{ label }}</div>
     <v-btn
       block
       variant="outlined"
       class="justify-start text-none"
-      @click="open = true"
+      :disabled="disabled || loading"
+      :loading="loading"
+      @click="show"
     >
       <v-icon start>mdi-package-variant</v-icon>
       <span
@@ -126,7 +161,11 @@ function facts(item: Item): string[] {
     max-width="1200"
     scrollable
   >
-    <v-card title="Choose equipment">
+    <v-card :title="title">
+      <v-progress-linear
+        v-if="loading"
+        indeterminate
+      />
       <v-card-text class="pt-0">
         <v-text-field
           v-model="filters.search"

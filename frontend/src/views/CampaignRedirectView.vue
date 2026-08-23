@@ -15,10 +15,14 @@ onMounted(async () => {
     error.value = "This context is no longer available.";
     return;
   }
+  if (context.kind === "gm") {
+    await router.replace(`/c/${context.id}/gm`);
+    return;
+  }
   await router.replace(
-    context.kind === "gm"
-      ? `/c/${context.id}/gm`
-      : `/c/${context.id}/characters/${context.character_id}`,
+    context.character_id
+      ? `/c/${context.id}/characters/${context.character_id}`
+      : `/c/${context.id}/characters`,
   );
 });
 </script>

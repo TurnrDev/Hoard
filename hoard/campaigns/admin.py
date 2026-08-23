@@ -52,6 +52,7 @@ class CharacterAdmin(admin.ModelAdmin):
     )
     list_filter = ("campaign", "is_active")
     search_fields = ("name", "context__user__username")
+    readonly_fields = ("current_hp", "temporary_hp")
 
     def save_model(
         self, request: HttpRequest, obj: Character, form: BaseModelForm, change: bool
@@ -65,8 +66,8 @@ class CharacterAdmin(admin.ModelAdmin):
 
 
 class ReadOnlyLedgerAdmin(admin.ModelAdmin):
-    list_display = ("id", "campaign", "description", "created_at")
-    readonly_fields = ("id", "campaign", "description", "created_at")
+    list_display = ("id", "campaign", "description", "occurred_at")
+    readonly_fields = ("id", "campaign", "description", "occurred_at")
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False

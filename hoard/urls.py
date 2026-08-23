@@ -21,9 +21,11 @@ from django.urls.resolvers import URLPattern
 
 from hoard.campaigns.api import api
 from hoard.campaigns.frontend import frontend
+from hoard.campaigns.views import cah_upload
 
 urlpatterns: list[URLPattern] = [
     path("admin/", admin.site.urls),
+    path("api/uploads/character-imports/<str:upload_id>/", cah_upload),
     path("api/", api.urls),
     re_path(r"^(?!api/|admin/).*$", frontend),
 ]

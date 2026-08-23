@@ -12,5 +12,5 @@ export function ordinal(value: number): string {
 }
 
 export function formatCampaignDate(calendar: CampaignCalendar): string {
-  return `${calendar.era_abbreviation}${calendar.year}, ${ordinal(calendar.day)}`;
+  return `${calendar.era_abbreviation} ${calendar.year}, ${ordinal(calendar.day)}`;
 }

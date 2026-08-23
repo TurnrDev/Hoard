@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   archiveCharacter,
-  commitCahImport,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
@@ -12,9 +11,7 @@ import {
   getItems,
   getMyCharacters,
   getTransactions,
-  previewCahImport,
-  updateCharacter,
-  type CahPreview,
+  postHealth,
   type Campaign,
   type Character,
   type Item,
@@ -23,6 +20,8 @@ import {
 import { useCampaignRefresh } from "../realtime";
 import { exchangedCoinAmount } from "../coinExchange";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
+import CalculationBreakdown from "../components/CalculationBreakdown.vue";
+import CharacterImportMenu from "../components/CharacterImportMenu.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import type { PickerCandidate } from "../itemPicker";
 import { formatGoldValue } from "../money";
@@ -63,31 +62,30 @@ const moneyAmounts = ref<Record<string, number>>({
 const moneyDestination = ref<number>();
 const exchangeTargetDenomination = ref("sp");
 const moneyDescription = ref("");
-const editOpen = ref(false);
-const importOpen = ref(false);
 const addItemOpen = ref(false);
 const activity = ref<LedgerTransaction[]>([]);
-const importFile = ref<File>();
-const importPreview = ref<CahPreview>();
-const importInventory = ref<CahPreview["inventory"]>([]);
-const editName = ref("");
-const editRace = ref("");
-const editClass = ref("");
-const editBackground = ref("");
-const editBaseHp = ref(1);
-const editCurrentHp = ref(1);
-const editTemporaryHp = ref(0);
-const editBaseAc = ref(10);
-const editAcAdjustment = ref(0);
-const editSpeed = ref("");
-const editProficiencyAdjustment = ref(0);
-const editAbilities = ref({
-  strength: 10,
-  dexterity: 10,
-  constitution: 10,
-  intelligence: 10,
-  wisdom: 10,
-  charisma: 10,
+const healthOpen = ref(false);
+const healthReason = ref<"damage" | "healing" | "temporary" | "correction">("damage");
+const healthAmount = ref(1);
+const healthCurrent = ref(0);
+const healthTemporary = ref(0);
+const healthDescription = ref("");
+const healthPreview = computed(() => {
+  if (!character.value) return "";
+  const beforeCurrent = character.value.sheet.current_hp;
+  const beforeTemporary = character.value.sheet.temporary_hp;
+  if (healthReason.value === "correction") {
+    return `Current ${beforeCurrent} → ${healthCurrent.value}; temporary ${beforeTemporary} → ${healthTemporary.value}`;
+  }
+  if (healthReason.value === "damage") {
+    const damage = Math.abs(healthAmount.value);
+    const absorbed = Math.min(beforeTemporary, damage);
+    return `Damage ${damage}: temporary ${beforeTemporary} − ${absorbed} = ${beforeTemporary - absorbed}; current ${beforeCurrent} − ${damage - absorbed} = ${Math.max(0, beforeCurrent - (damage - absorbed))}`;
+  }
+  if (healthReason.value === "healing") {
+    return `Current ${beforeCurrent} + ${Math.abs(healthAmount.value)} = ${Math.min(character.value.sheet.max_hp, beforeCurrent + Math.abs(healthAmount.value))} (maximum ${character.value.sheet.max_hp})`;
+  }
+  return `Temporary ${beforeTemporary} + ${healthAmount.value} = ${beforeTemporary + healthAmount.value}`;
 });
 const denominations = ["cp", "sp", "ep", "gp", "pp"];
 const xpThresholds = [
@@ -238,39 +236,6 @@ const proficiencyLabel = (proficiency: string) =>
   "";
 const proficiencyClass = (proficiency: string) =>
   `proficiency-bonus proficiency-bonus--${proficiency}`;
-const importChanges = computed(() => {
-  const before = importPreview.value?.calculated_before as Record<
-    string,
-    unknown
-  > | null;
-  const after = importPreview.value?.calculated_after as Record<string, unknown> | null;
-  if (!before || !after) return [];
-  const flatten = (
-    value: Record<string, unknown>,
-    prefix = "",
-  ): Record<string, unknown> => {
-    const result: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value)) {
-      if (child && typeof child === "object" && !Array.isArray(child)) {
-        Object.assign(
-          result,
-          flatten(child as Record<string, unknown>, `${prefix}${key} `),
-        );
-      } else {
-        result[`${prefix}${key}`] = child;
-      }
-    }
-    return result;
-  };
-  const oldValues = flatten(before);
-  return Object.entries(flatten(after))
-    .filter(([key, value]) => oldValues[key] !== value)
-    .map(([key, value]) => ({
-      label: key.replaceAll("_", " "),
-      current: oldValues[key],
-      next: value,
-    }));
-});
 
 async function load(): Promise<void> {
   try {
@@ -287,6 +252,10 @@ async function load(): Promise<void> {
       visible.find((candidate) => candidate.id === characterId) ??
       own.find((candidate) => candidate.id === characterId);
     ownCharacter.value = own.some((candidate) => candidate.id === characterId);
+    if (ownCharacter.value && character.value && !character.value.is_build_complete) {
+      await router.replace(`/c/${campaignId}/characters/${characterId}/build`);
+      return;
+    }
     items.value = nextItems;
     activity.value = recent.results.slice(0, 5);
     if (!character.value) await router.replace(`/c/${campaignId}/characters`);
@@ -355,36 +324,6 @@ function closeMoneyDialog(): void {
   moneyDescription.value = "";
 }
 
-function closeEditDialog(): void {
-  editOpen.value = false;
-  editName.value = "";
-  editRace.value = "";
-  editClass.value = "";
-  editBackground.value = "";
-  editBaseHp.value = 1;
-  editCurrentHp.value = 1;
-  editTemporaryHp.value = 0;
-  editBaseAc.value = 10;
-  editAcAdjustment.value = 0;
-  editSpeed.value = "";
-  editProficiencyAdjustment.value = 0;
-  editAbilities.value = {
-    strength: 10,
-    dexterity: 10,
-    constitution: 10,
-    intelligence: 10,
-    wisdom: 10,
-    charisma: 10,
-  };
-}
-
-function closeImportDialog(): void {
-  importOpen.value = false;
-  importFile.value = undefined;
-  importPreview.value = undefined;
-  importInventory.value = [];
-}
-
 async function submitItemAction(): Promise<void> {
   if (!character.value || !selectedInventoryItem.value || !itemAction.value) return;
   if (
@@ -449,52 +388,42 @@ function openMoneyDialog(action: "spend" | "transfer" | "exchange"): void {
   moneyDialog.value = true;
 }
 
-function openEdit(): void {
+function openHealth(): void {
   if (!character.value) return;
-  editName.value = character.value.name;
-  editRace.value = character.value.race;
-  editClass.value = character.value.class;
-  editBackground.value = character.value.background;
-  editBaseHp.value = character.value.sheet.base_hp;
-  editCurrentHp.value = character.value.sheet.current_hp;
-  editTemporaryHp.value = character.value.sheet.temporary_hp;
-  editBaseAc.value = character.value.sheet.base_ac;
-  editAcAdjustment.value = character.value.sheet.ac_adjustment;
-  editSpeed.value = character.value.sheet.speed;
-  editProficiencyAdjustment.value = character.value.sheet.proficiency_bonus_adjustment;
-  editAbilities.value = {
-    strength: character.value.strength,
-    dexterity: character.value.dexterity,
-    constitution: character.value.constitution,
-    intelligence: character.value.intelligence,
-    wisdom: character.value.wisdom,
-    charisma: character.value.charisma,
-  };
-  editOpen.value = true;
+  healthCurrent.value = character.value.sheet.current_hp;
+  healthTemporary.value = character.value.sheet.temporary_hp;
+  healthOpen.value = true;
 }
 
-async function saveProfile(): Promise<void> {
-  if (!character.value || !editName.value.trim()) return;
+async function saveHealth(): Promise<void> {
+  if (!character.value) return;
   try {
-    await updateCharacter(campaignId, character.value.id, {
-      name: editName.value.trim(),
-      race: editRace.value,
-      class: editClass.value,
-      background: editBackground.value,
-      base_hp: editBaseHp.value,
-      current_hp: editCurrentHp.value,
-      temporary_hp: editTemporaryHp.value,
-      base_ac: editBaseAc.value,
-      ac_adjustment: editAcAdjustment.value,
-      speed: editSpeed.value,
-      proficiency_bonus_adjustment: editProficiencyAdjustment.value,
-      ...editAbilities.value,
+    await postHealth(campaignId, {
+      character_id: character.value.id,
+      reason: healthReason.value,
+      ...(healthReason.value === "damage"
+        ? { current_hp_delta: -Math.abs(healthAmount.value) }
+        : {}),
+      ...(healthReason.value === "healing"
+        ? { current_hp_delta: Math.abs(healthAmount.value) }
+        : {}),
+      ...(healthReason.value === "temporary"
+        ? { temporary_hp_delta: healthAmount.value }
+        : {}),
+      ...(healthReason.value === "correction"
+        ? {
+            current_hp: healthCurrent.value,
+            temporary_hp: healthTemporary.value,
+          }
+        : {}),
+      description: healthDescription.value,
     });
-    closeEditDialog();
+    healthOpen.value = false;
+    healthDescription.value = "";
     await load();
   } catch (exception) {
     error.value =
-      exception instanceof Error ? exception.message : "Unable to update character.";
+      exception instanceof Error ? exception.message : "Unable to update HP.";
   }
 }
 
@@ -506,43 +435,6 @@ async function archive(): Promise<void> {
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to archive character.";
-  }
-}
-
-async function previewImport(): Promise<void> {
-  if (!importFile.value) return;
-  try {
-    importPreview.value = await previewCahImport(
-      campaignId,
-      characterId,
-      importFile.value,
-    );
-    importInventory.value = importPreview.value.inventory.map((line) => ({ ...line }));
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to read CAH file.";
-  }
-}
-
-async function commitImport(): Promise<void> {
-  if (!character.value || !importPreview.value) return;
-  try {
-    await commitCahImport(
-      campaignId,
-      importPreview.value.token,
-      character.value.id,
-      importInventory.value.map((line) => ({
-        line_id: line.line_id,
-        action: line.action,
-        quantity: line.quantity,
-        ...(line.matched_item_id ? { item_id: line.matched_item_id } : {}),
-      })),
-    );
-    closeImportDialog();
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to import character.";
   }
 }
 
@@ -564,42 +456,26 @@ useCampaignRefresh(load);
       <div class="d-flex ga-2">
         <v-btn
           v-if="canEdit"
-          @click="openEdit"
+          :to="`/c/${campaignId}/characters/${characterId}/build?mode=edit`"
         >
-          Edit
+          Edit character
         </v-btn>
-        <v-menu v-if="ownCharacter">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              variant="tonal"
-              append-icon="mdi-menu-down"
-            >
-              Import from …
-            </v-btn>
-          </template>
-          <v-list>
-            <v-list-item @click="importOpen = true">
-              <template #prepend>
-                <v-avatar
-                  size="28"
-                  image="/static/import-icons/5e-companion.png"
-                />
-              </template>
-              <v-list-item-title>5e Companion</v-list-item-title>
-            </v-list-item>
-            <v-list-item disabled>
-              <template #prepend>
-                <v-avatar
-                  size="28"
-                  image="/static/import-icons/rpg-companion.png"
-                />
-              </template>
-              <v-list-item-title>RPG Companion</v-list-item-title>
-              <v-list-item-subtitle>Coming soon</v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
-        </v-menu>
+        <v-btn
+          v-if="canEdit"
+          color="error"
+          variant="text"
+          @click="archive"
+        >
+          Archive
+        </v-btn>
+        <CharacterImportMenu
+          v-if="ownCharacter"
+          :context-id="campaignId"
+          :character-id="characterId"
+          :items="items"
+          @completed="load"
+          @error="(message) => (error = message)"
+        />
         <v-btn
           :to="`/c/${campaignId}/characters`"
           prepend-icon="mdi-account-group-outline"
@@ -616,6 +492,24 @@ useCampaignRefresh(load);
       @click:close="error = ''"
     >
       {{ error }}
+    </v-alert>
+    <v-alert
+      v-if="character && !character.level_up_complete"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      title="Level-up incomplete"
+    >
+      The GM has approved level {{ character.sheet.level }}, but this character still
+      has unfinished choices.
+      <template #append>
+        <v-btn
+          color="error"
+          :to="'/c/' + campaignId + '/characters/' + characterId + '/build'"
+        >
+          Complete level-up
+        </v-btn>
+      </template>
     </v-alert>
     <v-alert
       v-if="notice"
@@ -738,10 +632,24 @@ useCampaignRefresh(load);
                 <div class="text-h5">
                   {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }}
                 </div>
-                <div class="text-caption">
-                  Temp {{ character.sheet.temporary_hp }} · AC
-                  {{ character.sheet.armor_class }}
-                </div>
+                <CalculationBreakdown
+                  label="Maximum HP"
+                  :calculation="character.sheet.hp_calculation"
+                />
+                <div class="text-caption">Temp {{ character.sheet.temporary_hp }}</div>
+                <CalculationBreakdown
+                  label="Armor class"
+                  :calculation="character.sheet.armor_class_calculation"
+                />
+                <v-btn
+                  v-if="canEdit"
+                  size="small"
+                  variant="text"
+                  class="mt-2"
+                  @click="openHealth"
+                >
+                  Change HP
+                </v-btn>
               </v-card-text>
             </v-card>
           </v-col>
@@ -768,6 +676,10 @@ useCampaignRefresh(load);
                 <div class="text-h5">
                   {{ signed(character.sheet.proficiency_bonus) }}
                 </div>
+                <CalculationBreakdown
+                  label="Proficiency bonus"
+                  :calculation="character.sheet.proficiency_bonus_calculation"
+                />
               </v-card-text>
             </v-card>
           </v-col>
@@ -1141,6 +1053,12 @@ useCampaignRefresh(load);
             label="Note (optional)"
             rows="2"
           />
+          <v-alert
+            type="info"
+            variant="tonal"
+          >
+            {{ healthPreview }}
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -1224,280 +1142,56 @@ useCampaignRefresh(load);
       </v-card>
     </v-dialog>
     <v-dialog
-      v-model="editOpen"
-      max-width="720"
-      @update:model-value="(open) => !open && closeEditDialog()"
+      v-model="healthOpen"
+      max-width="520"
     >
-      <v-card title="Edit character">
+      <v-card title="Record HP change">
         <v-card-text>
-          <v-row>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model="editName"
-                label="Name"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model="editRace"
-                label="Race"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model="editClass"
-                label="Class"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model="editBackground"
-                label="Background"
-              />
-            </v-col>
-          </v-row>
-          <v-row>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model.number="editBaseHp"
-                type="number"
-                min="1"
-                label="Base HP"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model.number="editCurrentHp"
-                type="number"
-                label="Current HP"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model.number="editTemporaryHp"
-                type="number"
-                min="0"
-                label="Temporary HP"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model.number="editBaseAc"
-                type="number"
-                min="1"
-                label="Base AC"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model.number="editAcAdjustment"
-                type="number"
-                label="AC adjustment"
-              />
-            </v-col>
-            <v-col
-              cols="12"
-              sm="4"
-            >
-              <v-text-field
-                v-model="editSpeed"
-                label="Speed"
-              />
-            </v-col>
-          </v-row>
-          <v-row>
-            <v-col
-              v-for="(_, ability) in editAbilities"
-              :key="ability"
-              cols="6"
-              sm="4"
-            >
-              <v-text-field
-                v-model.number="editAbilities[ability]"
-                type="number"
-                min="1"
-                max="30"
-                :label="ability[0].toUpperCase() + ability.slice(1)"
-              />
-            </v-col>
-          </v-row>
-        </v-card-text>
-        <v-card-actions>
-          <v-btn
-            color="error"
-            variant="text"
-            @click="archive"
-          >
-            Archive
-          </v-btn>
-          <v-spacer />
-          <v-btn @click="closeEditDialog">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            @click="saveProfile"
-          >
-            Save
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-    <v-dialog
-      v-model="importOpen"
-      max-width="560"
-      @update:model-value="(open) => !open && closeImportDialog()"
-    >
-      <v-card title="Import from 5e Companion">
-        <v-card-text>
-          <v-file-input
-            v-model="importFile"
-            accept=".cah,application/json"
-            label="CAH export"
-            @update:model-value="importPreview = undefined"
+          <v-select
+            v-model="healthReason"
+            label="Action"
+            :items="[
+              { title: 'Damage', value: 'damage' },
+              { title: 'Healing', value: 'healing' },
+              { title: 'Temporary HP change', value: 'temporary' },
+              { title: 'Correction', value: 'correction' },
+            ]"
           />
-          <v-btn
-            :disabled="!importFile"
-            @click="previewImport"
-          >
-            Preview import
-          </v-btn>
-          <template v-if="importPreview">
-            <v-card
-              variant="tonal"
-              class="mt-4"
-            >
-              <v-card-title class="text-subtitle-1">Changes to apply</v-card-title>
-              <v-list density="compact">
-                <v-list-item
-                  v-for="change in importChanges"
-                  :key="change.label"
-                  :title="change.label"
-                  :subtitle="`${change.current} → ${change.next}`"
-                />
-                <v-list-item
-                  v-if="!importChanges.length"
-                  title="No supported values would change."
-                />
-              </v-list>
-            </v-card>
-            <v-card
-              variant="tonal"
-              class="mt-4"
-            >
-              <v-card-title class="text-subtitle-1">Inventory review</v-card-title>
-              <v-card-text v-if="importInventory.length">
-                <v-row
-                  v-for="line in importInventory"
-                  :key="line.line_id"
-                  dense
-                  class="mb-2"
-                >
-                  <v-col
-                    cols="12"
-                    sm="4"
-                  >
-                    <strong>{{ line.name }}</strong>
-                  </v-col>
-                  <v-col
-                    cols="4"
-                    sm="2"
-                  >
-                    <v-text-field
-                      v-model.number="line.quantity"
-                      density="compact"
-                      type="number"
-                      min="1"
-                      label="Qty"
-                    />
-                  </v-col>
-                  <v-col
-                    cols="4"
-                    sm="3"
-                  >
-                    <v-select
-                      v-model="line.action"
-                      density="compact"
-                      label="Action"
-                      :items="[
-                        { title: 'Add to inventory', value: 'add' },
-                        { title: 'Leave untouched', value: 'leave' },
-                      ]"
-                    />
-                  </v-col>
-                  <v-col
-                    cols="4"
-                    sm="3"
-                  >
-                    <v-select
-                      v-model="line.matched_item_id"
-                      density="compact"
-                      clearable
-                      label="Compendium match"
-                      :items="
-                        items
-                          .filter((item) => item.equipment.category === line.kind)
-                          .map((item) => ({ title: item.name, value: item.id }))
-                      "
-                    />
-                  </v-col>
-                </v-row>
-              </v-card-text>
-              <v-card-text
-                v-else
-                class="text-medium-emphasis"
-              >
-                No inventory to review.
-              </v-card-text>
-            </v-card>
-            <v-alert
-              v-if="importPreview.warnings.length"
-              type="warning"
-              class="mt-4"
-            >
-              <div
-                v-for="warning in importPreview.warnings"
-                :key="warning"
-              >
-                {{ warning }}
-              </div>
-            </v-alert>
+          <v-text-field
+            v-if="healthReason !== 'correction'"
+            v-model.number="healthAmount"
+            type="number"
+            min="1"
+            label="Amount"
+          />
+          <template v-else>
+            <v-text-field
+              v-model.number="healthCurrent"
+              type="number"
+              min="0"
+              label="Correct current HP"
+            />
+            <v-text-field
+              v-model.number="healthTemporary"
+              type="number"
+              min="0"
+              label="Correct temporary HP"
+            />
           </template>
+          <v-textarea
+            v-model="healthDescription"
+            label="Reason (optional)"
+            rows="2"
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="closeImportDialog">Cancel</v-btn>
+          <v-btn @click="healthOpen = false">Cancel</v-btn>
           <v-btn
             color="primary"
-            :disabled="!importPreview"
-            @click="commitImport"
+            @click="saveHealth"
           >
-            Replace reference sheet
+            Record transaction
           </v-btn>
         </v-card-actions>
       </v-card>

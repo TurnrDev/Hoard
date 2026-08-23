@@ -20,6 +20,16 @@ Character inventory, money, and XP are calculated from entries. A posted entry
 is immutable. Correct mistakes by creating a linked reversal, then post a
 replacement transaction if needed.
 
+Every transaction and audit event stores a timezone-aware real timestamp, the
+acting context/user snapshot, and the campaign era/year/day at posting time.
+Changing the calendar later never changes history. The UI formats campaign dates
+as `PD 81, 21st`; unreconstructable legacy dates are explicitly unavailable.
+
+Current and temporary HP are balances backed by immutable health transactions.
+Damage consumes temporary HP before current HP; healing caps at calculated maximum
+HP. Corrections post compensating before/after balances rather than rewriting or
+reversing an earlier health event.
+
 ## Public developer API
 
 Import models from `hoard.campaigns.models` and services from

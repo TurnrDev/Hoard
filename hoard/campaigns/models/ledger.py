@@ -5,20 +5,19 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from .audit import CampaignDatedEvent
 
-class LedgerTransaction(models.Model):
-    campaign_id: int
-    created_by_id: int | None
 
-    campaign = models.ForeignKey("campaigns.Campaign", on_delete=models.CASCADE)
-    created_by = models.ForeignKey(
-        "campaigns.CampaignContext", null=True, blank=True, on_delete=models.SET_NULL
-    )
+class LedgerTransaction(CampaignDatedEvent):
     description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         abstract = True
+
+    @property
+    def created_at(self):
+        """Compatibility alias while clients migrate to occurred_at."""
+        return self.occurred_at
 
 
 class ImmutableLedgerEntry(models.Model):
