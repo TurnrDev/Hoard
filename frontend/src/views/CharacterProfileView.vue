@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   archiveCharacter,
+  castCharacterSpell,
+  changeCharacterSheetRecord,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
@@ -12,6 +14,8 @@ import {
   getMyCharacters,
   getTransactions,
   postHealth,
+  restCharacter,
+  setCharacterInspiration,
   type Campaign,
   type Character,
   type Item,
@@ -74,6 +78,18 @@ const healthAmount = ref(1);
 const healthCurrent = ref(0);
 const healthTemporary = ref(0);
 const healthDescription = ref("");
+const shortRestOpen = ref(false);
+const shortRestHp = ref(0);
+const spellCastOpen = ref(false);
+const castingSpell = ref<Character["spells"][number]>();
+const castingSlot = ref<string>();
+const effectOpen = ref(false);
+const effectName = ref("");
+const effectSource = ref("");
+const effectDuration = ref("");
+const effectReminder = ref("");
+const effectTarget = ref("ac");
+const effectValue = ref(0);
 const healthPreview = computed(() => {
   if (!character.value) return "";
   const beforeCurrent = character.value.sheet.current_hp;
@@ -225,12 +241,39 @@ const skillColumns = computed(() => [
 const displayName = displayIdentifier;
 const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
 const formatXp = (value: number) => `${value.toLocaleString()} XP`;
-const formatSpellSlots = (slots: Record<string, number>) => {
-  const values = Object.entries(slots).filter(([, count]) => count > 0);
-  return values.length
-    ? values.map(([level, count]) => `Level ${level}: ${count}`).join(" · ")
-    : "No spell slots";
-};
+const castingSlots = computed(() => {
+  const spell = castingSpell.value;
+  if (!spell || !character.value) return [];
+  return Object.entries(character.value.sheet.spell_slot_pools)
+    .filter(
+      ([key, pool]) =>
+        !key.startsWith("pact-") && Number(key) >= spell.level && pool.current > 0,
+    )
+    .map(([key, pool]) => ({
+      title: `Level ${key} (${pool.current}/${pool.maximum})`,
+      value: key,
+    }));
+});
+const effectTargets = [
+  "ac",
+  "speed",
+  "spell_attack",
+  "spell_dc",
+  "weapon_attack",
+  "weapon_damage",
+  "ability:strength",
+  "ability:dexterity",
+  "ability:constitution",
+  "ability:intelligence",
+  "ability:wisdom",
+  "ability:charisma",
+  "save:strength",
+  "save:dexterity",
+  "save:constitution",
+  "save:intelligence",
+  "save:wisdom",
+  "save:charisma",
+].map((value) => ({ title: displayIdentifier(value.replace(":", " ")), value }));
 const activityAmount = (transaction: LedgerTransaction) =>
   transaction.entries
     .filter((entry) => entry.account_name === character.value?.name)
@@ -480,6 +523,164 @@ async function saveHealth(): Promise<void> {
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to update HP.";
+  }
+}
+
+async function toggleInspiration(): Promise<void> {
+  if (!character.value) return;
+  try {
+    character.value = await setCharacterInspiration(
+      campaignId,
+      character.value.id,
+      !character.value.has_inspiration,
+    );
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to update inspiration.";
+  }
+}
+
+async function equipItem(entry: { item_id: number; name: string }): Promise<void> {
+  if (!character.value) return;
+  try {
+    await changeCharacterSheetRecord(
+      campaignId,
+      character.value.id,
+      "loadout",
+      "create",
+      {
+        item_id: entry.item_id,
+        equipped: true,
+      },
+    );
+    notice.value = `${entry.name} equipped.`;
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to equip item.";
+  }
+}
+
+async function toggleEffect(effect: Character["effects"][number]): Promise<void> {
+  if (!character.value) return;
+  try {
+    await changeCharacterSheetRecord(
+      campaignId,
+      character.value.id,
+      "effects",
+      "update",
+      {
+        enabled: !effect.enabled,
+      },
+      effect.id,
+    );
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to update effect.";
+  }
+}
+
+function openEffect(): void {
+  effectName.value = "";
+  effectSource.value = "";
+  effectDuration.value = "";
+  effectReminder.value = "";
+  effectTarget.value = "ac";
+  effectValue.value = 0;
+  effectOpen.value = true;
+}
+
+async function saveEffect(): Promise<void> {
+  if (!character.value || !effectName.value.trim()) return;
+  try {
+    await changeCharacterSheetRecord(
+      campaignId,
+      character.value.id,
+      "effects",
+      "create",
+      {
+        name: effectName.value,
+        source: effectSource.value,
+        duration: effectDuration.value,
+        reminder: effectReminder.value,
+        modifiers: effectValue.value
+          ? [{ target: effectTarget.value, value: effectValue.value }]
+          : [],
+      },
+    );
+    effectOpen.value = false;
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to add effect.";
+  }
+}
+
+async function deleteEffect(effect: Character["effects"][number]): Promise<void> {
+  if (!character.value) return;
+  try {
+    await changeCharacterSheetRecord(
+      campaignId,
+      character.value.id,
+      "effects",
+      "delete",
+      {},
+      effect.id,
+    );
+    await load();
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to remove effect.";
+  }
+}
+
+function openShortRest(): void {
+  if (!character.value) return;
+  shortRestHp.value = character.value.sheet.current_hp;
+  shortRestOpen.value = true;
+}
+
+async function takeRest(kind: "short" | "long"): Promise<void> {
+  if (!character.value) return;
+  try {
+    character.value = await restCharacter(
+      campaignId,
+      character.value.id,
+      kind,
+      kind === "short" ? shortRestHp.value : undefined,
+    );
+    shortRestOpen.value = false;
+    notice.value = `${kind === "short" ? "Short" : "Long"} rest recorded.`;
+  } catch (exception) {
+    error.value =
+      exception instanceof Error ? exception.message : "Unable to record rest.";
+  }
+}
+
+function openSpellCast(spell: Character["spells"][number]): void {
+  castingSpell.value = spell;
+  castingSlot.value = undefined;
+  if (spell.level === 0) void confirmSpellCast();
+  else spellCastOpen.value = true;
+}
+
+async function confirmSpellCast(): Promise<void> {
+  if (!character.value || !castingSpell.value) return;
+  try {
+    character.value = await castCharacterSpell(
+      campaignId,
+      character.value.id,
+      castingSpell.value.id,
+      castingSpell.value.level === 0 ? undefined : castingSlot.value,
+    );
+    spellCastOpen.value = false;
+    notice.value = `${castingSpell.value.name} recorded.`;
+  } catch (exception) {
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to record spell casting.";
   }
 }
 
@@ -767,7 +968,11 @@ useCampaignRefresh(load);
               <v-card-text>
                 <div class="text-overline">Initiative bonus</div>
                 <div class="text-h5">
-                  {{ signed(character.sheet.abilities.dexterity.modifier) }}
+                  <CalculationBreakdown
+                    label="Initiative bonus"
+                    :calculation="character.sheet.initiative"
+                    :activator-label="signed(character.sheet.initiative.value)"
+                  />
                 </div>
               </v-card-text>
             </v-card>
@@ -781,18 +986,115 @@ useCampaignRefresh(load);
               <v-card-text>
                 <div class="text-overline">Proficiency bonus</div>
                 <div class="text-h5">
-                  {{ signed(character.sheet.proficiency_bonus) }}
+                  <CalculationBreakdown
+                    label="Proficiency bonus"
+                    :calculation="character.sheet.proficiency_bonus_calculation"
+                    :activator-label="signed(character.sheet.proficiency_bonus)"
+                  />
                 </div>
-                <CalculationBreakdown
-                  label="Proficiency bonus"
-                  :calculation="character.sheet.proficiency_bonus_calculation"
-                />
               </v-card-text>
             </v-card>
           </v-col>
         </v-row>
       </v-col>
       <v-col cols="12">
+        <v-card class="mb-4">
+          <v-card-title class="d-flex align-center">
+            Resources
+            <v-spacer />
+            <v-btn
+              v-if="canEdit"
+              size="small"
+              :prepend-icon="
+                character.has_inspiration ? 'mdi-star' : 'mdi-star-outline'
+              "
+              @click="toggleInspiration"
+            >
+              {{
+                character.has_inspiration ? "Spend inspiration" : "Award inspiration"
+              }}
+            </v-btn>
+            <v-btn
+              v-if="canEdit"
+              class="ml-2"
+              size="small"
+              @click="openShortRest"
+            >
+              Short rest
+            </v-btn>
+            <v-btn
+              v-if="canEdit"
+              class="ml-2"
+              size="small"
+              @click="takeRest('long')"
+            >
+              Long rest
+            </v-btn>
+          </v-card-title>
+          <v-card-text>
+            <p class="mb-3">
+              Inspiration:
+              <strong>
+                {{ character.has_inspiration ? "Available" : "Not available" }}
+              </strong>
+              <span class="ml-4">
+                Spell attack:
+                <strong>{{ signed(character.sheet.spell_attack) }}</strong>
+              </span>
+              <span class="ml-4">
+                Spell save DC:
+                <strong>{{ character.sheet.spell_save_dc }}</strong>
+              </span>
+            </p>
+            <v-table
+              density="compact"
+              class="a11y-table"
+            >
+              <caption class="visually-hidden">Spell slot availability</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Slot</th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    Current
+                  </th>
+                  <th
+                    scope="col"
+                    class="a11y-number"
+                  >
+                    Maximum
+                  </th>
+                  <th scope="col">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(pool, level) in character.sheet.spell_slot_pools"
+                  :key="level"
+                >
+                  <th scope="row">
+                    {{
+                      String(level).startsWith("pact-")
+                        ? `Pact level ${String(level).slice(5)}`
+                        : `Level ${level}`
+                    }}
+                  </th>
+                  <td class="a11y-number">{{ pool.current }}</td>
+                  <td class="a11y-number">{{ pool.maximum }}</td>
+                  <td>
+                    {{
+                      pool.adjustment
+                        ? `Class ${pool.calculated}, adjustment ${signed(pool.adjustment)}`
+                        : `Class ${pool.calculated}`
+                    }}
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-card-text>
+        </v-card>
         <v-card class="ability-save-card">
           <v-card-text>
             <v-row dense>
@@ -920,6 +1222,14 @@ useCampaignRefresh(load);
                       </template>
                       <v-list density="compact">
                         <v-list-item
+                          v-if="
+                            entry.item?.equipment.category === 'weapon' ||
+                            entry.item?.equipment.category === 'armor'
+                          "
+                          title="Equip"
+                          @click="equipItem(entry)"
+                        />
+                        <v-list-item
                           title="Use"
                           @click="openItemAction('use', entry)"
                         />
@@ -943,6 +1253,115 @@ useCampaignRefresh(load);
               class="text-medium-emphasis"
             >
               No inventory recorded.
+            </span>
+          </v-card-text>
+        </v-card>
+        <v-card class="mt-4">
+          <v-card-title class="d-flex align-center">
+            Equipment &amp; active effects
+            <v-spacer />
+            <v-btn
+              v-if="canEdit"
+              size="small"
+              prepend-icon="mdi-plus"
+              @click="openEffect"
+            >
+              Add effect
+            </v-btn>
+          </v-card-title>
+          <v-card-text>
+            <v-table
+              v-if="character.loadout.length"
+              density="compact"
+              class="a11y-table mb-4"
+            >
+              <caption class="visually-hidden">Character equipment</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Item</th>
+                  <th scope="col">Slot</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in character.loadout"
+                  :key="item.id"
+                >
+                  <th scope="row">{{ item.name }}</th>
+                  <td>{{ displayName(item.slot) }}</td>
+                  <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+            <v-table
+              v-if="character.effects.length"
+              density="compact"
+              class="a11y-table"
+            >
+              <caption class="visually-hidden">Character active effects</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Effect</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Modifiers and reminder</th>
+                  <th
+                    v-if="canEdit"
+                    scope="col"
+                  >
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="effect in character.effects"
+                  :key="effect.id"
+                >
+                  <th scope="row">
+                    {{ effect.name }}
+                    <span v-if="effect.source">· {{ effect.source }}</span>
+                  </th>
+                  <td>{{ effect.duration || displayName(effect.expires_on_rest) }}</td>
+                  <td>
+                    {{
+                      effect.modifiers
+                        .map(
+                          (modifier) =>
+                            `${modifier.label || displayName(modifier.target)} ${signed(modifier.value)}`,
+                        )
+                        .join(" · ") ||
+                      effect.reminder ||
+                      "—"
+                    }}
+                  </td>
+                  <td v-if="canEdit">
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      :aria-label="`${effect.enabled ? 'Deactivate' : 'Activate'} ${effect.name}`"
+                      @click="toggleEffect(effect)"
+                    >
+                      {{ effect.enabled ? "Deactivate" : "Activate" }}
+                    </v-btn>
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      color="error"
+                      :aria-label="`Remove ${effect.name}`"
+                      @click="deleteEffect(effect)"
+                    >
+                      Remove
+                    </v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+            <span
+              v-if="!character.loadout.length && !character.effects.length"
+              class="text-medium-emphasis"
+            >
+              No equipment is equipped and no effects are tracked.
             </span>
           </v-card-text>
         </v-card>
@@ -1017,16 +1436,26 @@ useCampaignRefresh(load);
           </v-expansion-panel>
           <v-expansion-panel :title="`Spells (${character.spells.length})`">
             <v-expansion-panel-text>
-              <div class="text-caption mb-2">
-                Slots: {{ formatSpellSlots(character.sheet.spell_slots) }}
-              </div>
               <v-list density="compact">
                 <v-list-item
                   v-for="spell in character.spells"
                   :key="spell.id"
                   :title="`${spell.name} · level ${spell.level}`"
                   :subtitle="spell.description || spell.notes"
-                />
+                >
+                  <template #append>
+                    <v-btn
+                      v-if="canEdit"
+                      size="small"
+                      variant="text"
+                      :disabled="spell.level > 0 && !spell.prepared"
+                      :aria-label="`Record casting ${spell.name}`"
+                      @click="openSpellCast(spell)"
+                    >
+                      Cast
+                    </v-btn>
+                  </template>
+                </v-list-item>
               </v-list>
             </v-expansion-panel-text>
           </v-expansion-panel>
@@ -1211,6 +1640,111 @@ useCampaignRefresh(load);
                   ? "Transfer coins"
                   : "Exchange coins"
             }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog
+      v-model="effectOpen"
+      max-width="560"
+    >
+      <v-card title="Add active effect">
+        <v-card-text>
+          <v-text-field
+            v-model="effectName"
+            label="Effect name"
+          />
+          <v-text-field
+            v-model="effectSource"
+            label="Source (optional)"
+          />
+          <v-text-field
+            v-model="effectDuration"
+            label="Duration or expiry reminder"
+          />
+          <v-select
+            v-model="effectTarget"
+            :items="effectTargets"
+            label="Modifier target"
+          />
+          <v-number-input
+            v-model.number="effectValue"
+            control-variant="split"
+            :min="-99"
+            :max="99"
+            :step="1"
+            label="Numeric modifier (0 for reminder only)"
+          />
+          <v-textarea
+            v-model="effectReminder"
+            label="Reminder (conditional or dice effects)"
+            rows="2"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="effectOpen = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :disabled="!effectName.trim()"
+            @click="saveEffect"
+          >
+            Add effect
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog
+      v-model="shortRestOpen"
+      max-width="460"
+    >
+      <v-card title="Short rest">
+        <v-card-text>
+          <p class="mb-4">
+            Enter current HP after spending Hit Dice. Hoard does not roll Hit Dice.
+          </p>
+          <v-number-input
+            v-model.number="shortRestHp"
+            control-variant="split"
+            :min="0"
+            :max="character?.sheet.max_hp ?? 1"
+            label="Current HP after rest"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="shortRestOpen = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            @click="takeRest('short')"
+          >
+            Record short rest
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog
+      v-model="spellCastOpen"
+      max-width="460"
+    >
+      <v-card :title="castingSpell ? `Cast ${castingSpell.name}` : 'Cast spell'">
+        <v-card-text>
+          <v-select
+            v-model="castingSlot"
+            :items="castingSlots"
+            label="Spell slot"
+            no-data-text="No eligible spell slots available"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="spellCastOpen = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :disabled="!castingSlot"
+            @click="confirmSpellCast"
+          >
+            Record casting
           </v-btn>
         </v-card-actions>
       </v-card>

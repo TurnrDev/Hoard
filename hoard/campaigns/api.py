@@ -33,7 +33,9 @@ from .models import (
     CampaignContext,
     Character,
     CharacterCompanion,
+    CharacterEffect,
     CharacterFeature,
+    CharacterHistory,
     CharacterLoadout,
     CharacterNote,
     CharacterSpell,
@@ -88,7 +90,7 @@ class CharacterUpdate(Schema):
     base_ac: int | None = None
     ac_adjustment: int | None = None
     speed: str | None = None
-    spell_slots: dict[str, int] | None = None
+    spell_slot_current: dict[str, int] | None = None
     proficiency_bonus_adjustment: int | None = None
     strength: int | None = None
     dexterity: int | None = None
@@ -169,6 +171,7 @@ class SheetRecord(Schema):
     catalogue_entry_id: int | None = None
     item_id: int | None = None
     equipped: bool = False
+    slot: Literal["armor", "shield", "weapon", "other"] = "other"
     label: str = ""
     armor_class: int = 10
     max_hp: int = 1
@@ -177,6 +180,12 @@ class SheetRecord(Schema):
     abilities: dict[str, int | None] = {}
     attacks: list[dict[str, object]] = []
     monster_template_id: int | None = None
+    source: str = ""
+    enabled: bool = True
+    duration: str = ""
+    reminder: str = ""
+    expires_on_rest: Literal["manual", "short", "long"] = "manual"
+    modifiers: list[dict[str, object]] = []
 
 
 api = NinjaAPI(title="Hoard API", version="2.0.0", auth=django_auth)
@@ -202,6 +211,96 @@ SKILL_ABILITIES = {
     "stealth": "dexterity",
     "survival": "wisdom",
 }
+
+SLOT_NAMES = ("1", "2", "3", "4", "5", "6", "7", "8", "9")
+SLOT_WORDS = {
+    "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
+    "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9",
+}
+FULL_CASTER_SLOTS = (
+    (), (2,), (3,), (4, 2), (4, 3), (4, 3, 2), (4, 3, 3), (4, 3, 3, 1),
+    (4, 3, 3, 2), (4, 3, 3, 3, 1), (4, 3, 3, 3, 2), (4, 3, 3, 3, 2, 1),
+    (4, 3, 3, 3, 2, 1), (4, 3, 3, 3, 2, 1, 1), (4, 3, 3, 3, 2, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1), (4, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1, 1), (4, 3, 3, 3, 3, 1, 1, 1, 1),
+    (4, 3, 3, 3, 3, 2, 1, 1, 1), (4, 3, 3, 3, 3, 2, 2, 1, 1),
+)
+PACT_SLOTS = {1: (1, 1), 2: (2, 1), 3: (2, 2), 4: (2, 2), 5: (2, 3), 6: (2, 3), 7: (2, 4), 8: (2, 4), 9: (2, 5), 10: (2, 5), 11: (3, 5), 12: (3, 5), 13: (3, 5), 14: (3, 5), 15: (3, 5), 16: (3, 5), 17: (4, 5), 18: (4, 5), 19: (4, 5), 20: (4, 5)}
+EFFECT_TARGETS = frozenset({
+    "ac", "speed", "spell_attack", "spell_dc", "weapon_attack", "weapon_damage",
+    *(f"ability:{ability}" for ability in ABILITIES),
+    *(f"save:{ability}" for ability in ABILITIES),
+    *(f"skill:{skill}" for skill in SKILL_ABILITIES),
+})
+
+
+def slot_key(key: object) -> str | None:
+    text = str(key).lower().strip()
+    if text.startswith("pact-"):
+        level = slot_key(text.removeprefix("pact-"))
+        return f"pact-{level}" if level else None
+    return SLOT_WORDS.get(text, text if text in SLOT_NAMES else None)
+
+
+def slot_map(value: object) -> dict[str, int]:
+    return {
+        key: max(0, int(raw))
+        for raw_key, raw in (value.items() if isinstance(value, dict) else [])
+        if (key := slot_key(raw_key)) is not None and isinstance(raw, int) and not isinstance(raw, bool)
+    }
+
+
+def class_slot_maxima(character: Character) -> dict[str, int]:
+    """Apply the 2014 multiclass caster table; Pact Magic is intentionally separate."""
+    classes = [row.class_name.lower() for row in character.class_levels.all()]
+    if not classes:
+        return {}
+    full = {"bard", "cleric", "druid", "sorcerer", "wizard"}
+    half = {"paladin", "ranger"}
+    third = {"fighter", "rogue"}
+    effective = sum(name in full for name in classes)
+    effective += sum(name in half for name in classes) // 2
+    effective += sum(name in third for name in classes) // 3
+    maxima = {
+        str(level): amount
+        for level, amount in enumerate(FULL_CASTER_SLOTS[min(effective, 20)], start=1)
+        if amount
+    } if effective else {}
+    warlock_level = sum(name == "warlock" for name in classes)
+    if warlock_level:
+        count, level = PACT_SLOTS[warlock_level]
+        maxima[f"pact-{level}"] = count
+    return maxima
+
+
+def slot_pools(character: Character) -> dict[str, dict[str, int]]:
+    calculated = class_slot_maxima(character)
+    current = slot_map(character.spell_slot_current)
+    adjustments = slot_map(character.spell_slot_adjustments)
+    # Imports do not contain maxima: preserve their useful values until the
+    # character is progressed through Hoard.
+    if not calculated:
+        calculated = dict(current)
+    keys = sorted(set(calculated) | set(current) | set(adjustments), key=lambda key: (key.startswith("pact-"), int(key.split("-")[-1])))
+    return {
+        key: {
+            "calculated": calculated.get(key, 0),
+            "adjustment": adjustments.get(key, 0),
+            "maximum": max(0, calculated.get(key, 0) + adjustments.get(key, 0)),
+            "current": min(current.get(key, calculated.get(key, 0) + adjustments.get(key, 0)), max(0, calculated.get(key, 0) + adjustments.get(key, 0))),
+        }
+        for key in keys
+    }
+
+
+def effect_total(character: Character, target: str) -> int:
+    return sum(
+        int(modifier.get("value", 0))
+        for effect in character.effects.filter(enabled=True)
+        for modifier in effect.modifiers
+        if isinstance(modifier, dict) and modifier.get("target") == target
+        and isinstance(modifier.get("value"), int)
+    )
 PASSWORD_WORDS = (
     "amber",
     "badger",
@@ -318,8 +417,66 @@ def _money_data(character: Character) -> dict[str, int | str]:
     }
 
 
+def unwrap_value(value: object) -> object:
+    return value.get("value") if isinstance(value, dict) and "value" in value else value
+
+
+def entry_stat(entry: CompendiumEntry, *names: str) -> object:
+    data = entry.data if isinstance(entry.data, dict) else {}
+    stats = data.get("stats", data)
+    if not isinstance(stats, dict):
+        return None
+    for name in names:
+        if name in stats:
+            return unwrap_value(stats[name])
+    return None
+
+
+def equipment_slot(entry: CompendiumEntry) -> str:
+    if entry.kind == CompendiumEntry.Kind.WEAPON:
+        return CharacterLoadout.Slot.WEAPON
+    category = str(entry_stat(entry, "armor_type", "armorType", "type") or "").lower()
+    if entry.kind == CompendiumEntry.Kind.ARMOR and ("shield" in category or "shield" in entry.name.lower()):
+        return CharacterLoadout.Slot.SHIELD
+    return CharacterLoadout.Slot.ARMOR if entry.kind == CompendiumEntry.Kind.ARMOR else CharacterLoadout.Slot.OTHER
+
+
+def armor_values(entry: CompendiumEntry) -> tuple[int, int | None]:
+    raw = entry_stat(entry, "base_ac", "baseAc", "armor_class", "armorClass", "ac")
+    if isinstance(raw, dict):
+        raw = unwrap_value(raw.get("base", raw.get("value")))
+    base = int(raw) if isinstance(raw, (int, float)) else 0
+    category = str(entry_stat(entry, "armor_type", "armorType", "type") or "").lower()
+    return base, 2 if "medium" in category else 0 if "heavy" in category else None
+
+
 def _sheet_data(character: Character) -> dict[str, object]:
     hp_modifier = character.ability_modifier(character.hp_ability)
+    equipped = list(character.loadout.select_related("item").filter(equipped=True))
+    armor = next((row for row in equipped if row.slot == CharacterLoadout.Slot.ARMOR), None)
+    shield = next((row for row in equipped if row.slot == CharacterLoadout.Slot.SHIELD), None)
+    armor_base, dex_cap = armor_values(armor.item) if armor else (character.base_ac, None)
+    dexterity = character.ability_modifier("dexterity")
+    dexterity_contribution = min(dexterity, dex_cap) if dex_cap is not None else dexterity
+    shield_bonus, _ = armor_values(shield.item) if shield else (0, None)
+    effect_ac = effect_total(character, "ac")
+    armor_class = armor_base + (dexterity_contribution if armor else 0) + shield_bonus + character.ac_adjustment + effect_ac
+    armor_formula = str(armor_base)
+    dexterity_label = "Dexterity"
+    if armor:
+        dexterity_label = (
+            f"Dexterity ({dexterity}, max {dex_cap})"
+            if dex_cap is not None
+            else f"Dexterity ({dexterity})"
+        )
+        armor_formula += f" + {dexterity_label}"
+    if shield_bonus:
+        armor_formula += f" + {shield.item.name} ({shield_bonus})"
+    if character.ac_adjustment:
+        armor_formula += f" + AC adjustment ({character.ac_adjustment})"
+    if effect_ac:
+        armor_formula += f" + effects ({effect_ac})"
+    pools = slot_pools(character)
     return {
         "level": character.level,
         "base_hp": character.base_hp,
@@ -346,25 +503,85 @@ def _sheet_data(character: Character) -> dict[str, object]:
         "temporary_hp": character.temporary_hp,
         "base_ac": character.base_ac,
         "ac_adjustment": character.ac_adjustment,
-        "armor_class": character.base_ac + character.ac_adjustment,
+        "armor_class": armor_class,
         "armor_class_calculation": {
-            "value": character.base_ac + character.ac_adjustment,
-            "base": character.base_ac,
+            "value": armor_class,
+            "base": armor_base,
+            "formula": armor_formula,
             "components": [
+                *(
+                    [
+                        {
+                            "label": armor.item.name,
+                            "value": armor_base,
+                            "source": "equipment",
+                        }
+                    ]
+                    if armor
+                    else []
+                ),
+                *(
+                    [
+                        {
+                            "label": dexterity_label,
+                            "value": dexterity_contribution,
+                            "source": "ability",
+                        }
+                    ]
+                    if armor
+                    else []
+                ),
+                *(
+                    [
+                        {
+                            "label": shield.item.name,
+                            "value": shield_bonus,
+                            "source": "equipment",
+                        }
+                    ]
+                    if shield
+                    else []
+                ),
                 {
                     "label": "Armor class adjustment",
                     "value": character.ac_adjustment,
                     "source": "override" if character.ac_adjustment else "manual",
-                }
+                },
+                *(
+                    [
+                        {
+                            "label": "Active effects",
+                            "value": effect_ac,
+                            "source": "effect",
+                        }
+                    ]
+                    if effect_ac
+                    else []
+                ),
             ],
         },
         "speed": character.speed,
-        "spell_slots": character.spell_slots,
+        "spell_slot_pools": pools,
+        "spell_attack": character.proficiency_bonus
+        + character.ability_modifier("intelligence")
+        + effect_total(character, "spell_attack"),
+        "spell_save_dc": 8
+        + character.proficiency_bonus
+        + character.ability_modifier("intelligence")
+        + effect_total(character, "spell_dc"),
+        "initiative": {
+            "value": character.ability_modifier("dexterity"),
+            "base": character.ability_modifier("dexterity"),
+            "formula": f"Dexterity ({character.ability_modifier('dexterity'):+d})",
+            "components": [],
+        },
         "proficiency_bonus_adjustment": character.proficiency_bonus_adjustment,
         "proficiency_bonus": character.proficiency_bonus,
         "proficiency_bonus_calculation": {
             "value": character.proficiency_bonus,
             "base": 2 + (character.level - 1) // 4,
+            "formula": "Rules: Base + player level progression",
+            "numeric_formula": f"Numbers: 2 + ({character.level} − 1) ÷ 4, rounded down{f' + {character.proficiency_bonus_adjustment}' if character.proficiency_bonus_adjustment else ''} = {character.proficiency_bonus}",
             "components": [
                 {
                     "label": "Manual adjustment",
@@ -479,6 +696,7 @@ def _character_data(character: Character) -> dict[str, object]:
         "about": character.about,
         "languages": character.languages,
         "equipment_proficiencies": character.equipment_proficiencies,
+        "has_inspiration": character.has_inspiration,
         "is_build_complete": character.is_build_complete,
         "level_up_complete": not character.level_progress.filter(
             level=character.level, is_complete=False
@@ -529,9 +747,23 @@ def _character_data(character: Character) -> dict[str, object]:
                 "item_id": loadout.item_id,
                 "name": loadout.item.name,
                 "equipped": loadout.equipped,
+                "slot": loadout.slot,
                 "label": loadout.label,
             }
             for loadout in character.loadout.select_related("item").all()
+        ],
+        "effects": [
+            {
+                "id": effect.pk,
+                "source": effect.source,
+                "name": effect.name,
+                "enabled": effect.enabled,
+                "duration": effect.duration,
+                "reminder": effect.reminder,
+                "expires_on_rest": effect.expires_on_rest,
+                "modifiers": effect.modifiers,
+            }
+            for effect in character.effects.all()
         ],
         "companions": [
             {
@@ -893,10 +1125,15 @@ def loadout_create(request, context_id: int, character_id: int, payload: SheetRe
     item = _enabled_entry(context.campaign, payload.item_id)
     if item.kind not in {"item", "weapon", "armor"}:
         raise HttpError(422, "Loadout entries must be equipment.")
+    if item not in character.inventory:
+        raise HttpError(422, "Equipment must be in this character's inventory.")
+    slot = equipment_slot(item)
+    if payload.equipped and slot in {CharacterLoadout.Slot.ARMOR, CharacterLoadout.Slot.SHIELD}:
+        character.loadout.filter(slot=slot, equipped=True).update(equipped=False)
     loadout, _ = CharacterLoadout.objects.update_or_create(
         character=character,
         item=item,
-        defaults={"equipped": payload.equipped, "label": payload.label},
+        defaults={"equipped": payload.equipped, "slot": slot, "label": payload.label},
     )
     return 201, {"id": loadout.pk}
 
@@ -912,11 +1149,122 @@ def loadout_update(
         if item.kind not in {"item", "weapon", "armor"}:
             raise HttpError(422, "Loadout entries must be equipment.")
         loadout.item = item
+        loadout.slot = equipment_slot(item)
+    if payload.equipped and loadout.slot in {CharacterLoadout.Slot.ARMOR, CharacterLoadout.Slot.SHIELD}:
+        loadout.character.loadout.filter(slot=loadout.slot, equipped=True).exclude(pk=loadout.pk).update(equipped=False)
     for field in ("equipped", "label"):
         if field in payload.model_fields_set:
             setattr(loadout, field, getattr(payload, field))
     loadout.save()
     return {"id": loadout.pk}
+
+
+def validate_modifiers(modifiers: list[dict[str, object]]) -> list[dict[str, object]]:
+    cleaned = []
+    for modifier in modifiers:
+        target, value = modifier.get("target"), modifier.get("value")
+        if target not in EFFECT_TARGETS or not isinstance(value, int) or isinstance(value, bool):
+            raise HttpError(422, "Effects require a supported target and an integer modifier.")
+        cleaned.append({"target": target, "value": value, "label": str(modifier.get("label", ""))[:200]})
+    return cleaned
+
+
+def effect_create(request, context_id: int, character_id: int, payload: SheetRecord):
+    character = _editable_sheet_character(_context_access(request, context_id), character_id)
+    if not payload.name.strip():
+        raise HttpError(422, "Effects need a name.")
+    effect = CharacterEffect.objects.create(
+        character=character, source=payload.source, name=payload.name, enabled=payload.enabled,
+        duration=payload.duration, reminder=payload.reminder, expires_on_rest=payload.expires_on_rest,
+        modifiers=validate_modifiers(payload.modifiers),
+    )
+    return 201, {"id": effect.pk}
+
+
+def effect_update(request, context_id: int, character_id: int, record_id: int, payload: SheetRecord):
+    effect = _sheet_record(_context_access(request, context_id), character_id, CharacterEffect, record_id)
+    for field in ("source", "name", "enabled", "duration", "reminder", "expires_on_rest"):
+        if field in payload.model_fields_set:
+            setattr(effect, field, getattr(payload, field))
+    if "modifiers" in payload.model_fields_set:
+        effect.modifiers = validate_modifiers(payload.modifiers)
+    effect.save()
+    return {"id": effect.pk}
+
+
+def effect_delete(request, context_id: int, character_id: int, record_id: int):
+    _sheet_record(_context_access(request, context_id), character_id, CharacterEffect, record_id).delete()
+    return 204, None
+
+
+def cast_spell(character: Character, spell_id: int, slot: str | None, *, created_by: CampaignContext) -> dict[str, object]:
+    spell = get_object_or_404(CharacterSpell, pk=spell_id, character=character)
+    if spell.level and not spell.prepared:
+        raise HttpError(422, "Prepare this spell before casting it.")
+    if spell.level == 0:
+        if slot is not None:
+            raise HttpError(422, "Cantrips do not use spell slots.")
+    else:
+        key = slot_key(slot) if slot is not None else None
+        if key is None or key.startswith("pact-") or int(key) < spell.level:
+            raise HttpError(422, "Choose an available slot at the spell's level or higher.")
+        pools = slot_pools(character)
+        pool = pools.get(key)
+        if not pool or pool["current"] < 1:
+            raise HttpError(422, "That spell slot is not available.")
+        current = {name: value["current"] for name, value in pools.items()}
+        current[key] -= 1
+        character.spell_slot_current = current
+        character.save(update_fields=("spell_slot_current",))
+    CharacterHistory.objects.create(
+        campaign=character.campaign, character=character, created_by=created_by,
+        reason=CharacterHistory.Reason.EDIT, description=f"Cast {spell.name}",
+        changes={"spell": {"id": spell.pk, "name": spell.name, "slot": slot}},
+    )
+    return _character_data(character)
+
+
+def take_rest(character: Character, kind: Literal["short", "long"], current_hp: int | None, *, created_by: CampaignContext) -> dict[str, object]:
+    if kind == "short":
+        if current_hp is None or not 0 <= current_hp <= character.max_hp:
+            raise HttpError(422, "Enter current HP after spending Hit Dice.")
+        character.current_hp = current_hp
+        pools = slot_pools(character)
+        character.spell_slot_current = {
+            key: pool["maximum"] if key.startswith("pact-") else pool["current"]
+            for key, pool in pools.items()
+        }
+        expiry = CharacterEffect.RestExpiry.SHORT
+    else:
+        character.current_hp = character.max_hp
+        character.temporary_hp = 0
+        character.spell_slot_current = {key: pool["maximum"] for key, pool in slot_pools(character).items()}
+        expiry = CharacterEffect.RestExpiry.LONG
+    character.save(update_fields=("current_hp", "temporary_hp", "spell_slot_current"))
+    expired = list(character.effects.filter(enabled=True, expires_on_rest=expiry))
+    for effect in expired:
+        effect.enabled = False
+        effect.save(update_fields=("enabled",))
+    CharacterHistory.objects.create(
+        campaign=character.campaign, character=character, created_by=created_by,
+        reason=CharacterHistory.Reason.EDIT, description=f"{kind.title()} rest",
+        changes={"rest": {"kind": kind, "expired_effect_ids": [effect.pk for effect in expired]}},
+    )
+    return _character_data(character)
+
+
+def set_inspiration(character: Character, available: bool, *, created_by: CampaignContext) -> dict[str, object]:
+    if character.has_inspiration == available:
+        raise HttpError(422, "Inspiration is already in that state.")
+    character.has_inspiration = available
+    character.save(update_fields=("has_inspiration",))
+    CharacterHistory.objects.create(
+        campaign=character.campaign, character=character, created_by=created_by,
+        reason=CharacterHistory.Reason.EDIT,
+        description="Awarded inspiration" if available else "Spent inspiration",
+        changes={"inspiration": {"available": available}},
+    )
+    return _character_data(character)
 
 
 @contexts.delete(

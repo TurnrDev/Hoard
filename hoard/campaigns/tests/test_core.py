@@ -3,8 +3,17 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from hoard.campaigns.models import Campaign, CampaignContext, Character
+from hoard.campaigns.api import armor_values, cast_spell, slot_pools, take_rest
+from hoard.campaigns.models import (
+    Campaign,
+    CampaignContext,
+    Character,
+    CharacterClassLevel,
+    CharacterEffect,
+    CharacterSpell,
+)
 from hoard.campaigns.services.cah import parse_cah
+from hoard.compendium.models import CompendiumEntry
 
 
 class CoreModelTests(TestCase):
@@ -111,6 +120,62 @@ class CoreModelTests(TestCase):
         self.assertEqual(character.max_hp, 12)
         self.assertEqual(character.saving_throw("strength"), 5)
         self.assertEqual(character.skill_bonus("athletics", "strength"), 7)
+
+    def test_spell_slots_casting_and_rests_track_resources_without_dice(self) -> None:
+        context = CampaignContext.objects.create(
+            campaign=self.campaign, user=self.user, kind=CampaignContext.Kind.PC
+        )
+        character = Character.objects.create(
+            campaign=self.campaign,
+            context=context,
+            name="Mage",
+            race="Human",
+            character_class="Wizard",
+            strength=8,
+            dexterity=12,
+            constitution=12,
+            intelligence=16,
+            wisdom=10,
+            charisma=10,
+            base_hp=10,
+            current_hp=4,
+            temporary_hp=3,
+        )
+        for level in range(1, 4):
+            CharacterClassLevel.objects.create(
+                character=character, level=level, class_name="Wizard"
+            )
+        spell = CharacterSpell.objects.create(character=character, name="Shield", level=1)
+        character.spell_slot_current = {"1": 2, "2": 2}
+        character.save(update_fields=("spell_slot_current",))
+
+        self.assertEqual(slot_pools(character)["1"]["maximum"], 4)
+        cast_spell(character, spell.pk, "1", created_by=context)
+        character.refresh_from_db()
+        self.assertEqual(character.spell_slot_current["1"], 1)
+
+        CharacterEffect.objects.create(
+            character=character,
+            name="Short-lived ward",
+            expires_on_rest=CharacterEffect.RestExpiry.SHORT,
+        )
+        take_rest(character, "short", 7, created_by=context)
+        character.refresh_from_db()
+        self.assertEqual(character.current_hp, 7)
+        self.assertFalse(character.effects.get(name="Short-lived ward").enabled)
+
+        take_rest(character, "long", None, created_by=context)
+        character.refresh_from_db()
+        self.assertEqual(character.current_hp, character.max_hp)
+        self.assertEqual(character.temporary_hp, 0)
+        self.assertEqual(character.spell_slot_current["1"], 4)
+
+    def test_light_armor_uses_base_ac_plus_dexterity(self) -> None:
+        armor = CompendiumEntry(
+            kind="armor",
+            data={"stats": {"base_ac": {"value": 11}, "type": {"value": "light"}}},
+        )
+        self.assertEqual(armor_values(armor), (11, None))
 
     def test_cah_parser_warns_for_invalid_optional_values_without_losing_valid_data(
         self,

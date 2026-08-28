@@ -259,7 +259,9 @@ class Character(models.Model):
     base_ac = models.PositiveSmallIntegerField("Base AC", default=10)
     ac_adjustment = models.SmallIntegerField("AC Adjustment", default=0)
     speed = models.CharField(max_length=100, blank=True)
-    spell_slots = models.JSONField(default=dict, blank=True)
+    spell_slot_current = models.JSONField(default=dict, blank=True)
+    spell_slot_adjustments = models.JSONField(default=dict, blank=True)
+    has_inspiration = models.BooleanField(default=False)
     proficiency_bonus_adjustment = models.SmallIntegerField(
         "Proficiency Bonus Adjustment", default=0
     )

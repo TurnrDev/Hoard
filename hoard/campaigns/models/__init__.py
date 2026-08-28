@@ -25,6 +25,7 @@ from .money import MoneyAccount, MoneyEntry, MoneyTransaction
 from .progression import CharacterChoice, CharacterClassLevel, CharacterLevelProgress
 from .sheet import (
     CharacterCompanion,
+    CharacterEffect,
     CharacterFeature,
     CharacterLoadout,
     CharacterNote,
@@ -44,6 +45,7 @@ __all__ = [
     "CharacterHistory",
     "CharacterLevelProgress",
     "CharacterCompanion",
+    "CharacterEffect",
     "CharacterFeature",
     "CharacterLoadout",
     "CharacterNote",

@@ -25,7 +25,7 @@ class CahImporterTests(SimpleTestCase):
         self.assertEqual(preview.fields["background"], "Criminal")
         self.assertEqual(preview.fields["languages"], ["Common", "Choose 1"])
         self.assertEqual(preview.fields["character_class"], "Fighter")
-        self.assertEqual(preview.fields["spell_slots"]["first"], 0)
+        self.assertEqual(preview.fields["spell_slot_current"]["first"], 0)
         self.assertEqual(len(preview.collections["notes"]), 1)
         self.assertEqual(len(preview.inventory), 7)
         self.assertEqual(preview.inventory[0]["line_id"], "equipment-0")

@@ -4,6 +4,8 @@
 - After modifying frontend code, run `npm run fix` from `frontend`, then verify with
   `npm run check` and the frontend build when appropriate.
 - Never format, lint-fix, bulk-rewrite, or otherwise modify `vendor/`.
+- Do not use leading-underscore “private” methods or functions in Python; Python
+  has no private methods and the convention makes the code harder to read.
 
 ## Frontend accessibility baseline
 

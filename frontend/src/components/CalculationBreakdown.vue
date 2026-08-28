@@ -17,6 +17,12 @@ defineProps<{
     <div class="text-caption text-medium-emphasis">{{ label }}</div>
     <div class="font-weight-medium">{{ calculation.formula ?? calculation.value }}</div>
     <div
+      v-if="calculation.numeric_formula"
+      class="text-caption"
+    >
+      {{ calculation.numeric_formula }}
+    </div>
+    <div
       v-for="component in calculation.components"
       :key="component.label"
       class="text-caption"

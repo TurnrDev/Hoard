@@ -53,11 +53,17 @@ class CharacterSpell(models.Model):
 
 
 class CharacterLoadout(models.Model):
+    class Slot(models.TextChoices):
+        ARMOR = "armor", "Armor"
+        SHIELD = "shield", "Shield"
+        WEAPON = "weapon", "Weapon"
+        OTHER = "other", "Other"
     character = models.ForeignKey(
         "campaigns.Character", on_delete=models.CASCADE, related_name="loadout"
     )
     item = models.ForeignKey("compendium.CompendiumEntry", on_delete=models.CASCADE)
     equipped = models.BooleanField(default=False)
+    slot = models.CharField(max_length=20, choices=Slot.choices, default=Slot.OTHER)
     label = models.CharField(max_length=100, blank=True)
 
     class Meta:
@@ -66,6 +72,30 @@ class CharacterLoadout(models.Model):
                 fields=("character", "item"), name="unique_character_loadout_item"
             )
         ]
+
+
+class CharacterEffect(models.Model):
+    class RestExpiry(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        SHORT = "short", "Short rest"
+        LONG = "long", "Long rest"
+
+    character = models.ForeignKey(
+        "campaigns.Character", on_delete=models.CASCADE, related_name="effects"
+    )
+    source = models.CharField(max_length=200, blank=True)
+    name = models.CharField(max_length=200)
+    enabled = models.BooleanField(default=True)
+    duration = models.CharField(max_length=200, blank=True)
+    reminder = models.TextField(blank=True)
+    expires_on_rest = models.CharField(
+        max_length=20, choices=RestExpiry.choices, default=RestExpiry.MANUAL
+    )
+    # A list of {target, value, label}; targets are validated at the API edge.
+    modifiers = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ("name", "pk")
 
 
 class CharacterCompanion(models.Model):

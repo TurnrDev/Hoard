@@ -380,6 +380,12 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.loadout.create": self._sheet_change,
             "characters.loadout.update": self._sheet_change,
             "characters.loadout.delete": self._sheet_change,
+            "characters.effects.create": self._sheet_change,
+            "characters.effects.update": self._sheet_change,
+            "characters.effects.delete": self._sheet_change,
+            "characters.spells.cast": self.spell_cast,
+            "characters.rest": self.rest,
+            "characters.inspiration.set": self.inspiration_set,
             "characters.companions.create": self._sheet_change,
             "characters.companions.update": self._sheet_change,
             "characters.companions.delete": self._sheet_change,
@@ -859,7 +865,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "race_entry_id",
             "subrace_identifier",
             "npc_level",
-            "spell_slots",
+            "spell_slot_current",
             "proficiency_bonus_adjustment",
         }
         unknown = set(fields) - allowed
@@ -1684,6 +1690,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             ("loadout", "create"): api.loadout_create,
             ("loadout", "update"): api.loadout_update,
             ("loadout", "delete"): api.loadout_delete,
+            ("effects", "create"): api.effect_create,
+            ("effects", "update"): api.effect_update,
+            ("effects", "delete"): api.effect_delete,
             ("companions", "create"): api.companion_create,
             ("companions", "update"): api.companion_update,
             ("companions", "delete"): api.companion_delete,
@@ -1723,6 +1732,48 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         notify_campaign_changed(context.campaign_id)
         if isinstance(result, tuple):
             return result[1]
+
+    @database_sync_to_async
+    def spell_cast(self, content: dict[str, object]) -> dict[str, object]:
+        from . import api
+
+        context = self._context()
+        character = api._editable_sheet_character(context, self._integer(content, "character_id"))
+        slot = content.get("slot")
+        if slot is not None and not isinstance(slot, str):
+            raise ValueError("slot must be a string.")
+        result = api.cast_spell(character, self._integer(content, "spell_id"), slot, created_by=context)
+        notify_campaign_changed(context.campaign_id)
+        return result
+
+    @database_sync_to_async
+    def rest(self, content: dict[str, object]) -> dict[str, object]:
+        from . import api
+
+        context = self._context()
+        character = api._editable_sheet_character(context, self._integer(content, "character_id"))
+        kind = self._string(content, "kind", required=True)
+        if kind not in {"short", "long"}:
+            raise ValueError("kind must be short or long.")
+        current_hp = content.get("current_hp")
+        if current_hp is not None and not isinstance(current_hp, int):
+            raise ValueError("current_hp must be an integer.")
+        result = api.take_rest(character, kind, current_hp, created_by=context)
+        notify_campaign_changed(context.campaign_id)
+        return result
+
+    @database_sync_to_async
+    def inspiration_set(self, content: dict[str, object]) -> dict[str, object]:
+        from . import api
+
+        context = self._context()
+        character = api._editable_sheet_character(context, self._integer(content, "character_id"))
+        available = content.get("available")
+        if not isinstance(available, bool):
+            raise ValueError("available must be a boolean.")
+        result = api.set_inspiration(character, available, created_by=context)
+        notify_campaign_changed(context.campaign_id)
+        return result
         return result
 
     @database_sync_to_async

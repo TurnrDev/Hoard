@@ -79,6 +79,7 @@ export type Character = {
   about: string;
   languages: string[];
   equipment_proficiencies: Record<string, string[]>;
+  has_inspiration: boolean;
   is_build_complete: boolean;
   level_up_complete: boolean;
   strength: number;
@@ -99,7 +100,13 @@ export type Character = {
     armor_class: number;
     armor_class_calculation: Calculation;
     speed: string;
-    spell_slots: Record<string, number>;
+    spell_slot_pools: Record<
+      string,
+      { calculated: number; adjustment: number; maximum: number; current: number }
+    >;
+    spell_attack: number;
+    spell_save_dc: number;
+    initiative: Calculation;
     proficiency_bonus_adjustment: number;
     proficiency_bonus: number;
     proficiency_bonus_calculation: Calculation;
@@ -150,7 +157,18 @@ export type Character = {
     item_id: number;
     name: string;
     equipped: boolean;
+    slot: "armor" | "shield" | "weapon" | "other";
     label: string;
+  }>;
+  effects: Array<{
+    id: number;
+    source: string;
+    name: string;
+    enabled: boolean;
+    duration: string;
+    reminder: string;
+    expires_on_rest: "manual" | "short" | "long";
+    modifiers: Array<{ target: string; value: number; label: string }>;
   }>;
   companions: Array<{
     id: number;
@@ -169,6 +187,7 @@ export type Calculation = {
   value: number;
   base: number;
   formula?: string;
+  numeric_formula?: string;
   components: Array<{
     label: string;
     value: number;
@@ -668,7 +687,7 @@ export const postHealth = (
 export const changeCharacterSheetRecord = (
   contextId: number,
   characterId: number,
-  resource: "notes" | "features" | "spells" | "loadout" | "companions",
+  resource: "notes" | "features" | "spells" | "loadout" | "companions" | "effects",
   operation: "create" | "update" | "delete",
   fields: Record<string, unknown> = {},
   recordId?: number,
@@ -682,6 +701,40 @@ export const changeCharacterSheetRecord = (
       ...(recordId === undefined ? {} : { record_id: recordId }),
     },
   );
+
+export const castCharacterSpell = (
+  contextId: number,
+  characterId: number,
+  spellId: number,
+  slot?: string,
+) =>
+  contextRequest<Character>(contextId, "characters.spells.cast", {
+    character_id: characterId,
+    spell_id: spellId,
+    ...(slot === undefined ? {} : { slot }),
+  });
+
+export const restCharacter = (
+  contextId: number,
+  characterId: number,
+  kind: "short" | "long",
+  currentHp?: number,
+) =>
+  contextRequest<Character>(contextId, "characters.rest", {
+    character_id: characterId,
+    kind,
+    ...(currentHp === undefined ? {} : { current_hp: currentHp }),
+  });
+
+export const setCharacterInspiration = (
+  contextId: number,
+  characterId: number,
+  available: boolean,
+) =>
+  contextRequest<Character>(contextId, "characters.inspiration.set", {
+    character_id: characterId,
+    available,
+  });
 
 export type BuilderEntry = {
   id: number;

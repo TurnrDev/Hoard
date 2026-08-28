@@ -270,7 +270,7 @@ def parse_cah(raw: bytes) -> CahPreview:
             },
             attacks=_list(row.get("attacks")),
         )
-    fields["spell_slots"] = {
+    fields["spell_slot_current"] = {
         key: value
         for key, raw_value in _dict(source.get("spellSlots")).items()
         if (value := _integer(raw_value, minimum=0)) is not None
