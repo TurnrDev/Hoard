@@ -8,6 +8,15 @@ import {
   login,
 } from "./api";
 
+const { httpRequest } = vi.hoisted(() => ({ httpRequest: vi.fn() }));
+
+vi.mock("axios", () => ({
+  default: {
+    create: () => ({ request: httpRequest }),
+    isAxiosError: () => false,
+  },
+}));
+
 vi.mock("./realtime", () => ({
   campaignRequest: vi.fn().mockResolvedValue({ id: 4, ledger: "test" }),
   ensureCampaignRealtime: vi.fn().mockResolvedValue(undefined),
@@ -20,25 +29,17 @@ describe("API client", () => {
   });
 
   it("uses the CSRF token when posting login credentials", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ csrfToken: "token" }), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 1, username: "jay" }), {
-          status: 200,
-        }),
-      );
-    vi.stubGlobal("fetch", fetch);
+    httpRequest
+      .mockResolvedValueOnce({ status: 200, data: { csrfToken: "token" } })
+      .mockResolvedValueOnce({ status: 200, data: { id: 1, username: "jay" } });
 
     await initialiseCsrf();
     await login("jay", "secret");
 
-    expect(fetch).toHaveBeenNthCalledWith(
+    expect(httpRequest).toHaveBeenNthCalledWith(
       2,
-      "/api/auth/session/",
       expect.objectContaining({
+        url: "/api/auth/session/",
         method: "POST",
         headers: expect.objectContaining({ "X-CSRFToken": "token" }),
       }),

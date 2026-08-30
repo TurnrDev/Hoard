@@ -5,6 +5,7 @@ import {
   inviteRequest,
   userRequest,
 } from "./realtime";
+import axios from "axios";
 
 export type User = { id: number; username: string };
 export type CampaignSummary = {
@@ -262,6 +263,10 @@ export type LedgerTransaction = {
 };
 
 let csrfToken = "";
+const http = axios.create({
+  headers: { Accept: "application/json" },
+  withCredentials: true,
+});
 
 function getCookie(name: string): string {
   if (typeof document === "undefined") return "";
@@ -274,23 +279,33 @@ function getCookie(name: string): string {
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = getCookie("csrftoken") || csrfToken;
   const unsafe = !["GET", "HEAD", "OPTIONS", "TRACE"].includes(options.method ?? "GET");
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options.body && !(options.body instanceof FormData)
-        ? { "Content-Type": "application/json" }
-        : {}),
-      ...(unsafe ? { "X-CSRFToken": token } : {}),
-      ...options.headers,
-    },
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(apiErrorMessage(error, response.statusText));
+  const headers = Object.fromEntries(new Headers(options.headers).entries());
+  try {
+    const response = await http.request<T>({
+      url,
+      method: options.method,
+      data: options.body,
+      headers: {
+        ...headers,
+        ...(options.body && !(options.body instanceof FormData)
+          ? { "Content-Type": "application/json" }
+          : {}),
+        ...(unsafe ? { "X-CSRFToken": token } : {}),
+      },
+    });
+    return response.status === 204 ? (undefined as T) : response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(
+        apiErrorMessage(
+          error.response?.data,
+          error.response?.statusText ?? error.message,
+        ),
+        { cause: error },
+      );
+    }
+    throw error;
   }
-  return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
 
 function apiErrorMessage(error: unknown, fallback: string): string {

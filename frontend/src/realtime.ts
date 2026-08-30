@@ -1,9 +1,9 @@
 import { ref, watch } from "vue";
+import ReconnectingWebSocket from "reconnecting-websocket";
+import { v7 as uuid7 } from "uuid";
 
-let socket: WebSocket | undefined;
+let socket: ReconnectingWebSocket | undefined;
 let campaignId: number | undefined;
-let reconnectTimer: number | undefined;
-let shouldReconnect = false;
 const SOCKET_CONNECT_TIMEOUT_MS = 5_000;
 const SOCKET_CONNECT_POLL_MS = 50;
 export const campaignRefreshRevision = ref(0);
@@ -85,19 +85,6 @@ function notify(id: number): void {
   window.dispatchEvent(new CustomEvent("hoard:campaign-changed", { detail: id }));
 }
 
-function uuid7(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  let timestamp = Date.now();
-  for (let index = 5; index >= 0; index -= 1) {
-    bytes[index] = timestamp & 0xff;
-    timestamp = Math.floor(timestamp / 256);
-  }
-  bytes[6] = (bytes[6] & 0x0f) | 0x70;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 function requestError(message: {
   type?: string;
   detail?: unknown;
@@ -124,7 +111,12 @@ function requestError(message: {
 
 function open(): void {
   if (!campaignId) return;
-  socket = new WebSocket(socketUrl(`/ws/contexts/${campaignId}/`));
+  socket = new ReconnectingWebSocket(socketUrl(`/ws/contexts/${campaignId}/`), [], {
+    connectionTimeout: SOCKET_CONNECT_TIMEOUT_MS,
+    maxReconnectionDelay: 1_000,
+    minReconnectionDelay: 1_000,
+    reconnectionDelayGrowFactor: 1,
+  });
   socket.onopen = () => {
     reconnectListeners.forEach((listener) => listener());
   };
@@ -165,9 +157,7 @@ function open(): void {
     }
   };
   socket.onclose = () => {
-    socket = undefined;
     rejectPendingRequests("The campaign connection closed.");
-    if (shouldReconnect) reconnectTimer = window.setTimeout(open, 1000);
   };
 }
 
@@ -175,11 +165,10 @@ export function connectCampaignRealtime(id: number): void {
   if (campaignId === id && socket) return;
   disconnectCampaignRealtime();
   campaignId = id;
-  shouldReconnect = true;
   open();
 }
 
-export async function ensureCampaignRealtime(id: number): Promise<WebSocket> {
+export async function ensureCampaignRealtime(id: number): Promise<ReconnectingWebSocket> {
   if (campaignId !== id || socket?.readyState === WebSocket.CLOSED) {
     connectCampaignRealtime(id);
   }
@@ -187,10 +176,7 @@ export async function ensureCampaignRealtime(id: number): Promise<WebSocket> {
 }
 
 export function disconnectCampaignRealtime(): void {
-  shouldReconnect = false;
   campaignId = undefined;
-  if (reconnectTimer) window.clearTimeout(reconnectTimer);
-  reconnectTimer = undefined;
   socket?.close();
   socket = undefined;
   rejectPendingRequests("The campaign connection closed.");
@@ -224,7 +210,9 @@ async function oneShotRequest<T>(
   type: string,
   payload: Record<string, unknown> = {},
 ): Promise<T> {
-  const connection = new WebSocket(socketUrl(path));
+  const connection = new ReconnectingWebSocket(socketUrl(path), [], {
+    maxRetries: 0,
+  });
   const requestId = uuid7();
   return new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -284,11 +272,11 @@ export async function startRepositoryImport(payload: {
   });
 }
 
-async function readySocket(): Promise<WebSocket> {
+async function readySocket(): Promise<ReconnectingWebSocket> {
   const deadline = Date.now() + SOCKET_CONNECT_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (socket?.readyState === WebSocket.OPEN) return socket;
-    if (!campaignId || !shouldReconnect) break;
+    if (!campaignId) break;
     await new Promise<void>((resolve) => {
       window.setTimeout(resolve, SOCKET_CONNECT_POLL_MS);
     });
