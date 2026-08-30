@@ -47,7 +47,9 @@ let unsubscribeRepositoryImport: (() => void) | undefined;
 const repositoryQuery = ref("");
 const filtered = computed(() => {
   const needle = query.value.trim().toLowerCase();
-  if (!needle) return items.value;
+  if (!needle) {
+    return items.value;
+  }
   return items.value.filter((item) =>
     [
       item.name,
@@ -65,7 +67,9 @@ const filtered = computed(() => {
 });
 const filteredRepositories = computed(() => {
   const words = repositoryQuery.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return registry.value;
+  if (!words.length) {
+    return registry.value;
+  }
   return registry.value.filter((repository) => {
     const name = repository.name.toLowerCase();
     const description = repository.description.toLowerCase();
@@ -80,11 +84,15 @@ function summary(item: Item): string {
 }
 
 function dismissError(open: boolean): void {
-  if (!open) error.value = "";
+  if (!open) {
+    error.value = "";
+  }
 }
 
 function dismissNotice(open: boolean): void {
-  if (!open) notice.value = "";
+  if (!open) {
+    notice.value = "";
+  }
 }
 
 async function load(): Promise<void> {
@@ -105,7 +113,9 @@ async function load(): Promise<void> {
 
 async function openPacks(): Promise<void> {
   packsOpen.value = true;
-  if (registry.value.length || repositoriesLoading.value) return;
+  if (registry.value.length || repositoriesLoading.value) {
+    return;
+  }
   repositoriesLoading.value = true;
   try {
     registry.value = await getCompendiumRepositories(campaignId);
@@ -119,8 +129,11 @@ async function openPacks(): Promise<void> {
 
 async function togglePack(pack: CompendiumSource): Promise<void> {
   try {
-    if (pack.enabled) await disableCompendiumSource(campaignId, pack.id);
-    else await enableCompendiumSource(campaignId, pack.id);
+    if (pack.enabled) {
+      await disableCompendiumSource(campaignId, pack.id);
+    } else {
+      await enableCompendiumSource(campaignId, pack.id);
+    }
     await load();
   } catch (exception) {
     error.value =
@@ -143,7 +156,9 @@ async function importRegistryPack(pack: CompendiumRepository): Promise<void> {
 }
 
 function repositoryImportEvent(event: RepositoryImportEvent): void {
-  if (event.type === "repository.import.started") return;
+  if (event.type === "repository.import.started") {
+    return;
+  }
   if (event.type === "repository.import.progress") {
     importProgress.value = event.message ?? "Importing repository";
     importProgressCurrent.value = event.current ?? undefined;
@@ -173,14 +188,18 @@ function openEditor(item?: Item): void {
 }
 
 async function save(): Promise<void> {
-  if (!name.value.trim()) return;
+  if (!name.value.trim()) {
+    return;
+  }
   try {
-    if (editing.value)
+    if (editing.value) {
       await updateItem(campaignId, editing.value.id, {
         name: name.value.trim(),
         description: description.value,
       });
-    else await createItem(campaignId, name.value.trim(), description.value);
+    } else {
+      await createItem(campaignId, name.value.trim(), description.value);
+    }
     notice.value = editing.value ? "Item updated." : "Item created.";
     editorOpen.value = false;
     await load();

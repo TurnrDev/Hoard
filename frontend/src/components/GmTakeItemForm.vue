@@ -34,7 +34,9 @@ const selectedItem = computed(() =>
   props.items.find((item) => item.id === itemId.value),
 );
 watch(candidates, (values) => {
-  if (!values.some((value) => value.item.id === itemId.value)) itemId.value = undefined;
+  if (!values.some((value) => value.item.id === itemId.value)) {
+    itemId.value = undefined;
+  }
 });
 
 async function submit() {

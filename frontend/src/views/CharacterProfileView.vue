@@ -91,7 +91,9 @@ const effectReminder = ref("");
 const effectTarget = ref("ac");
 const effectValue = ref(0);
 const healthPreview = computed(() => {
-  if (!character.value) return "";
+  if (!character.value) {
+    return "";
+  }
   const beforeCurrent = character.value.sheet.current_hp;
   const beforeTemporary = character.value.sheet.temporary_hp;
   if (healthReason.value === "correction") {
@@ -199,7 +201,9 @@ const skillAbilities: Record<string, string> = {
   survival: "wisdom",
 };
 const abilityGroups = computed(() => {
-  if (!character.value) return [];
+  if (!character.value) {
+    return [];
+  }
   return [
     ["strength", "Strength", "STR"],
     ["dexterity", "Dexterity", "DEX"],
@@ -243,7 +247,9 @@ const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
 const formatXp = (value: number) => `${value.toLocaleString()} XP`;
 const castingSlots = computed(() => {
   const spell = castingSpell.value;
-  if (!spell || !character.value) return [];
+  if (!spell || !character.value) {
+    return [];
+  }
   return Object.entries(character.value.sheet.spell_slot_pools)
     .filter(
       ([key, pool]) =>
@@ -326,7 +332,9 @@ async function load(): Promise<void> {
     }
     items.value = nextItems;
     activity.value = recent.results.slice(0, 5);
-    if (!character.value) await router.replace(`/c/${campaignId}/characters`);
+    if (!character.value) {
+      await router.replace(`/c/${campaignId}/characters`);
+    }
   } catch (exception) {
     error.value =
       exception instanceof Error
@@ -336,7 +344,9 @@ async function load(): Promise<void> {
 }
 
 async function grantItem(): Promise<void> {
-  if (!character.value || !grantItemId.value) return;
+  if (!character.value || !grantItemId.value) {
+    return;
+  }
   try {
     await createInventoryTransaction(campaignId, {
       from_character_id: null,
@@ -393,13 +403,16 @@ function closeMoneyDialog(): void {
 }
 
 async function submitItemAction(): Promise<void> {
-  if (!character.value || !selectedInventoryItem.value || !itemAction.value) return;
+  if (!character.value || !selectedInventoryItem.value || !itemAction.value) {
+    return;
+  }
   if (
     itemActionQuantity.value < 1 ||
     itemActionQuantity.value > selectedInventoryQuantity.value ||
     (itemAction.value === "transfer" && !itemActionDestination.value)
-  )
+  ) {
     return;
+  }
   try {
     await createInventoryTransaction(campaignId, {
       from_character_id: character.value.id,
@@ -421,10 +434,14 @@ async function submitItemAction(): Promise<void> {
 }
 
 async function submitMoneyAction(): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     if (moneyAction.value === "exchange") {
-      if (!exchangeAmount.value) return;
+      if (!exchangeAmount.value) {
+        return;
+      }
       await createMoneyExchange(campaignId, {
         character_id: character.value.id,
         given: { [denomination.value]: amount.value },
@@ -432,7 +449,9 @@ async function submitMoneyAction(): Promise<void> {
         description: moneyDescription.value,
       });
     } else {
-      if (!hasMoneyAmounts.value || hasInvalidMoneyAmounts.value) return;
+      if (!hasMoneyAmounts.value || hasInvalidMoneyAmounts.value) {
+        return;
+      }
       await createMoneyTransfer(campaignId, {
         from_character_id: character.value.id,
         to_character_id:
@@ -457,7 +476,9 @@ function openMoneyDialog(action: "spend" | "transfer" | "exchange"): void {
 }
 
 function openHealth(): void {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   healthCurrent.value = character.value.sheet.current_hp;
   healthTemporary.value = character.value.sheet.temporary_hp;
   healthAmount.value = 1;
@@ -478,7 +499,9 @@ function openHpAdjustment(): void {
 }
 
 async function submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     await postHealth(campaignId, {
       character_id: character.value.id,
@@ -495,7 +518,9 @@ async function submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
 }
 
 async function saveHealth(): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     await postHealth(campaignId, {
       character_id: character.value.id,
@@ -527,7 +552,9 @@ async function saveHealth(): Promise<void> {
 }
 
 async function toggleInspiration(): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     character.value = await setCharacterInspiration(
       campaignId,
@@ -541,7 +568,9 @@ async function toggleInspiration(): Promise<void> {
 }
 
 async function equipItem(entry: { item_id: number; name: string }): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     await changeCharacterSheetRecord(
       campaignId,
@@ -562,7 +591,9 @@ async function equipItem(entry: { item_id: number; name: string }): Promise<void
 }
 
 async function toggleEffect(effect: Character["effects"][number]): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     await changeCharacterSheetRecord(
       campaignId,
@@ -592,7 +623,9 @@ function openEffect(): void {
 }
 
 async function saveEffect(): Promise<void> {
-  if (!character.value || !effectName.value.trim()) return;
+  if (!character.value || !effectName.value.trim()) {
+    return;
+  }
   try {
     await changeCharacterSheetRecord(
       campaignId,
@@ -618,7 +651,9 @@ async function saveEffect(): Promise<void> {
 }
 
 async function deleteEffect(effect: Character["effects"][number]): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     await changeCharacterSheetRecord(
       campaignId,
@@ -636,13 +671,17 @@ async function deleteEffect(effect: Character["effects"][number]): Promise<void>
 }
 
 function openShortRest(): void {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   shortRestHp.value = character.value.sheet.current_hp;
   shortRestOpen.value = true;
 }
 
 async function takeRest(kind: "short" | "long"): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     character.value = await restCharacter(
       campaignId,
@@ -661,12 +700,17 @@ async function takeRest(kind: "short" | "long"): Promise<void> {
 function openSpellCast(spell: Character["spells"][number]): void {
   castingSpell.value = spell;
   castingSlot.value = undefined;
-  if (spell.level === 0) void confirmSpellCast();
-  else spellCastOpen.value = true;
+  if (spell.level === 0) {
+    void confirmSpellCast();
+  } else {
+    spellCastOpen.value = true;
+  }
 }
 
 async function confirmSpellCast(): Promise<void> {
-  if (!character.value || !castingSpell.value) return;
+  if (!character.value || !castingSpell.value) {
+    return;
+  }
   try {
     character.value = await castCharacterSpell(
       campaignId,
@@ -685,7 +729,9 @@ async function confirmSpellCast(): Promise<void> {
 }
 
 async function archive(): Promise<void> {
-  if (!character.value) return;
+  if (!character.value) {
+    return;
+  }
   try {
     await archiveCharacter(campaignId, character.value.id);
     await router.replace(`/c/${campaignId}/characters`);

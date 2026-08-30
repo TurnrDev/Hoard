@@ -31,7 +31,9 @@ const activeContext = computed(() =>
   availableContexts.value.find((context) => context.id === contextId.value),
 );
 const title = computed(() => {
-  if (!activeContext.value) return "Hoard";
+  if (!activeContext.value) {
+    return "Hoard";
+  }
   return activeContext.value.kind === "gm"
     ? `${activeContext.value.campaign_name} · GM`
     : `${activeContext.value.campaign_name} · ${activeContext.value.character_name}`;
@@ -61,13 +63,17 @@ async function signOut(): Promise<void> {
 
 function updateViewport(): void {
   isDesktop.value = window.innerWidth >= 960;
-  if (isDesktop.value) drawer.value = false;
+  if (isDesktop.value) {
+    drawer.value = false;
+  }
 }
 
 watch(
   () => route.fullPath,
   () => {
-    if (activeContext.value) rememberContext(activeContext.value);
+    if (activeContext.value) {
+      rememberContext(activeContext.value);
+    }
   },
 );
 watch(

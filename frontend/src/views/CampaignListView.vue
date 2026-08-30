@@ -13,7 +13,9 @@ onMounted(async () => {
     const target =
       contexts.value.find((context) => context.id === saved) ??
       (contexts.value.length === 1 ? contexts.value[0] : undefined);
-    if (target) await router.replace(`/c/${target.id}`);
+    if (target) {
+      await router.replace(`/c/${target.id}`);
+    }
   } catch (exception) {
     error.value = String(exception);
   }

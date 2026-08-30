@@ -269,7 +269,9 @@ const http = axios.create({
 });
 
 function getCookie(name: string): string {
-  if (typeof document === "undefined") return "";
+  if (typeof document === "undefined") {
+    return "";
+  }
   const cookie = document.cookie
     .split("; ")
     .find((value) => value.startsWith(`${name}=`));
@@ -309,15 +311,23 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 function apiErrorMessage(error: unknown, fallback: string): string {
-  if (!error || typeof error !== "object" || !("detail" in error)) return fallback;
+  if (!error || typeof error !== "object" || !("detail" in error)) {
+    return fallback;
+  }
   const { detail } = error as { detail: unknown };
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") {
+    return detail;
+  }
   if (Array.isArray(detail)) {
     const messages = detail.map((entry) => {
-      if (typeof entry === "string") return entry;
+      if (typeof entry === "string") {
+        return entry;
+      }
       if (entry && typeof entry === "object" && "msg" in entry) {
         const { msg } = entry as { msg: unknown };
-        if (typeof msg === "string") return msg;
+        if (typeof msg === "string") {
+          return msg;
+        }
       }
       return "";
     });

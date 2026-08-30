@@ -16,8 +16,9 @@ const options = computed(() =>
 watch(
   () => props.characters,
   (characters) => {
-    if (!characters.some((character) => character.id === selectedId.value))
+    if (!characters.some((character) => character.id === selectedId.value)) {
       selectedId.value = characters[0]?.id;
+    }
     emit("selected", selectedId.value);
   },
   { immediate: true },

@@ -85,7 +85,9 @@ function isCalculation(value: unknown): value is Calculation {
 const importChanges = computed(() => {
   const before = preview.value?.calculated_before;
   const after = preview.value?.calculated_after;
-  if (!before || !after) return [];
+  if (!before || !after) {
+    return [];
+  }
   const groups: CalculationGroup[] = [];
   for (const [groupKey, afterValue] of Object.entries(after)) {
     const beforeValue = before[groupKey];
@@ -123,7 +125,9 @@ const importChanges = computed(() => {
         }
       }
     }
-    if (rows.length) groups.push({ key: groupKey, label: title(groupKey), rows });
+    if (rows.length) {
+      groups.push({ key: groupKey, label: title(groupKey), rows });
+    }
   }
   return groups;
 });
@@ -146,8 +150,12 @@ function matchStatus(line: CahPreview["inventory"][number]): {
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "Empty";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "None";
+  if (value === null || value === undefined || value === "") {
+    return "Empty";
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.join(", ") : "None";
+  }
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>);
     return entries.length
@@ -196,7 +204,9 @@ function setNumberField(
   value: string | number | null,
 ): void {
   const number = Number(value);
-  if (Number.isFinite(number)) change.after = number;
+  if (Number.isFinite(number)) {
+    change.after = number;
+  }
 }
 
 function setJsonField(
@@ -213,7 +223,9 @@ function setJsonField(
 }
 
 function importFields(): Record<string, unknown> {
-  if (!preview.value) return {};
+  if (!preview.value) {
+    return {};
+  }
   return Object.fromEntries(
     preview.value.field_changes
       .filter((change) => change.enabled)
@@ -237,7 +249,9 @@ function collectionChoices(): Record<string, boolean> {
 }
 
 async function loadPreview(): Promise<void> {
-  if (!file.value) return;
+  if (!file.value) {
+    return;
+  }
   busy.value = true;
   try {
     const nextPreview = await previewCahImport(
@@ -265,7 +279,9 @@ async function loadPreview(): Promise<void> {
 }
 
 async function commit(): Promise<void> {
-  if (!preview.value) return;
+  if (!preview.value) {
+    return;
+  }
   busy.value = true;
   try {
     await commitCahImport(

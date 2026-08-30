@@ -85,7 +85,9 @@ watch(
   { deep: true },
 );
 watch(pageCount, () => {
-  if (page.value > pageCount.value) page.value = pageCount.value;
+  if (page.value > pageCount.value) {
+    page.value = pageCount.value;
+  }
 });
 
 function choose(candidate: PickerCandidate): void {
@@ -412,7 +414,9 @@ function facts(item: Item): string[] {
     max-width="650"
     @update:model-value="
       (value) => {
-        if (!value) detailItem = undefined;
+        if (!value) {
+          detailItem = undefined;
+        }
       }
     "
   >

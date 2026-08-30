@@ -49,7 +49,9 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
-  if (to.path === "/login" || to.path.startsWith("/invites/")) return true;
+  if (to.path === "/login" || to.path.startsWith("/invites/")) {
+    return true;
+  }
   try {
     await getSession();
     return true;

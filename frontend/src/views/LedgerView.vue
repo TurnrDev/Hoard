@@ -91,7 +91,9 @@ async function load(): Promise<void> {
 }
 
 async function reverse(): Promise<void> {
-  if (!reversing.value) return;
+  if (!reversing.value) {
+    return;
+  }
   try {
     await reverseTransaction(campaignId, reversing.value);
     reversing.value = undefined;
@@ -188,7 +190,9 @@ useCampaignRefresh(load);
       max-width="480"
       @update:model-value="
         (open) => {
-          if (!open) reversing = undefined;
+          if (!open) {
+            reversing = undefined;
+          }
         }
       "
     >

@@ -35,7 +35,9 @@ export function displayIdentifier(value: string): string {
 }
 
 export function displayCoin(value: string | null | undefined): string {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
   return coinLabels[value.toLowerCase()] ?? displayIdentifier(value);
 }
 

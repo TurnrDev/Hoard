@@ -137,7 +137,9 @@ function canonicalEntryId(
   kind: "race" | "class" | "background",
   id: number | null | undefined,
 ): number | undefined {
-  if (typeof id !== "number") return undefined;
+  if (typeof id !== "number") {
+    return undefined;
+  }
   const canonical = definition.value?.[kind].find(
     (candidate) => candidate.id === id || (candidate.alias_ids ?? []).includes(id),
   );
@@ -260,11 +262,17 @@ function findEntry(id: number): BuilderEntry | undefined {
 }
 
 async function loadEntryData(id?: number | null): Promise<void> {
-  if (!id) return;
+  if (!id) {
+    return;
+  }
   const candidate = findEntry(id);
-  if (!candidate || candidate.data) return;
+  if (!candidate || candidate.data) {
+    return;
+  }
   const existing = entryRequests.get(id);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
   loadingEntryIds.value.add(id);
   const request = getBuilderEntry(contextId, id)
     .then((details) => {
@@ -304,16 +312,22 @@ function entryChoices(
 ): CompendiumChoice[] {
   const selected = entry(kind, id);
   const values = selected?.data?.[key];
-  if (!selected || !Array.isArray(values)) return [];
+  if (!selected || !Array.isArray(values)) {
+    return [];
+  }
   return values
     .map((value): CompendiumChoice | undefined => {
       if (typeof value === "string") {
         return value ? { name: value, source: selected.source } : undefined;
       }
-      if (!value || typeof value !== "object") return undefined;
+      if (!value || typeof value !== "object") {
+        return undefined;
+      }
       const choice = value as Record<string, unknown>;
       const name = String(choice.name ?? "").trim();
-      if (!name) return undefined;
+      if (!name) {
+        return undefined;
+      }
       return {
         identifier: String(choice.identifier ?? ""),
         name,
@@ -375,13 +389,19 @@ function subclassStatus(row: ClassLevel): string {
 
 function reconcileSubclassChoices(): void {
   for (const row of classLevels.value) {
-    if (!row.class_entry_id) continue;
+    if (!row.class_entry_id) {
+      continue;
+    }
     const unlockLevel = subclassUnlockLevel(row);
-    if (!unlockLevel) continue;
+    if (!unlockLevel) {
+      continue;
+    }
     const matching = classLevels.value.filter((candidate) => sameClass(candidate, row));
     const target = matching[unlockLevel - 1];
     const previous = matching.find((candidate) => candidate.subclass_name);
-    if (!target || !previous || target === previous || target.subclass_name) continue;
+    if (!target || !previous || target === previous || target.subclass_name) {
+      continue;
+    }
     target.subclass_identifier = previous.subclass_identifier;
     target.subclass_name = previous.subclass_name;
     previous.subclass_identifier = "";
@@ -425,7 +445,9 @@ function selectedRuleEntries(): BuilderEntry[] {
 function ruleSuggestions(key: string): CompendiumChoice[] {
   const choices = selectedRuleEntries().flatMap((selected) => {
     const values = selected.data?.[key];
-    if (!Array.isArray(values)) return [];
+    if (!Array.isArray(values)) {
+      return [];
+    }
     return values.map((name) => ({ name: String(name), source: selected.source }));
   });
   const unique = new Map<string, CompendiumChoice>();
@@ -451,18 +473,25 @@ function equipmentSuggestionKey(
 async function save(): Promise<void> {
   busy.value = true;
   try {
-    if (raceOverride.value) form.value.race_entry_id = undefined;
-    else
+    if (raceOverride.value) {
+      form.value.race_entry_id = undefined;
+    } else {
       form.value.race =
         entry("race", form.value.race_entry_id)?.name ?? form.value.race;
-    if (backgroundOverride.value) form.value.background_entry_id = undefined;
-    else
+    }
+    if (backgroundOverride.value) {
+      form.value.background_entry_id = undefined;
+    } else {
       form.value.background =
         entry("background", form.value.background_entry_id)?.name ??
         form.value.background;
+    }
     classLevels.value.forEach((row) => {
-      if (row.is_override) row.class_entry_id = undefined;
-      else row.class_name = entry("class", row.class_entry_id)?.name ?? row.class_name;
+      if (row.is_override) {
+        row.class_entry_id = undefined;
+      } else {
+        row.class_name = entry("class", row.class_entry_id)?.name ?? row.class_name;
+      }
     });
     await saveCharacterBuilder(contextId, characterId, {
       fields: form.value,

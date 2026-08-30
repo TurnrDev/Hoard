@@ -88,11 +88,15 @@ const chosenClass = computed(() =>
 );
 
 function hpAverage(): void {
-  if (rules.value) hpIncrease.value = rules.value.class.average_hp;
+  if (rules.value) {
+    hpIncrease.value = rules.value.class.average_hp;
+  }
 }
 
 async function refreshPreview(): Promise<void> {
-  if (!classEntryId.value) return;
+  if (!classEntryId.value) {
+    return;
+  }
   previewLoading.value = true;
   try {
     preview.value = await previewLevelUp(contextId, characterId, {
@@ -119,7 +123,9 @@ async function loadClassRules(): Promise<void> {
   preview.value = undefined;
   try {
     rules.value = await getLevelUpClass(contextId, characterId, classEntryId.value);
-    if (hpMethod.value === "average") hpAverage();
+    if (hpMethod.value === "average") {
+      hpAverage();
+    }
   } catch (exception) {
     error.value =
       exception instanceof Error
@@ -132,11 +138,15 @@ async function loadClassRules(): Promise<void> {
 
 watch(classEntryId, loadClassRules);
 watch(hpMethod, (method) => {
-  if (method === "average") hpAverage();
+  if (method === "average") {
+    hpAverage();
+  }
 });
 watch(hasAsi, (available) => {
   if (available) {
-    if (!feats.value.length && !featsLoading.value) void searchFeats();
+    if (!feats.value.length && !featsLoading.value) {
+      void searchFeats();
+    }
   } else {
     asiChoice.value = undefined;
     abilityAdjustments.value = {};
@@ -180,9 +190,12 @@ function featTitle(feat: LevelUpFeat): string {
 }
 
 watch(asiChoice, (choice) => {
-  if (choice === "feat" && !feats.value.length && !featsLoading.value)
+  if (choice === "feat" && !feats.value.length && !featsLoading.value) {
     void searchFeats();
-  if (choice === "feat") abilityAdjustments.value = {};
+  }
+  if (choice === "feat") {
+    abilityAdjustments.value = {};
+  }
   if (choice === "scores") {
     featEntryId.value = undefined;
     featOverride.value = "";
@@ -259,12 +272,18 @@ async function next(): Promise<void> {
       return;
     }
   }
-  if (step.value + 1 === steps.value.length) await refreshPreview();
-  if (!error.value && step.value < steps.value.length) step.value += 1;
+  if (step.value + 1 === steps.value.length) {
+    await refreshPreview();
+  }
+  if (!error.value && step.value < steps.value.length) {
+    step.value += 1;
+  }
 }
 
 function back(): void {
-  if (step.value > 1) step.value -= 1;
+  if (step.value > 1) {
+    step.value -= 1;
+  }
 }
 
 function classChoicePayload() {
@@ -275,13 +294,14 @@ function classChoicePayload() {
     is_override: false,
   }));
   for (const [identifier, value] of Object.entries(customChoices.value)) {
-    if (value.trim())
+    if (value.trim()) {
       choices.push({
         identifier: `custom:${identifier}`,
         kind: "custom",
         values: [value.trim()],
         is_override: true,
       });
+    }
   }
   return choices;
 }

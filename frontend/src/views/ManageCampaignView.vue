@@ -57,7 +57,9 @@ async function load(): Promise<void> {
 }
 
 async function createNpc(): Promise<void> {
-  if (!characterName.value.trim()) return;
+  if (!characterName.value.trim()) {
+    return;
+  }
   try {
     await createCharacter(campaignId, {
       name: characterName.value.trim(),

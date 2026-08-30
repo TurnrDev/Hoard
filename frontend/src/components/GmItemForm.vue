@@ -35,7 +35,9 @@ const selectedItem = computed(() =>
 );
 
 watch(candidates, (values) => {
-  if (!values.some(({ item }) => item.id === itemId.value)) itemId.value = undefined;
+  if (!values.some(({ item }) => item.id === itemId.value)) {
+    itemId.value = undefined;
+  }
 });
 
 async function submit(): Promise<void> {

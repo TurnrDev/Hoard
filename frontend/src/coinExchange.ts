@@ -19,8 +19,9 @@ export function exchangedCoinAmount(
     source === target ||
     !Number.isInteger(amount) ||
     amount <= 0
-  )
+  ) {
     return null;
+  }
   const copper = sourceValue * amount;
   const result = copper / targetValue;
   return Number.isInteger(result) ? result : null;

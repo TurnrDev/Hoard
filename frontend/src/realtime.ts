@@ -110,7 +110,9 @@ function requestError(message: {
 }
 
 function open(): void {
-  if (!campaignId) return;
+  if (!campaignId) {
+    return;
+  }
   socket = new ReconnectingWebSocket(socketUrl(`/ws/contexts/${campaignId}/`), [], {
     connectionTimeout: SOCKET_CONNECT_TIMEOUT_MS,
     maxReconnectionDelay: 1_000,
@@ -139,7 +141,9 @@ function open(): void {
       const pending = pendingRequests.get(message.request_id);
       if (pending) {
         pendingRequests.delete(message.request_id);
-        if (pending.isCommand) pendingCommandCount.value -= 1;
+        if (pending.isCommand) {
+          pendingCommandCount.value -= 1;
+        }
         if (message.type === "query.error" || message.type === "command.error") {
           pending.reject(requestError(message));
         } else {
@@ -149,7 +153,9 @@ function open(): void {
       return;
     }
     domainEventListeners.forEach((listener) => listener(message as DomainEvent));
-    if (message.type === "campaign.changed" && campaignId) notify(campaignId);
+    if (message.type === "campaign.changed" && campaignId) {
+      notify(campaignId);
+    }
     if (message.type?.startsWith("repository.import.")) {
       repositoryImportListeners.forEach((listener) =>
         listener(message as RepositoryImportEvent),
@@ -162,13 +168,17 @@ function open(): void {
 }
 
 export function connectCampaignRealtime(id: number): void {
-  if (campaignId === id && socket) return;
+  if (campaignId === id && socket) {
+    return;
+  }
   disconnectCampaignRealtime();
   campaignId = id;
   open();
 }
 
-export async function ensureCampaignRealtime(id: number): Promise<ReconnectingWebSocket> {
+export async function ensureCampaignRealtime(
+  id: number,
+): Promise<ReconnectingWebSocket> {
   if (campaignId !== id || socket?.readyState === WebSocket.CLOSED) {
     connectCampaignRealtime(id);
   }
@@ -190,7 +200,9 @@ export async function campaignRequest<T>(
   const requestId = uuid7();
   const isCommand = !queryOperations.has(type);
   return new Promise<T>((resolve, reject) => {
-    if (isCommand) pendingCommandCount.value += 1;
+    if (isCommand) {
+      pendingCommandCount.value += 1;
+    }
     pendingRequests.set(requestId, {
       resolve: (data) => resolve(data as T),
       reject,
@@ -217,12 +229,16 @@ async function oneShotRequest<T>(
   return new Promise<T>((resolve, reject) => {
     let settled = false;
     const rejectOnce = (error: Error) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       reject(error);
     };
     const resolveOnce = (data: T) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       resolve(data);
     };
@@ -242,7 +258,9 @@ async function oneShotRequest<T>(
         data?: unknown;
         detail?: unknown;
       };
-      if (message.request_id !== requestId) return;
+      if (message.request_id !== requestId) {
+        return;
+      }
       if (message.type === "query.error" || message.type === "command.error") {
         rejectOnce(requestError(message));
       } else {
@@ -275,8 +293,12 @@ export async function startRepositoryImport(payload: {
 async function readySocket(): Promise<ReconnectingWebSocket> {
   const deadline = Date.now() + SOCKET_CONNECT_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (socket?.readyState === WebSocket.OPEN) return socket;
-    if (!campaignId) break;
+    if (socket?.readyState === WebSocket.OPEN) {
+      return socket;
+    }
+    if (!campaignId) {
+      break;
+    }
     await new Promise<void>((resolve) => {
       window.setTimeout(resolve, SOCKET_CONNECT_POLL_MS);
     });
@@ -286,7 +308,9 @@ async function readySocket(): Promise<ReconnectingWebSocket> {
 
 function rejectPendingRequests(detail: string): void {
   for (const pending of pendingRequests.values()) {
-    if (pending.isCommand) pendingCommandCount.value -= 1;
+    if (pending.isCommand) {
+      pendingCommandCount.value -= 1;
+    }
     pending.reject(new Error(detail));
   }
   pendingRequests.clear();
@@ -301,7 +325,9 @@ export function subscribeRepositoryImport(
 
 export function subscribeCampaignChanges(id: number, listener: () => void): () => void {
   const handler = (event: Event) => {
-    if ((event as CustomEvent<number>).detail === id) listener();
+    if ((event as CustomEvent<number>).detail === id) {
+      listener();
+    }
   };
   window.addEventListener("hoard:campaign-changed", handler);
   return () => window.removeEventListener("hoard:campaign-changed", handler);
