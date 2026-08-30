@@ -15,6 +15,7 @@ dependencies = [
     "channels-redis>=4.2",
     "celery>=5.6",
     "psycopg[binary]>=3.3.4",
+    "pydantic>=2.13.4",
 ]
 
 [dependency-groups]

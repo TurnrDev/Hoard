@@ -9,6 +9,7 @@ import {
   connectCampaignRealtime,
   campaignRefreshRevision,
   disconnectCampaignRealtime,
+  subscribeCampaignReconnect,
   subscribeCampaignChanges,
 } from "./realtime";
 
@@ -21,6 +22,7 @@ const availableContexts = ref<ActingContext[]>([]);
 const calendar = ref<CampaignCalendar>();
 const incompleteLevelUps = ref<string[]>([]);
 let unsubscribeCampaignChanges: (() => void) | undefined;
+let unsubscribeCampaignReconnect: (() => void) | undefined;
 const contextId = computed(() => Number(route.params.id));
 const isPublicRoute = computed(
   () => route.path === "/login" || route.path.startsWith("/invites/"),
@@ -72,6 +74,7 @@ watch(
   activeContext,
   (context) => {
     unsubscribeCampaignChanges?.();
+    unsubscribeCampaignReconnect?.();
     calendar.value = undefined;
     incompleteLevelUps.value = [];
     if (!context) {
@@ -99,6 +102,10 @@ watch(
       void refreshCalendar();
       campaignRefreshRevision.value += 1;
     });
+    unsubscribeCampaignReconnect = subscribeCampaignReconnect(() => {
+      void refreshCalendar();
+      campaignRefreshRevision.value += 1;
+    });
   },
   { immediate: true },
 );
@@ -109,6 +116,7 @@ onMounted(() => {
 onBeforeUnmount(() => window.removeEventListener("resize", updateViewport));
 onBeforeUnmount(() => {
   unsubscribeCampaignChanges?.();
+  unsubscribeCampaignReconnect?.();
   disconnectCampaignRealtime();
 });
 </script>

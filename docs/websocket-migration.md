@@ -4,12 +4,12 @@ This roadmap completes Hoard's REST-to-WebSocket migration in small, independent
 
 ## Current state and target
 
-Campaign features are already reachable through the context, user, and invitation WebSocket endpoints. `hoard/campaigns/api.py` still contains the former REST-oriented handlers and provides serializers and mutation helpers used by the consumers.
+Campaign features are already reachable through the context, user, and invitation WebSocket endpoints. `hoard/campaigns/api.py` still contains the former REST-oriented handlers and provides payload formatting and mutation helpers used by the consumers.
 
-The migration replaces those handler dependencies with a sensible, class-based Python domain layer:
+The migration replaces those handler dependencies with a small, conventional Python domain layer:
 
 * cohesive service classes for commands;
-* read-model classes for queries;
+* Pydantic models as the explicit contracts for query results, command payloads, and domain events;
 * thin WebSocket consumers responsible only for connection handling, envelopes, authorization context, dispatch, and response/event delivery.
 
 The final HTTP surface is intentionally narrow:
@@ -234,7 +234,8 @@ Page-oriented queries should group data that naturally belongs to one render ope
 ### 1. Foundation and compatibility seam
 
 * Document the request envelope, query/result lifecycle, command acknowledgement/error lifecycle, event naming, reconnect behaviour, authorization, subscription rules, and payload-size limits.
-* Move shared serializers and mutation logic into cohesive, class-based domain service and read-model layers so consumers no longer invoke HTTP handler functions.
+* Move shared mutation logic into cohesive, class-based domain services so consumers no longer invoke HTTP handler functions.
+* Define query results, command payloads, and domain events with Pydantic models; use `model_dump(mode="json")` at transport boundaries.
 * Give each class a named domain responsibility; do not create generic catch-all services or transport-aware business logic.
 * Add frontend request correlation for queries and commands.
 * Add frontend command pending/error handling.

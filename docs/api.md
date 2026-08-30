@@ -17,11 +17,16 @@ Campaign domain data is not exposed through HTTP REST routes.
 - `/ws/invites/<token>/` inspects and claims a single invitation. It supports
   anonymous inspection and registration.
 
-Requests contain a `type`, a unique `request_id`, and command fields. Replies use
-`response` or `response.error` and echo `request_id`. Errors include a stable
+Requests contain a `type`, a fresh UUIDv7 `request_id`, and operation fields.
+Queries receive `query.result` or `query.error`; commands receive `command.ack`
+or `command.error`. Correlated replies echo `request_id`. Errors include a stable
 `code`, human-readable `detail`, and `field_errors` where validation identified
-specific fields. Campaign sockets reconnect and clients authoritatively reload
-after `campaign.changed` broadcasts.
+specific fields. Campaign sockets reconnect and clients authoritatively rerun
+their required queries after reconnecting.
+
+Query-result data, command payloads, and domain-event data are defined with
+Pydantic models. These models are transport-neutral: WebSocket consumers and
+temporary HTTP compatibility handlers serialize them with `model_dump(mode="json")`.
 
 The context socket exposes campaign state/calendar, members, invitations, group
 levels, characters and builder drafts, HP history, `.cah` imports, sheet records,

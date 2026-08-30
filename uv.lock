@@ -425,6 +425,7 @@ dependencies = [
     { name = "django-ninja" },
     { name = "django-vite" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -442,6 +443,7 @@ requires-dist = [
     { name = "django-ninja", specifier = ">=1.5.3" },
     { name = "django-vite", specifier = ">=3.1.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
+    { name = "pydantic", specifier = ">=2.13.4" },
 ]
 
 [package.metadata.requires-dev]

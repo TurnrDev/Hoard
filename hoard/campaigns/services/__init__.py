@@ -8,6 +8,7 @@ from .actions import (
     take_loot,
     transfer_item,
 )
+from .calendar import CampaignCalendarService
 from .experience import (
     activate_character,
     award_shared_experience,
@@ -49,4 +50,5 @@ __all__ = [
     "create_invitation",
     "register_and_accept",
     "approve_campaign_level",
+    "CampaignCalendarService",
 ]

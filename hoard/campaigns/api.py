@@ -45,9 +45,11 @@ from .models import (
     MoneyEntry,
     MoneyTransaction,
 )
+from .payloads import CampaignCalendarData
 from .realtime import notify_campaign_changed
 from .services import exchange_coins, reverse_transaction
 from .services.cah import ABILITIES, SKILL_NAMES, parse_cah
+from .services.calendar import CampaignCalendarService
 from .services.ledger import post_inventory_transaction, post_money_transaction
 
 
@@ -385,12 +387,7 @@ def _context_data(context: CampaignContext) -> dict[str, object]:
 
 
 def _calendar_data(campaign: Campaign) -> dict[str, int | str]:
-    return {
-        "era_abbreviation": campaign.calendar_era_abbreviation,
-        "era_name": campaign.calendar_era_name,
-        "year": campaign.calendar_year,
-        "day": campaign.calendar_day,
-    }
+    return CampaignCalendarData.from_campaign(campaign).model_dump(mode="json")
 
 
 def _field_metadata(model: type[models.Model]) -> dict[str, object]:
@@ -950,7 +947,9 @@ def context_detail(request, context_id: int):
 
 @contexts.get("/{context_id}/calendar/")
 def calendar_detail(request, context_id: int):
-    return _calendar_data(_context_access(request, context_id).campaign)
+    return CampaignCalendarData.from_campaign(
+        _context_access(request, context_id).campaign
+    ).model_dump(mode="json")
 
 
 @api.get("/contexts/{context_id}/metadata/")
@@ -968,9 +967,7 @@ def calendar_adjust(request, context_id: int, payload: CalendarAdjustment):
     context = _context_access(request, context_id)
     _gm(context)
     try:
-        context.campaign.adjust_calendar_day(payload.amount)
-        context.campaign.full_clean()
-        context.campaign.save(update_fields=("calendar_year", "calendar_day"))
+        CampaignCalendarService().adjust_day(context.campaign, payload.amount)
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
     notify_campaign_changed(context.campaign_id)

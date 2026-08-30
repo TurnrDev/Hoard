@@ -41,6 +41,8 @@ from .models import (
     InvitationEvent,
     MembershipEvent,
 )
+from .payloads import CampaignCalendarData
+from .protocol import error_type, is_uuid7, operation_kind, result_type
 from .realtime import campaign_group_name, notify_campaign_changed
 from .services import (
     accept_invitation,
@@ -49,6 +51,7 @@ from .services import (
     post_health_transaction,
     register_and_accept,
 )
+from .services.calendar import CampaignCalendarService
 from .services.history import character_snapshot, record_character_history
 
 logger = logging.getLogger(__name__)
@@ -340,6 +343,17 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 }
             )
             return
+        request_id = content.get("request_id")
+        if not is_uuid7(request_id):
+            await self.send_json(
+                {
+                    "type": error_type(operation_kind(message_type)),
+                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    "code": "invalid_request_id",
+                    "detail": "request_id must be a UUIDv7.",
+                }
+            )
+            return
         handlers = {
             "campaign.get": self._campaign_get,
             "campaign.calendar.get": self._calendar_get,
@@ -436,7 +450,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         ):
             await self.send_json(
                 {
-                    "type": "repository.import.error",
+                    "type": "command.error",
+                    "request_id": request_id,
+                    "code": "invalid_request",
                     "detail": "A registered repository is required.",
                 }
             )
@@ -448,7 +464,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             logger.exception("Unable to queue Compendium repository import.")
             await self.send_json(
                 {
-                    "type": "repository.import.error",
+                    "type": "command.error",
+                    "request_id": request_id,
+                    "code": "server_error",
                     "detail": "Unable to queue the repository import.",
                 }
             )
@@ -456,12 +474,23 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if not queued:
             await self.send_json(
                 {
-                    "type": "repository.import.error",
+                    "type": "command.error",
+                    "request_id": request_id,
+                    "code": "import_in_progress",
                     "detail": "A repository import is already running.",
                 }
             )
             return
-        await self.send_json({"type": "repository.import.started", "job_id": job_id})
+        await self.send_json(
+            {"type": "command.ack", "request_id": request_id, "data": {"job_id": job_id}}
+        )
+        await self.send_json(
+            {
+                "type": "repository.import.started",
+                "job_id": job_id,
+                "request_id": request_id,
+            }
+        )
 
     async def _run_request(self, content: dict[str, object], handler) -> None:
         started = asyncio.get_running_loop().time()
@@ -498,12 +527,17 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     async def _request_response(self, content: dict[str, object], handler) -> None:
         request_id = content.get("request_id")
-        if not isinstance(request_id, str) or not request_id:
+        message_type = content.get("type")
+        if not isinstance(message_type, str):
+            return
+        kind = operation_kind(message_type)
+        if not is_uuid7(request_id):
             await self.send_json(
                 {
-                    "type": "response.error",
-                    "code": "missing_request_id",
-                    "detail": "A request ID is required.",
+                    "type": error_type(kind),
+                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    "code": "invalid_request_id",
+                    "detail": "request_id must be a UUIDv7.",
                 }
             )
             return
@@ -522,7 +556,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 code = "invalid_request"
             await self.send_json(
                 {
-                    "type": "response.error",
+                    "type": error_type(kind),
                     "request_id": request_id,
                     "code": code,
                     "detail": detail,
@@ -536,14 +570,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             )
             await self.send_json(
                 {
-                    "type": "response.error",
+                    "type": error_type(kind),
                     "request_id": request_id,
                     "code": "server_error",
                     "detail": "Unable to process the campaign request.",
                 }
             )
             return
-        response = {"type": "response", "request_id": request_id, "data": data}
+        # Command data is retained temporarily for existing callers.  Clients must
+        # treat the acknowledgement and the following event as authoritative.
+        response = {"type": result_type(kind), "request_id": request_id, "data": data}
         encoded = await self.encode_json(response)
         response_size = len(encoded.encode("utf-8"))
         if response_size > MAX_WEBSOCKET_RESPONSE_BYTES:
@@ -555,7 +591,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             )
             await self.send_json(
                 {
-                    "type": "response.error",
+                    "type": error_type(kind),
                     "request_id": request_id,
                     "code": "response_too_large",
                     "detail": (
@@ -580,7 +616,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     @database_sync_to_async
     def _campaign_get(self, content: dict[str, object]) -> dict[str, object]:
         from .api import (
-            _calendar_data,
             _character_data,
             _context_data,
             _party_money,
@@ -600,7 +635,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "eligible_level": Character.level_for_experience(
                 campaign.shared_experience
             ),
-            "calendar": _calendar_data(campaign),
+            "calendar": CampaignCalendarData.from_campaign(campaign).model_dump(
+                mode="json"
+            ),
             "party_money": _party_money(campaign),
             "characters": [
                 _character_data(value) for value in _visible_characters(context)
@@ -610,22 +647,22 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _calendar_get(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import _calendar_data
-
-        return _calendar_data(self._context().campaign)
+        return CampaignCalendarData.from_campaign(
+            self._context().campaign
+        ).model_dump(mode="json")
 
     @database_sync_to_async
     def _calendar_adjust(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import _calendar_data, _gm
+        from .api import _gm
 
         context = self._context()
         _gm(context)
         amount = self._integer(content, "amount")
-        context.campaign.adjust_calendar_day(amount)
-        context.campaign.full_clean()
-        context.campaign.save(update_fields=("calendar_year", "calendar_day"))
+        CampaignCalendarService().adjust_day(context.campaign, amount)
         notify_campaign_changed(context.campaign_id)
-        return _calendar_data(context.campaign)
+        return CampaignCalendarData.from_campaign(context.campaign).model_dump(
+            mode="json"
+        )
 
     @database_sync_to_async
     def _member_list(self, content: dict[str, object]) -> list[dict[str, object]]:
@@ -2507,19 +2544,22 @@ class UserConsumer(HoardJsonWebsocketConsumer):
 
     async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
         request_id = content.get("request_id")
-        if not isinstance(request_id, str) or not request_id:
+        message_type = content.get("type")
+        kind = operation_kind(message_type) if isinstance(message_type, str) else None
+        if not is_uuid7(request_id):
             await self.send_json(
                 {
-                    "type": "response.error",
-                    "code": "missing_request_id",
-                    "detail": "A request ID is required.",
+                    "type": error_type(kind or operation_kind("")),
+                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    "code": "invalid_request_id",
+                    "detail": "request_id must be a UUIDv7.",
                 }
             )
             return
-        if content.get("type") != "user.contexts.list":
+        if message_type != "user.contexts.list":
             await self.send_json(
                 {
-                    "type": "response.error",
+                    "type": error_type(operation_kind("")),
                     "request_id": request_id,
                     "code": "unsupported_message",
                     "detail": "Unsupported message.",
@@ -2528,7 +2568,7 @@ class UserConsumer(HoardJsonWebsocketConsumer):
             return
         data = await self._contexts()
         await self.send_json(
-            {"type": "response", "request_id": request_id, "data": data}
+            {"type": result_type(operation_kind(message_type)), "request_id": request_id, "data": data}
         )
 
     @database_sync_to_async
@@ -2555,12 +2595,15 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
 
     async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
         request_id = content.get("request_id")
-        if not isinstance(request_id, str) or not request_id:
+        message_type = content.get("type")
+        kind = operation_kind(message_type) if isinstance(message_type, str) else None
+        if not is_uuid7(request_id):
             await self.send_json(
                 {
-                    "type": "response.error",
-                    "code": "missing_request_id",
-                    "detail": "A request ID is required.",
+                    "type": error_type(kind or operation_kind("")),
+                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    "code": "invalid_request_id",
+                    "detail": "request_id must be a UUIDv7.",
                 }
             )
             return
@@ -2573,7 +2616,7 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
         if handler is None:
             await self.send_json(
                 {
-                    "type": "response.error",
+                    "type": error_type(operation_kind("")),
                     "request_id": request_id,
                     "code": "unsupported_message",
                     "detail": "Unsupported message.",
@@ -2592,7 +2635,7 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
             )
             await self.send_json(
                 {
-                    "type": "response.error",
+                    "type": error_type(operation_kind(message_type)),
                     "request_id": request_id,
                     "code": code,
                     "detail": detail,
@@ -2601,7 +2644,11 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
             )
             return
         await self.send_json(
-            {"type": "response", "request_id": request_id, "data": data}
+            {
+                "type": result_type(operation_kind(message_type)),
+                "request_id": request_id,
+                "data": data,
+            }
         )
 
     @database_sync_to_async
