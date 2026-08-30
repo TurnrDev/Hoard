@@ -13,6 +13,29 @@ jobs:
   python:
     name: Python
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:18
+        env:
+          POSTGRES_DB: hoard
+          POSTGRES_USER: hoard
+          POSTGRES_PASSWORD: hoard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hoard -d hoard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
