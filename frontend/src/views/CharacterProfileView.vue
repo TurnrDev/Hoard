@@ -534,7 +534,6 @@ async function submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
         reason === "damage" ? -Math.abs(healthAmount.value) : healthAmount.value,
     });
     hpAdjustmentOpen.value = false;
-    await load();
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to update HP.";
@@ -568,7 +567,6 @@ async function saveHealth(): Promise<void> {
     });
     healthOpen.value = false;
     healthDescription.value = "";
-    await load();
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to update HP.";

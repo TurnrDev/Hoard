@@ -14,7 +14,11 @@ from .experience import (
     award_shared_experience,
     reverse_experience_transaction,
 )
-from .health import create_health_baseline, post_health_transaction
+from .health import (
+    CharacterHealthService,
+    create_health_baseline,
+    post_health_transaction,
+)
 from .invitations import accept_invitation, create_invitation, register_and_accept
 from .ledger import (
     character_account,
@@ -51,4 +55,5 @@ __all__ = [
     "register_and_accept",
     "approve_campaign_level",
     "CampaignCalendarService",
+    "CharacterHealthService",
 ]

@@ -6,6 +6,38 @@ from django.db import transaction
 from ..models import Character, HealthTransaction
 
 
+class CharacterHealthService:
+    """Records authoritative character health transactions and balances."""
+
+    def post(
+        self,
+        character: Character,
+        *,
+        reason: str,
+        current_hp_delta: int = 0,
+        temporary_hp_delta: int = 0,
+        current_hp: int | None = None,
+        temporary_hp: int | None = None,
+        description: str = "",
+        created_by=None,
+    ) -> HealthTransaction:
+        """Apply one validated health change and return its ledger record."""
+        return post_health_transaction(
+            character,
+            reason=reason,
+            current_hp_delta=current_hp_delta,
+            temporary_hp_delta=temporary_hp_delta,
+            current_hp=current_hp,
+            temporary_hp=temporary_hp,
+            description=description,
+            created_by=created_by,
+        )
+
+    def create_baseline(self, character: Character, *, created_by=None) -> HealthTransaction:
+        """Create the initial health ledger record for a character."""
+        return create_health_baseline(character, created_by=created_by)
+
+
 def post_health_transaction(
     character: Character,
     *,

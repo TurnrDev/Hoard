@@ -742,12 +742,8 @@ export type MoneyExchangeInput = {
 export function createInventoryTransaction(
   campaignId: number,
   payload: InventoryTransactionInput,
-): Promise<LedgerTransaction> {
-  return contextRequest<LedgerTransaction>(
-    campaignId,
-    "inventory.transactions.create",
-    payload,
-  );
+): Promise<void> {
+  return contextRequest<void>(campaignId, "inventory.transactions.create", payload);
 }
 
 export function createMoneyTransfer(

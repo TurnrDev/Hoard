@@ -49,6 +49,7 @@ from .payloads import (
     CampaignLevelChangedEvent,
     CampaignMemberData,
     CampaignMembershipChangedEvent,
+    CharacterHealthChangedEvent,
 )
 from .protocol import (
     CommandAcknowledgementEnvelope,
@@ -67,6 +68,7 @@ from .realtime import (
     notify_campaign_event,
 )
 from .services import (
+    CharacterHealthService,
     accept_invitation,
     approve_campaign_level,
     create_invitation,
@@ -628,6 +630,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.members.deactivate",
             "campaign.invites.revoke",
             "campaign.level.approve",
+            "characters.health.post",
         }:
             response = CommandAcknowledgementEnvelope(
                 request_id=envelope.request_id
@@ -1796,7 +1799,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             context, character
         ):
             raise PermissionError("You may only change your own character's HP.")
-        posted = post_health_transaction(
+        posted = CharacterHealthService().post(
             character,
             reason=self._string(content, "reason", required=True),
             current_hp_delta=int(content.get("current_hp_delta", 0)),
@@ -1810,7 +1813,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             description=self._string(content, "description"),
             created_by=context,
         )
-        notify_campaign_changed(context.campaign_id)
+        character.refresh_from_db(fields=("current_hp", "temporary_hp"))
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterHealthChangedEvent(
+                character_id=character.pk,
+                current_hp=character.current_hp,
+                temporary_hp=character.temporary_hp,
+                request_id=str(content["request_id"]),
+            ),
+        )
         return self._health_data(posted)
 
     @database_sync_to_async
