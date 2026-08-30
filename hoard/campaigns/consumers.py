@@ -41,7 +41,15 @@ from .models import (
     InvitationEvent,
     MembershipEvent,
 )
-from .payloads import CampaignCalendarChangedEvent, CampaignCalendarData
+from .payloads import (
+    CampaignCalendarChangedEvent,
+    CampaignCalendarData,
+    CampaignInvitationChangedEvent,
+    CampaignInvitationData,
+    CampaignLevelChangedEvent,
+    CampaignMemberData,
+    CampaignMembershipChangedEvent,
+)
 from .protocol import (
     CommandAcknowledgementEnvelope,
     QueryResultEnvelope,
@@ -615,7 +623,12 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 request_id=envelope.request_id,
                 data=result_data,
             ).model_dump(mode="json")
-        elif message_type == "campaign.calendar.adjust":
+        elif message_type in {
+            "campaign.calendar.adjust",
+            "campaign.members.deactivate",
+            "campaign.invites.revoke",
+            "campaign.level.approve",
+        }:
             response = CommandAcknowledgementEnvelope(
                 request_id=envelope.request_id
             ).model_dump(mode="json")
@@ -770,7 +783,18 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             character.is_archived = True
             character.archived_at = timezone.now()
             character.save(update_fields=("is_active", "is_archived", "archived_at"))
-        notify_campaign_changed(context.campaign_id)
+        notify_campaign_event(
+            context.campaign_id,
+            CampaignMembershipChangedEvent(
+                member=CampaignMemberData(
+                    id=candidate.pk,
+                    username=candidate.user.get_username(),
+                    is_game_master=candidate.kind == CampaignContext.Kind.GM,
+                    is_active=candidate.is_active,
+                ),
+                request_id=str(content["request_id"]),
+            ),
+        )
 
     @database_sync_to_async
     def _invite_list(self, content: dict[str, object]) -> list[dict[str, object]]:
@@ -798,6 +822,15 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 None,
                 [email],
             )
+        notify_campaign_event(
+            context.campaign_id,
+            CampaignInvitationChangedEvent(
+                invitation=CampaignInvitationData.model_validate(
+                    self._invitation_data(invitation)
+                ),
+                request_id=str(content["request_id"]),
+            ),
+        )
         return {**self._invitation_data(invitation), "link": link}
 
     @database_sync_to_async
@@ -832,6 +865,15 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 None,
                 [invitation.delivery_email],
             )
+        notify_campaign_event(
+            context.campaign_id,
+            CampaignInvitationChangedEvent(
+                invitation=CampaignInvitationData.model_validate(
+                    self._invitation_data(invitation)
+                ),
+                request_id=str(content["request_id"]),
+            ),
+        )
         return {**self._invitation_data(invitation), "link": link}
 
     @database_sync_to_async
@@ -855,6 +897,15 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             created_by=context,
             reason=InvitationEvent.Reason.REVOKED,
         )
+        notify_campaign_event(
+            context.campaign_id,
+            CampaignInvitationChangedEvent(
+                invitation=CampaignInvitationData.model_validate(
+                    self._invitation_data(invitation)
+                ),
+                request_id=str(content["request_id"]),
+            ),
+        )
 
     @database_sync_to_async
     def _level_status(self, content: dict[str, object]) -> dict[str, object]:
@@ -876,7 +927,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         context = self._context()
         _gm(context)
         event = approve_campaign_level(context.campaign, created_by=context)
-        notify_campaign_changed(context.campaign_id)
+        notify_campaign_event(
+            context.campaign_id,
+            CampaignLevelChangedEvent(
+                previous_level=event.previous_level,
+                next_level=event.next_level,
+                request_id=str(content["request_id"]),
+            ),
+        )
         return {
             "previous_level": event.previous_level,
             "next_level": event.next_level,

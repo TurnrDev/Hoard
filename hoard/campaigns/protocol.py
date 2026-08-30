@@ -181,7 +181,13 @@ COMMAND_OPERATIONS = frozenset(
 
 def operation_definitions() -> dict[str, OperationDefinition]:
     """Return the registered contracts for every currently supported operation."""
-    from .payloads import CalendarAdjustmentCommand, CampaignCalendarData
+    from .payloads import (
+        CalendarAdjustmentCommand,
+        CampaignCalendarData,
+        InvitationCreateCommand,
+        InvitationIdentifierCommand,
+        MemberDeactivationCommand,
+    )
 
     definitions = {
         name: OperationDefinition(name=name, kind=OperationKind.QUERY)
@@ -205,6 +211,25 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         payload_model=CalendarAdjustmentCommand,
         result_model=CampaignCalendarData,
     )
+    definitions["campaign.members.deactivate"] = OperationDefinition(
+        name="campaign.members.deactivate",
+        kind=OperationKind.COMMAND,
+        payload_model=MemberDeactivationCommand,
+    )
+    definitions["campaign.invites.create"] = OperationDefinition(
+        name="campaign.invites.create",
+        kind=OperationKind.COMMAND,
+        payload_model=InvitationCreateCommand,
+    )
+    for name in (
+        "campaign.invites.resend",
+        "campaign.invites.revoke",
+    ):
+        definitions[name] = OperationDefinition(
+            name=name,
+            kind=OperationKind.COMMAND,
+            payload_model=InvitationIdentifierCommand,
+        )
 
     return definitions
 
