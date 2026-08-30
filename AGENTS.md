@@ -7,6 +7,19 @@
 - Do not use leading-underscore “private” methods or functions in Python; Python
   has no private methods and the convention makes the code harder to read.
 
+## API architecture
+
+- All new application APIs must use WebSocket. Do not add new HTTP/REST endpoints
+  for application data or mutations.
+- Design each page around an initial query that returns all data needed to render
+  that page. Avoid follow-up request waterfalls where practical.
+- Make state changes through commands. A command is acknowledged when accepted;
+  its eventual success or failure is reported asynchronously, including a useful
+  error when it fails.
+- Publish events for accepted changes so every connected client can update its
+  local view from the same source of truth. Treat events, rather than the command
+  acknowledgement, as the mechanism for distributing resulting state changes.
+
 ## Frontend accessibility baseline
 
 - Target WCAG 2.2 AA. Do not use colour as the only indication of state, meaning, or
