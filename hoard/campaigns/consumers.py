@@ -41,9 +41,23 @@ from .models import (
     InvitationEvent,
     MembershipEvent,
 )
-from .payloads import CampaignCalendarData
-from .protocol import error_type, is_uuid7, operation_kind, result_type
-from .realtime import campaign_group_name, notify_campaign_changed
+from .payloads import CampaignCalendarChangedEvent, CampaignCalendarData
+from .protocol import (
+    CommandAcknowledgementEnvelope,
+    QueryResultEnvelope,
+    RequestEnvelope,
+    RequestErrorEnvelope,
+    error_type,
+    is_uuid7,
+    operation_definition,
+    operation_kind,
+    result_type,
+)
+from .realtime import (
+    campaign_group_name,
+    notify_campaign_changed,
+    notify_campaign_event,
+)
 from .services import (
     accept_invitation,
     approve_campaign_level,
@@ -513,8 +527,10 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 exc_info=(type(error), error, error.__traceback__),
             )
 
-    async def campaign_changed(self, event: dict[str, object]) -> None:
-        await self.send_json({"type": "campaign.changed"})
+    async def domain_event(self, event: dict[str, object]) -> None:
+        payload = event.get("event")
+        if isinstance(payload, dict):
+            await self.send_json(payload)
 
     async def repository_import_progress(self, event: dict[str, object]) -> None:
         await self.send_json({"type": "repository.import.progress", **event})
@@ -531,14 +547,26 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if not isinstance(message_type, str):
             return
         kind = operation_kind(message_type)
-        if not is_uuid7(request_id):
-            await self.send_json(
+        try:
+            envelope = RequestEnvelope.model_validate(
+                {"type": message_type, "request_id": request_id}
+            )
+            definition = operation_definition(message_type)
+            definition.payload_model.model_validate(
                 {
-                    "type": error_type(kind),
-                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
-                    "code": "invalid_request_id",
-                    "detail": "request_id must be a UUIDv7.",
+                    key: value
+                    for key, value in content.items()
+                    if key not in {"type", "request_id"}
                 }
+            )
+        except Exception:
+            await self.send_json(
+                RequestErrorEnvelope(
+                    type=error_type(kind),
+                    request_id=request_id if isinstance(request_id, str) else None,
+                    code="invalid_request",
+                    detail="The request envelope or payload is invalid.",
+                ).model_dump(mode="json", exclude_none=True)
             )
             return
         try:
@@ -555,13 +583,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             else:
                 code = "invalid_request"
             await self.send_json(
-                {
-                    "type": error_type(kind),
-                    "request_id": request_id,
-                    "code": code,
-                    "detail": detail,
-                    "field_errors": field_errors,
-                }
+                RequestErrorEnvelope(
+                    type=error_type(kind),
+                    request_id=envelope.request_id,
+                    code=code,
+                    detail=detail,
+                    field_errors=field_errors,
+                ).model_dump(mode="json", exclude_none=True)
             )
             return
         except Exception:
@@ -569,17 +597,36 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 "Unable to process campaign request %s.", content.get("type")
             )
             await self.send_json(
-                {
-                    "type": error_type(kind),
-                    "request_id": request_id,
-                    "code": "server_error",
-                    "detail": "Unable to process the campaign request.",
-                }
+                RequestErrorEnvelope(
+                    type=error_type(kind),
+                    request_id=envelope.request_id,
+                    code="server_error",
+                    detail="Unable to process the campaign request.",
+                ).model_dump(mode="json")
             )
             return
-        # Command data is retained temporarily for existing callers.  Clients must
-        # treat the acknowledgement and the following event as authoritative.
-        response = {"type": result_type(kind), "request_id": request_id, "data": data}
+        result_data = data
+        if kind.value == "query" and definition.result_model is not None:
+            result_data = definition.result_model.model_validate(data).model_dump(
+                mode="json"
+            )
+        if kind.value == "query":
+            response = QueryResultEnvelope(
+                request_id=envelope.request_id,
+                data=result_data,
+            ).model_dump(mode="json")
+        elif message_type == "campaign.calendar.adjust":
+            response = CommandAcknowledgementEnvelope(
+                request_id=envelope.request_id
+            ).model_dump(mode="json")
+        else:
+            # Other command responses remain temporary compatibility payloads until
+            # their domain event contracts are introduced by this foundation work.
+            response = {
+                "type": result_type(kind),
+                "request_id": envelope.request_id,
+                "data": data,
+            }
         encoded = await self.encode_json(response)
         response_size = len(encoded.encode("utf-8"))
         if response_size > MAX_WEBSOCKET_RESPONSE_BYTES:
@@ -659,7 +706,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         _gm(context)
         amount = self._integer(content, "amount")
         CampaignCalendarService().adjust_day(context.campaign, amount)
-        notify_campaign_changed(context.campaign_id)
+        notify_campaign_event(
+            context.campaign_id,
+            CampaignCalendarChangedEvent(
+                calendar=CampaignCalendarData.from_campaign(context.campaign),
+                request_id=str(content["request_id"]),
+            ),
+        )
         return CampaignCalendarData.from_campaign(context.campaign).model_dump(
             mode="json"
         )

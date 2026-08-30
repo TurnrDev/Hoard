@@ -81,10 +81,6 @@ function socketUrl(path: string): string {
   return `${protocol}//${window.location.host}${path}`;
 }
 
-function notify(id: number): void {
-  window.dispatchEvent(new CustomEvent("hoard:campaign-changed", { detail: id }));
-}
-
 function requestError(message: {
   type?: string;
   detail?: unknown;
@@ -153,9 +149,6 @@ function open(): void {
       return;
     }
     domainEventListeners.forEach((listener) => listener(message as DomainEvent));
-    if (message.type === "campaign.changed" && campaignId) {
-      notify(campaignId);
-    }
     if (message.type?.startsWith("repository.import.")) {
       repositoryImportListeners.forEach((listener) =>
         listener(message as RepositoryImportEvent),
@@ -323,14 +316,8 @@ export function subscribeRepositoryImport(
   return () => repositoryImportListeners.delete(listener);
 }
 
-export function subscribeCampaignChanges(id: number, listener: () => void): () => void {
-  const handler = (event: Event) => {
-    if ((event as CustomEvent<number>).detail === id) {
-      listener();
-    }
-  };
-  window.addEventListener("hoard:campaign-changed", handler);
-  return () => window.removeEventListener("hoard:campaign-changed", handler);
+export function subscribeCampaignChanges(listener: () => void): () => void {
+  return subscribeDomainEvents(() => listener());
 }
 
 export function subscribeDomainEvents(

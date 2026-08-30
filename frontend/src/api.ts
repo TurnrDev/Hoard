@@ -451,8 +451,8 @@ export function getCalendar(id: number): Promise<CampaignCalendar> {
   return contextRequest<CampaignCalendar>(id, "campaign.calendar.get");
 }
 
-export function adjustCalendar(id: number, amount: -1 | 1): Promise<CampaignCalendar> {
-  return contextRequest<CampaignCalendar>(id, "campaign.calendar.adjust", {
+export function adjustCalendar(id: number, amount: -1 | 1): Promise<void> {
+  return contextRequest<void>(id, "campaign.calendar.adjust", {
     amount,
   });
 }

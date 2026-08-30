@@ -104,7 +104,7 @@ watch(
     };
     void refreshCalendar();
     connectCampaignRealtime(context.id);
-    unsubscribeCampaignChanges = subscribeCampaignChanges(context.id, () => {
+    unsubscribeCampaignChanges = subscribeCampaignChanges(() => {
       void refreshCalendar();
       campaignRefreshRevision.value += 1;
     });

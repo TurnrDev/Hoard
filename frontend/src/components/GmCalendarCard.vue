@@ -4,7 +4,6 @@ import { adjustCalendar, type CampaignCalendar } from "../api";
 import { formatCampaignDate } from "../calendar";
 
 const props = defineProps<{ contextId: number; calendar: CampaignCalendar }>();
-const emit = defineEmits<{ changed: [calendar: CampaignCalendar] }>();
 const busy = ref(false);
 const error = ref("");
 const canDecrement = computed(() => props.calendar.year > 1 || props.calendar.day > 1);
@@ -13,7 +12,7 @@ async function adjust(amount: -1 | 1): Promise<void> {
   busy.value = true;
   error.value = "";
   try {
-    emit("changed", await adjustCalendar(props.contextId, amount));
+    await adjustCalendar(props.contextId, amount);
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to update date.";

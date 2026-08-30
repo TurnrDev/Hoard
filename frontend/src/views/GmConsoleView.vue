@@ -60,14 +60,6 @@ async function completed(message: string): Promise<void> {
   await load();
 }
 
-function updateCalendar(calendar: Campaign["calendar"]): void {
-  if (!campaign.value) {
-    return;
-  }
-
-  campaign.value = { ...campaign.value, calendar };
-}
-
 async function approveLevel(): Promise<void> {
   try {
     await approveCampaignLevel(contextId);
@@ -157,7 +149,6 @@ useCampaignRefresh(load);
         <GmCalendarCard
           :context-id="contextId"
           :calendar="campaign.calendar"
-          @changed="updateCalendar"
         />
       </v-col>
       <v-col

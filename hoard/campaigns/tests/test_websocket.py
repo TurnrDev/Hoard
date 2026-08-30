@@ -1,5 +1,6 @@
 import time
 from unittest.mock import patch
+from uuid import uuid7
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
@@ -23,6 +24,11 @@ from hoard.compendium.models import (
     CompendiumSource,
 )
 from hoard.routing import websocket_urlpatterns
+
+
+def request_id() -> str:
+    """Return a fresh protocol-compliant request identifier for a test message."""
+    return str(uuid7())
 
 
 @override_settings(
@@ -68,23 +74,42 @@ class ContextSocketTests(TransactionTestCase):
         return response
 
     def test_user_socket_lists_exact_acting_contexts(self) -> None:
+        message = {"type": "user.contexts.list", "request_id": request_id()}
         response = async_to_sync(self.user_request)(
-            {"type": "user.contexts.list", "request_id": "contexts-1"}
+            message
         )
 
-        self.assertEqual(response["request_id"], "contexts-1")
+        self.assertEqual(response["type"], "query.result")
+        self.assertEqual(response["request_id"], message["request_id"])
         self.assertEqual([row["id"] for row in response["data"]], [self.context.pk])
 
     def test_context_socket_correlates_requests(self) -> None:
+        message = {"type": "campaign.calendar.get", "request_id": request_id()}
         response = async_to_sync(self.socket_request)(
             self.user,
             self.context.pk,
-            {"type": "campaign.calendar.get", "request_id": "calendar-1"},
+            message,
         )
 
-        self.assertEqual(response["type"], "response")
-        self.assertEqual(response["request_id"], "calendar-1")
+        self.assertEqual(response["type"], "query.result")
+        self.assertEqual(response["request_id"], message["request_id"])
         self.assertEqual(response["data"]["year"], 81)
+
+    def test_calendar_command_validates_its_pydantic_payload(self) -> None:
+        message = {
+            "type": "campaign.calendar.adjust",
+            "request_id": request_id(),
+            "amount": 2,
+        }
+        response = async_to_sync(self.socket_request)(
+            self.user,
+            self.context.pk,
+            message,
+        )
+
+        self.assertEqual(response["type"], "command.error")
+        self.assertEqual(response["request_id"], message["request_id"])
+        self.assertEqual(response["code"], "invalid_request")
 
     async def concurrent_requests(self):
         async def slow_definition(consumer, content):
@@ -98,25 +123,80 @@ class ContextSocketTests(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
         with patch.object(ContextConsumer, "_builder_definition", slow_definition):
+            slow_request_id = request_id()
+            quick_request_id = request_id()
             await communicator.send_json_to(
                 {
                     "type": "characters.builder.definition",
-                    "request_id": "slow-definition",
+                    "request_id": slow_request_id,
                 }
             )
             await communicator.send_json_to(
-                {"type": "campaign.calendar.get", "request_id": "quick-calendar"}
+                {"type": "campaign.calendar.get", "request_id": quick_request_id}
             )
             first = await communicator.receive_json_from(timeout=1)
             second = await communicator.receive_json_from(timeout=1)
         await communicator.disconnect()
-        return first, second
+        return first, second, quick_request_id, slow_request_id
 
     def test_slow_request_does_not_block_later_correlated_request(self) -> None:
-        first, second = async_to_sync(self.concurrent_requests)()
+        first, second, quick_request_id, slow_request_id = async_to_sync(
+            self.concurrent_requests
+        )()
 
-        self.assertEqual(first["request_id"], "quick-calendar")
-        self.assertEqual(second["request_id"], "slow-definition")
+        self.assertEqual(first["request_id"], quick_request_id)
+        self.assertEqual(second["request_id"], slow_request_id)
+
+    async def calendar_change_events(self):
+        first = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/contexts/{self.context.pk}/"
+        )
+        second = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/contexts/{self.context.pk}/"
+        )
+        first.scope["user"] = self.user
+        second.scope["user"] = self.user
+        self.assertTrue((await first.connect())[0])
+        self.assertTrue((await second.connect())[0])
+
+        command_request_id = request_id()
+        await first.send_json_to(
+            {
+                "type": "campaign.calendar.adjust",
+                "request_id": command_request_id,
+                "amount": 1,
+            }
+        )
+        first_messages = [
+            await first.receive_json_from(timeout=2),
+            await first.receive_json_from(timeout=2),
+        ]
+        second_message = await second.receive_json_from(timeout=2)
+        await first.disconnect()
+        await second.disconnect()
+
+        return first_messages, second_message, command_request_id
+
+    def test_calendar_command_fans_out_the_same_authoritative_event(self) -> None:
+        first_messages, second_message, command_request_id = async_to_sync(
+            self.calendar_change_events
+        )()
+        acknowledgement = next(
+            message
+            for message in first_messages
+            if message["type"] == "command.ack"
+        )
+        origin_event = next(
+            message
+            for message in first_messages
+            if message["type"] == "campaign.calendar_changed"
+        )
+
+        self.assertEqual(acknowledgement["request_id"], command_request_id)
+        self.assertNotIn("data", acknowledgement)
+        self.assertEqual(origin_event, second_message)
+        self.assertEqual(origin_event["request_id"], command_request_id)
+        self.assertEqual(origin_event["calendar"]["day"], 138)
 
     def test_campaign_response_serializes_archived_character_datetimes(self) -> None:
         Character.objects.create(
@@ -134,13 +214,14 @@ class ContextSocketTests(TransactionTestCase):
             archived_at=timezone.now(),
         )
 
+        message = {"type": "campaign.get", "request_id": request_id()}
         response = async_to_sync(self.socket_request)(
             self.user,
             self.context.pk,
-            {"type": "campaign.get", "request_id": "archived-1"},
+            message,
         )
 
-        self.assertEqual(response["type"], "response")
+        self.assertEqual(response["type"], "query.result")
         self.assertIsInstance(response["data"]["characters"][0]["archived_at"], str)
 
     def test_context_socket_rejects_a_different_user(self) -> None:
@@ -182,7 +263,7 @@ class ContextSocketTests(TransactionTestCase):
             context.pk,
             {
                 "type": "characters.builder.save",
-                "request_id": "builder-save",
+                "request_id": request_id(),
                 "character_id": character.pk,
                 "fields": {"name": "Builder", "race": "Custom lineage"},
                 "class_levels": [
@@ -200,13 +281,13 @@ class ContextSocketTests(TransactionTestCase):
             context.pk,
             {
                 "type": "characters.builder.complete",
-                "request_id": "builder-complete",
+                "request_id": request_id(),
                 "character_id": character.pk,
             },
         )
 
-        self.assertEqual(saved["type"], "response")
-        self.assertEqual(completed["type"], "response")
+        self.assertEqual(saved["type"], "command.ack")
+        self.assertEqual(completed["type"], "command.ack")
         character.refresh_from_db()
         self.assertTrue(character.is_active)
         self.assertTrue(character.is_build_complete)
@@ -266,7 +347,7 @@ class ContextSocketTests(TransactionTestCase):
             context.pk,
             {
                 "type": "characters.level_up.definition",
-                "request_id": "level-definition",
+                "request_id": request_id(),
                 "character_id": character.pk,
             },
         )
@@ -275,7 +356,7 @@ class ContextSocketTests(TransactionTestCase):
             context.pk,
             {
                 "type": "characters.level_up.complete",
-                "request_id": "level-complete",
+                "request_id": request_id(),
                 "character_id": character.pk,
                 "class_entry_id": fighter.pk,
                 "hp_method": "average",
@@ -286,9 +367,9 @@ class ContextSocketTests(TransactionTestCase):
             },
         )
 
-        self.assertEqual(definition["type"], "response")
+        self.assertEqual(definition["type"], "query.result")
         self.assertEqual(definition["data"]["level"], 2)
-        self.assertEqual(completed["type"], "response")
+        self.assertEqual(completed["type"], "command.ack")
         character.refresh_from_db()
         self.assertEqual(character.base_hp, 16)
         self.assertEqual(character.current_hp, 16)
