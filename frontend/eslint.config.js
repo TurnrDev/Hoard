@@ -18,6 +18,7 @@ export default [
       "@stylistic": stylistic,
     },
     rules: {
+      curly: ["error", "all"],
       "@stylistic/padding-line-between-statements": [
         "error",
         { blankLine: "always", prev: ["function", "class"], next: "*" },
