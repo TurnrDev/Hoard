@@ -7,6 +7,7 @@ import {
   type Item,
 } from "../api";
 import type { PickerCandidate } from "../itemPicker";
+import { createSnackbarDismissHandler } from "../dismissibleMessage";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
 const props = defineProps<{
@@ -19,6 +20,7 @@ const itemId = ref<number>();
 const quantity = ref(1);
 const description = ref("");
 const error = ref("");
+const clearErrorWhenClosed = createSnackbarDismissHandler(error);
 const characters = ref<Character[]>([]);
 const selected = computed(() =>
   characters.value.find((item) => item.id === characterId.value),
@@ -104,7 +106,7 @@ onMounted(async () => {
       <v-snackbar
         :model-value="Boolean(error)"
         color="error"
-        @update:model-value="(visible) => !visible && (error = '')"
+        @update:model-value="clearErrorWhenClosed"
       >
         {{ error }}
       </v-snackbar>

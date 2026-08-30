@@ -59,7 +59,16 @@ const resumeKey = computed(
 const step = ref(
   Math.min(6, Math.max(1, Number(localStorage.getItem(resumeKey.value)) || 1)),
 );
-watch(step, (value) => localStorage.setItem(resumeKey.value, String(value)));
+
+function saveCurrentStep(value: number): void {
+  localStorage.setItem(resumeKey.value, String(value));
+}
+
+function showImportError(message: string): void {
+  error.value = message;
+}
+
+watch(step, saveCurrentStep);
 const definition = ref<BuilderDefinition>();
 const character = ref<Character>();
 const items = ref<Item[]>([]);
@@ -162,24 +171,34 @@ function finalAbility(ability: (typeof abilities)[number]): number {
   );
 }
 
+async function loadDefinition(): Promise<BuilderDefinition> {
+  try {
+    const nextDefinition = await getBuilderDefinition(contextId);
+    definition.value = nextDefinition;
+
+    return nextDefinition;
+  } finally {
+    definitionLoading.value = false;
+  }
+}
+
+async function loadItems(): Promise<Item[]> {
+  try {
+    const nextItems = await getItems(contextId);
+    items.value = nextItems;
+
+    return nextItems;
+  } finally {
+    itemsLoading.value = false;
+  }
+}
+
 async function load(): Promise<void> {
   try {
     const [nextDefinition, draft, nextItems] = await Promise.all([
-      getBuilderDefinition(contextId)
-        .then((value) => {
-          definition.value = value;
-          return value;
-        })
-        .finally(() => (definitionLoading.value = false)),
-      getCharacterBuilder(contextId, characterId).finally(
-        () => (draftLoading.value = false),
-      ),
-      getItems(contextId)
-        .then((value) => {
-          items.value = value;
-          return value;
-        })
-        .finally(() => (itemsLoading.value = false)),
+      loadDefinition(),
+      getCharacterBuilder(contextId, characterId),
+      loadItems(),
     ]);
     items.value = nextItems;
     const value = draft.character as Character;
@@ -250,6 +269,8 @@ async function load(): Promise<void> {
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : "Unable to load builder.";
+  } finally {
+    draftLoading.value = false;
   }
 }
 
@@ -274,22 +295,25 @@ async function loadEntryData(id?: number | null): Promise<void> {
     return existing;
   }
   loadingEntryIds.value.add(id);
-  const request = getBuilderEntry(contextId, id)
-    .then((details) => {
-      Object.assign(candidate, details);
-    })
-    .catch((exception) => {
-      error.value =
-        exception instanceof Error
-          ? exception.message
-          : "Unable to load Compendium choices.";
-    })
-    .finally(() => {
-      entryRequests.delete(id);
-      loadingEntryIds.value.delete(id);
-    });
+  const request = loadEntryDetails(id, candidate);
   entryRequests.set(id, request);
+
   return request;
+}
+
+async function loadEntryDetails(id: number, candidate: BuilderEntry): Promise<void> {
+  try {
+    const details = await getBuilderEntry(contextId, id);
+    Object.assign(candidate, details);
+  } catch (exception) {
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : "Unable to load Compendium choices.";
+  } finally {
+    entryRequests.delete(id);
+    loadingEntryIds.value.delete(id);
+  }
 }
 
 function entryLoading(id?: number | null): boolean {
@@ -567,7 +591,7 @@ onMounted(load);
         :items="items"
         :items-loading="itemsLoading"
         @completed="load"
-        @error="(message) => (error = message)"
+        @error="showImportError"
       />
       <v-btn
         v-if="isEditing"

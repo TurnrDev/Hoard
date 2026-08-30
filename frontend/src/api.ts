@@ -1,18 +1,23 @@
+import axios from "axios";
 import {
-  campaignRequest,
   campaignImportRequest,
+  campaignRequest,
   ensureCampaignRealtime,
   inviteRequest,
   userRequest,
 } from "./realtime";
-import axios from "axios";
 
-export type User = { id: number; username: string };
+export type User = {
+  id: number;
+  username: string;
+};
+
 export type CampaignSummary = {
   id: number;
   name: string;
   is_game_master: boolean;
 };
+
 export type CampaignContext = {
   id: number;
   campaign_id: number;
@@ -21,18 +26,21 @@ export type CampaignContext = {
   character_id: number | null;
   character_name: string | null;
 };
+
 export type CampaignCalendar = {
   era_abbreviation: string;
   era_name: string;
   year: number;
   day: number;
 };
+
 export type CampaignMember = {
   id: number;
   username: string;
   is_game_master: boolean;
   is_active: boolean;
 };
+
 export type EquipmentMetadata = {
   category: string | null;
   source_book: string | null;
@@ -45,6 +53,7 @@ export type EquipmentMetadata = {
   is_magic: boolean | null;
   requires_attunement: boolean | null;
 };
+
 export type Item = {
   id: number;
   name: string;
@@ -58,6 +67,146 @@ export type Item = {
   equipment: EquipmentMetadata;
   is_imported: boolean;
 };
+
+export type CalculationComponent = {
+  label: string;
+  value: number;
+  formula?: string;
+  source?: string;
+};
+
+export type Calculation = {
+  value: number;
+  base: number;
+  formula?: string;
+  numeric_formula?: string;
+  components: CalculationComponent[];
+};
+
+export type SpellSlotPool = {
+  calculated: number;
+  adjustment: number;
+  maximum: number;
+  current: number;
+};
+
+export type CharacterAbility = {
+  score: number;
+  raw: number;
+  ancestry_bonus: number;
+  score_adjustment: number;
+  modifier: number;
+  adjustment: number;
+  formula: Calculation;
+};
+
+export type CharacterSave = {
+  proficient: boolean;
+  adjustment: number;
+  bonus: number;
+  formula: Calculation;
+};
+
+export type CharacterSkill = {
+  proficiency: string;
+  bonus: number;
+  formula: Calculation;
+};
+
+export type CharacterSheet = {
+  level: number;
+  base_hp: number;
+  max_hp: number;
+  hp_calculation: Calculation;
+  current_hp: number;
+  temporary_hp: number;
+  base_ac: number;
+  ac_adjustment: number;
+  armor_class: number;
+  armor_class_calculation: Calculation;
+  speed: string;
+  spell_slot_pools: Record<string, SpellSlotPool>;
+  spell_attack: number;
+  spell_save_dc: number;
+  initiative: Calculation;
+  proficiency_bonus_adjustment: number;
+  proficiency_bonus: number;
+  proficiency_bonus_calculation: Calculation;
+  abilities: Record<string, CharacterAbility>;
+  saves: Record<string, CharacterSave>;
+  skills: Record<string, CharacterSkill>;
+};
+
+export type CharacterInventoryItem = {
+  item_id: number;
+  name: string;
+  quantity: number;
+};
+
+export type CharacterNote = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export type CharacterFeature = {
+  id: number;
+  kind: string;
+  name: string;
+  description: string;
+  notes: string;
+  catalogue_entry_id: number | null;
+};
+
+export type CharacterSpell = {
+  id: number;
+  name: string;
+  level: number;
+  description: string;
+  notes: string;
+  prepared: boolean;
+  catalogue_entry_id: number | null;
+};
+
+export type CharacterLoadoutItem = {
+  id: number;
+  item_id: number;
+  name: string;
+  equipped: boolean;
+  slot: "armor" | "shield" | "weapon" | "other";
+  label: string;
+};
+
+export type CharacterEffectModifier = {
+  target: string;
+  value: number;
+  label: string;
+};
+
+export type CharacterEffect = {
+  id: number;
+  source: string;
+  name: string;
+  enabled: boolean;
+  duration: string;
+  reminder: string;
+  expires_on_rest: "manual" | "short" | "long";
+  modifiers: CharacterEffectModifier[];
+};
+
+export type CharacterCompanion = {
+  id: number;
+  name: string;
+  armor_class: number;
+  max_hp: number;
+  current_hp: number;
+  speed: string;
+  abilities: Record<string, number | null>;
+  attacks: Array<Record<string, unknown>>;
+  notes: string;
+  monster_template_id: number | null;
+};
+
 export type Character = {
   id: number;
   context_id: number | null;
@@ -89,127 +238,35 @@ export type Character = {
   intelligence: number;
   wisdom: number;
   charisma: number;
-  sheet: {
-    level: number;
-    base_hp: number;
-    max_hp: number;
-    hp_calculation: Calculation;
-    current_hp: number;
-    temporary_hp: number;
-    base_ac: number;
-    ac_adjustment: number;
-    armor_class: number;
-    armor_class_calculation: Calculation;
-    speed: string;
-    spell_slot_pools: Record<
-      string,
-      { calculated: number; adjustment: number; maximum: number; current: number }
-    >;
-    spell_attack: number;
-    spell_save_dc: number;
-    initiative: Calculation;
-    proficiency_bonus_adjustment: number;
-    proficiency_bonus: number;
-    proficiency_bonus_calculation: Calculation;
-    abilities: Record<
-      string,
-      {
-        score: number;
-        raw: number;
-        ancestry_bonus: number;
-        score_adjustment: number;
-        modifier: number;
-        adjustment: number;
-        formula: Calculation;
-      }
-    >;
-    saves: Record<
-      string,
-      { proficient: boolean; adjustment: number; bonus: number; formula: Calculation }
-    >;
-    skills: Record<
-      string,
-      { proficiency: string; bonus: number; formula: Calculation }
-    >;
-  };
+  sheet: CharacterSheet;
   experience: number;
   money: Record<string, number | string>;
-  inventory: Array<{ item_id: number; name: string; quantity: number }>;
-  notes: Array<{ id: number; title: string; body: string }>;
-  features: Array<{
-    id: number;
-    kind: string;
-    name: string;
-    description: string;
-    notes: string;
-    catalogue_entry_id: number | null;
-  }>;
-  spells: Array<{
-    id: number;
-    name: string;
-    level: number;
-    description: string;
-    notes: string;
-    prepared: boolean;
-    catalogue_entry_id: number | null;
-  }>;
-  loadout: Array<{
-    id: number;
-    item_id: number;
-    name: string;
-    equipped: boolean;
-    slot: "armor" | "shield" | "weapon" | "other";
-    label: string;
-  }>;
-  effects: Array<{
-    id: number;
-    source: string;
-    name: string;
-    enabled: boolean;
-    duration: string;
-    reminder: string;
-    expires_on_rest: "manual" | "short" | "long";
-    modifiers: Array<{ target: string; value: number; label: string }>;
-  }>;
-  companions: Array<{
-    id: number;
-    name: string;
-    armor_class: number;
-    max_hp: number;
-    current_hp: number;
-    speed: string;
-    abilities: Record<string, number | null>;
-    attacks: Array<Record<string, unknown>>;
-    notes: string;
-    monster_template_id: number | null;
-  }>;
+  inventory: CharacterInventoryItem[];
+  notes: CharacterNote[];
+  features: CharacterFeature[];
+  spells: CharacterSpell[];
+  loadout: CharacterLoadoutItem[];
+  effects: CharacterEffect[];
+  companions: CharacterCompanion[];
 };
-export type Calculation = {
-  value: number;
-  base: number;
-  formula?: string;
-  numeric_formula?: string;
-  components: Array<{
-    label: string;
-    value: number;
-    formula?: string;
-    source?: string;
-  }>;
+
+export type IncompleteLevelUp = {
+  character_id: number;
+  character_name: string;
+  level: number;
 };
+
 export type Campaign = CampaignSummary & {
   use_shared_exp: boolean;
   shared_experience: number;
   level: number;
   eligible_level: number;
-  incomplete_level_ups: Array<{
-    character_id: number;
-    character_name: string;
-    level: number;
-  }>;
+  incomplete_level_ups: IncompleteLevelUp[];
   calendar: CampaignCalendar;
   party_money: Record<string, number | string>;
   characters: Character[];
 };
+
 export type CompendiumSource = {
   id: number;
   identifier: string;
@@ -219,6 +276,7 @@ export type CompendiumSource = {
   enabled: boolean;
   entry_count: number;
 };
+
 export type CompendiumRepository = {
   id: string;
   name: string;
@@ -228,6 +286,7 @@ export type CompendiumRepository = {
   github_repository: string;
   installed: boolean;
 };
+
 export type LedgerEntry = {
   account_id: number;
   account_name: string;
@@ -237,6 +296,7 @@ export type LedgerEntry = {
   item_name?: string;
   denomination?: string;
 };
+
 export type LedgerTransaction = {
   id: number;
   ledger: string;
@@ -338,37 +398,64 @@ function apiErrorMessage(error: unknown, fallback: string): string {
 
 export async function initialiseCsrf(): Promise<void> {
   const response = await request<{ csrfToken: string }>("/api/auth/csrf/");
+
   csrfToken = getCookie("csrftoken") || response.csrfToken;
 }
-export const getSession = () => request<User>("/api/auth/session/");
-export const login = (username: string, password: string) =>
-  request<User>("/api/auth/session/", {
+
+export function getSession(): Promise<User> {
+  return request<User>("/api/auth/session/");
+}
+
+export function login(username: string, password: string): Promise<User> {
+  const credentials = JSON.stringify({ username, password });
+
+  return request<User>("/api/auth/session/", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: credentials,
   });
-export const logout = () => request<void>("/api/auth/session/", { method: "DELETE" });
-export const getContexts = () => userRequest<CampaignContext[]>("user.contexts.list");
-export const getCampaigns = async (): Promise<CampaignSummary[]> => {
+}
+
+export function logout(): Promise<void> {
+  return request<void>("/api/auth/session/", { method: "DELETE" });
+}
+
+export function getContexts(): Promise<CampaignContext[]> {
+  return userRequest<CampaignContext[]>("user.contexts.list");
+}
+
+export async function getCampaigns(): Promise<CampaignSummary[]> {
   const contexts = await getContexts();
   const campaigns = new Map<number, CampaignSummary>();
+
   for (const context of contexts) {
     const previous = campaigns.get(context.campaign_id);
+    const isGameMaster = previous?.is_game_master || context.kind === "gm";
+
     campaigns.set(context.campaign_id, {
       id: context.campaign_id,
       name: context.campaign_name,
-      is_game_master: Boolean(previous?.is_game_master || context.kind === "gm"),
+      is_game_master: isGameMaster,
     });
   }
+
   return [...campaigns.values()];
-};
-export const getCampaign = async (id: number) => {
+}
+
+export async function getCampaign(id: number): Promise<Campaign> {
   await ensureCampaignRealtime(id);
+
   return campaignRequest<Campaign>("campaign.get");
-};
-export const getCalendar = (id: number) =>
-  contextRequest<CampaignCalendar>(id, "campaign.calendar.get");
-export const adjustCalendar = (id: number, amount: -1 | 1) =>
-  contextRequest<CampaignCalendar>(id, "campaign.calendar.adjust", { amount });
+}
+
+export function getCalendar(id: number): Promise<CampaignCalendar> {
+  return contextRequest<CampaignCalendar>(id, "campaign.calendar.get");
+}
+
+export function adjustCalendar(id: number, amount: -1 | 1): Promise<CampaignCalendar> {
+  return contextRequest<CampaignCalendar>(id, "campaign.calendar.adjust", {
+    amount,
+  });
+}
 
 async function contextRequest<T>(
   contextId: number,
@@ -379,7 +466,7 @@ async function contextRequest<T>(
   return campaignRequest<T>(type, payload);
 }
 
-async function compendiumRequest<T>(
+function compendiumRequest<T>(
   contextId: number,
   type: string,
   payload: Record<string, unknown> = {},
@@ -387,7 +474,9 @@ async function compendiumRequest<T>(
   return contextRequest<T>(contextId, type, payload);
 }
 
-export const getItems = (id: number) => getCompendiumItemPages(id);
+export function getItems(id: number): Promise<Item[]> {
+  return getCompendiumItemPages(id);
+}
 
 type CompendiumItemPage = {
   items: Item[];
@@ -409,36 +498,49 @@ async function getCompendiumItemPages(contextId: number): Promise<Item[]> {
   return items;
 }
 
-export const getCompendiumSources = (id: number) =>
-  compendiumRequest<CompendiumSource[]>(id, "compendium.sources.list");
-export const enableCompendiumSource = (id: number, sourceId: number) =>
-  compendiumRequest<CompendiumSource>(id, "compendium.sources.enable", {
+export function getCompendiumSources(id: number): Promise<CompendiumSource[]> {
+  return compendiumRequest<CompendiumSource[]>(id, "compendium.sources.list");
+}
+
+export function enableCompendiumSource(
+  id: number,
+  sourceId: number,
+): Promise<CompendiumSource> {
+  return compendiumRequest<CompendiumSource>(id, "compendium.sources.enable", {
     source_id: sourceId,
   });
-export const disableCompendiumSource = (id: number, sourceId: number) =>
-  compendiumRequest<void>(id, "compendium.sources.disable", {
+}
+
+export function disableCompendiumSource(id: number, sourceId: number): Promise<void> {
+  return compendiumRequest<void>(id, "compendium.sources.disable", {
     source_id: sourceId,
   });
-export const getCompendiumRepositories = (id: number) => {
+}
+
+export function getCompendiumRepositories(id: number): Promise<CompendiumRepository[]> {
   return compendiumRequest<CompendiumRepository[]>(id, "compendium.repositories.list");
-};
-export const removeMember = (campaignId: number, memberId: number) =>
-  contextRequest<void>(campaignId, "campaign.members.deactivate", {
+}
+
+export function removeMember(campaignId: number, memberId: number): Promise<void> {
+  return contextRequest<void>(campaignId, "campaign.members.deactivate", {
     member_id: memberId,
   });
-export const createItem = (
+}
+
+export function createItem(
   id: number,
   name: string,
   description: string,
   metadata: Partial<EquipmentMetadata> = {},
-): Promise<Item> => {
+): Promise<Item> {
   return compendiumRequest<Item>(id, "compendium.items.create", {
     name,
     description,
     metadata,
   });
-};
-export const updateItem = (
+}
+
+export function updateItem(
   campaignId: number,
   itemId: number,
   payload: {
@@ -446,26 +548,34 @@ export const updateItem = (
     description?: string;
     metadata?: Partial<EquipmentMetadata>;
   },
-) => {
+): Promise<Item> {
   return compendiumRequest<Item>(campaignId, "compendium.items.update", {
     item_id: itemId,
     ...payload,
   });
-};
-export const deleteItem = (campaignId: number, itemId: number) => {
+}
+
+export function deleteItem(campaignId: number, itemId: number): Promise<void> {
   return compendiumRequest<void>(campaignId, "compendium.items.delete", {
     item_id: itemId,
   });
-};
-export const getCharacters = (campaignId: number) =>
-  contextRequest<Character[]>(campaignId, "characters.list");
-export const getMyCharacters = (contextId: number) =>
-  getCharacters(contextId).then((characters) =>
-    characters.filter((character) => character.context_id === contextId),
-  );
-export const getMembers = (contextId: number) =>
-  contextRequest<CampaignMember[]>(contextId, "campaign.members.list");
-export const createCharacter = (
+}
+
+export function getCharacters(campaignId: number): Promise<Character[]> {
+  return contextRequest<Character[]>(campaignId, "characters.list");
+}
+
+export async function getMyCharacters(contextId: number): Promise<Character[]> {
+  const characters = await getCharacters(contextId);
+
+  return characters.filter((character) => character.context_id === contextId);
+}
+
+export function getMembers(contextId: number): Promise<CampaignMember[]> {
+  return contextRequest<CampaignMember[]>(contextId, "campaign.members.list");
+}
+
+export function createCharacter(
   campaignId: number,
   payload: {
     name: string;
@@ -479,60 +589,88 @@ export const createCharacter = (
     charisma: number;
     is_npc?: boolean;
   },
-) => contextRequest<Character>(campaignId, "characters.create", { fields: payload });
-export const archiveCharacter = (campaignId: number, characterId: number) =>
-  contextRequest<Character>(campaignId, "characters.archive", {
+): Promise<Character> {
+  return contextRequest<Character>(campaignId, "characters.create", {
+    fields: payload,
+  });
+}
+
+export function archiveCharacter(
+  campaignId: number,
+  characterId: number,
+): Promise<Character> {
+  return contextRequest<Character>(campaignId, "characters.archive", {
     character_id: characterId,
   });
+}
+export type CahFieldChange = {
+  field: string;
+  before: unknown;
+  after: unknown;
+  changed: boolean;
+  enabled?: boolean;
+};
+
+export type CahCollectionChange = {
+  collection: string;
+  before_count: number;
+  after_count: number;
+  names: string[];
+  remaining_count: number;
+  enabled?: boolean;
+};
+
+export type CahInventoryLine = {
+  line_id: string;
+  name: string;
+  kind: string;
+  description: string;
+  quantity: number;
+  equipped: boolean;
+  matched_item_id: number | null;
+  suggested_item_id: number | null;
+  action: "add" | "leave";
+};
+
+export type CahInventorySelection = {
+  line_id: string;
+  action: "add" | "leave";
+  quantity: number;
+  item_id?: number;
+};
+
+export type CahUpload = {
+  upload_id: string;
+  upload_url: string;
+};
+
 export type CahPreview = {
   token: string;
-  field_changes: Array<{
-    field: string;
-    before: unknown;
-    after: unknown;
-    changed: boolean;
-    enabled?: boolean;
-  }>;
-  collection_changes: Array<{
-    collection: string;
-    before_count: number;
-    after_count: number;
-    names: string[];
-    remaining_count: number;
-    enabled?: boolean;
-  }>;
-  inventory: Array<{
-    line_id: string;
-    name: string;
-    kind: string;
-    description: string;
-    quantity: number;
-    equipped: boolean;
-    matched_item_id: number | null;
-    suggested_item_id: number | null;
-    action: "add" | "leave";
-  }>;
+  field_changes: CahFieldChange[];
+  collection_changes: CahCollectionChange[];
+  inventory: CahInventoryLine[];
   warnings: string[];
   calculated_before: Record<string, Calculation | Record<string, Calculation>> | null;
   calculated_after: Record<string, Calculation | Record<string, Calculation>> | null;
 };
-export const previewCahImport = (
+export function previewCahImport(
   contextId: number,
   characterId: number,
   file: File,
-) => {
+): Promise<CahPreview> {
   return previewCahImportOverSocket(contextId, characterId, file);
-};
+}
 
 async function previewCahImportOverSocket(
   contextId: number,
   characterId: number,
   file: File,
 ): Promise<CahPreview> {
-  const upload = await contextRequest<{
-    upload_id: string;
-    upload_url: string;
-  }>(contextId, "characters.imports.cah.begin", { character_id: characterId });
+  const upload = await contextRequest<CahUpload>(
+    contextId,
+    "characters.imports.cah.begin",
+    { character_id: characterId },
+  );
   const body = new FormData();
   body.append("file", file);
   await request<void>(upload.upload_url, { method: "POST", body });
@@ -542,46 +680,45 @@ async function previewCahImportOverSocket(
   });
 }
 
-export const commitCahImport = (
+export async function commitCahImport(
   contextId: number,
   token: string,
   characterId?: number,
-  inventory: Array<{
-    line_id: string;
-    action: "add" | "leave";
-    quantity: number;
-    item_id?: number;
-  }> = [],
+  inventory: CahInventorySelection[] = [],
   fields: Record<string, unknown> = {},
   excludedFields: string[] = [],
   collections: Record<string, boolean> = {},
-) => {
-  return ensureCampaignRealtime(contextId).then(() =>
-    campaignImportRequest<Character>("characters.imports.cah.commit", {
-      token,
-      character_id: characterId,
-      inventory,
-      fields,
-      excluded_fields: excludedFields,
-      collections,
-    }),
-  );
-};
-export const cancelCahImport = (contextId: number, token: string) =>
-  contextRequest<void>(contextId, "characters.imports.cah.cancel", { token });
-export const updateCharacter = (
+): Promise<Character> {
+  await ensureCampaignRealtime(contextId);
+
+  return campaignImportRequest<Character>("characters.imports.cah.commit", {
+    token,
+    character_id: characterId,
+    inventory,
+    fields,
+    excluded_fields: excludedFields,
+    collections,
+  });
+}
+
+export function cancelCahImport(contextId: number, token: string): Promise<void> {
+  return contextRequest<void>(contextId, "characters.imports.cah.cancel", { token });
+}
+
+export function updateCharacter(
   campaignId: number,
   characterId: number,
   payload: Record<string, unknown>,
-) => {
+): Promise<Character> {
   const { class: characterClass, ...fields } = payload as {
     class?: string;
   } & Record<string, unknown>;
+
   return contextRequest<Character>(campaignId, "characters.update", {
     character_id: characterId,
     fields: { ...fields, character_class: characterClass },
   });
-};
+}
 export type InventoryTransactionInput = {
   from_character_id: number | null;
   to_character_id: number | null;
@@ -602,53 +739,84 @@ export type MoneyExchangeInput = {
   description?: string;
 };
 
-export const createInventoryTransaction = (
+export function createInventoryTransaction(
   campaignId: number,
   payload: InventoryTransactionInput,
-) =>
-  contextRequest<LedgerTransaction>(
+): Promise<LedgerTransaction> {
+  return contextRequest<LedgerTransaction>(
     campaignId,
     "inventory.transactions.create",
     payload,
   );
-export const createMoneyTransfer = (campaignId: number, payload: MoneyTransferInput) =>
-  contextRequest<LedgerTransaction>(campaignId, "money.transfers.create", payload);
-export const createMoneyExchange = (campaignId: number, payload: MoneyExchangeInput) =>
-  contextRequest<LedgerTransaction>(campaignId, "money.exchanges.create", payload);
-export const createSharedXpAward = (
+}
+
+export function createMoneyTransfer(
+  campaignId: number,
+  payload: MoneyTransferInput,
+): Promise<LedgerTransaction> {
+  return contextRequest<LedgerTransaction>(
+    campaignId,
+    "money.transfers.create",
+    payload,
+  );
+}
+
+export function createMoneyExchange(
+  campaignId: number,
+  payload: MoneyExchangeInput,
+): Promise<LedgerTransaction> {
+  return contextRequest<LedgerTransaction>(
+    campaignId,
+    "money.exchanges.create",
+    payload,
+  );
+}
+
+export function createSharedXpAward(
   campaignId: number,
   payload: { amount: number; description?: string },
-) =>
-  contextRequest<LedgerTransaction>(
+): Promise<LedgerTransaction> {
+  return contextRequest<LedgerTransaction>(
     campaignId,
     "experience.shared_awards.create",
     payload,
   );
-export const getTransactions = (
+}
+
+export function getTransactions(
   campaignId: number,
   ledger = "all",
   page = 1,
   characterId?: number,
-) =>
-  contextRequest<{
+): Promise<{
+  count: number;
+  page: number;
+  page_size: number;
+  results: LedgerTransaction[];
+}> {
+  const payload = {
+    ledger,
+    page,
+    ...(characterId ? { character_id: characterId } : {}),
+  };
+
+  return contextRequest<{
     count: number;
     page: number;
     page_size: number;
     results: LedgerTransaction[];
-  }>(campaignId, "transactions.list", {
-    ledger,
-    page,
-    ...(characterId ? { character_id: characterId } : {}),
-  });
-export const reverseTransaction = (
+  }>(campaignId, "transactions.list", payload);
+}
+
+export function reverseTransaction(
   campaignId: number,
   transaction: LedgerTransaction,
-) => {
+): Promise<unknown> {
   return contextRequest(campaignId, "transactions.reverse", {
     ledger: transaction.ledger,
     transaction_id: transaction.id,
   });
-};
+}
 
 export type CampaignInvitation = {
   id: number;
@@ -660,18 +828,36 @@ export type CampaignInvitation = {
   link?: string;
 };
 
-export const getInvitations = (contextId: number) =>
-  contextRequest<CampaignInvitation[]>(contextId, "campaign.invites.list");
-export const createInvitation = (contextId: number, email = "") =>
-  contextRequest<CampaignInvitation>(contextId, "campaign.invites.create", { email });
-export const resendInvitation = (contextId: number, invitationId: number) =>
-  contextRequest<CampaignInvitation>(contextId, "campaign.invites.resend", {
+export function getInvitations(contextId: number): Promise<CampaignInvitation[]> {
+  return contextRequest<CampaignInvitation[]>(contextId, "campaign.invites.list");
+}
+
+export function createInvitation(
+  contextId: number,
+  email = "",
+): Promise<CampaignInvitation> {
+  return contextRequest<CampaignInvitation>(contextId, "campaign.invites.create", {
+    email,
+  });
+}
+
+export function resendInvitation(
+  contextId: number,
+  invitationId: number,
+): Promise<CampaignInvitation> {
+  return contextRequest<CampaignInvitation>(contextId, "campaign.invites.resend", {
     invitation_id: invitationId,
   });
-export const revokeInvitation = (contextId: number, invitationId: number) =>
-  contextRequest<void>(contextId, "campaign.invites.revoke", {
+}
+
+export function revokeInvitation(
+  contextId: number,
+  invitationId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.invites.revoke", {
     invitation_id: invitationId,
   });
+}
 
 export type InviteDetails = {
   campaign_name: string;
@@ -679,24 +865,39 @@ export type InviteDetails = {
   authenticated: boolean;
   username: string | null;
 };
-export const inspectInvite = (token: string) =>
-  inviteRequest<InviteDetails>(token, "invite.inspect");
-export const acceptInvite = (token: string) =>
-  inviteRequest<{ context_id: number; character_id: number }>(token, "invite.accept");
-export const registerAndAcceptInvite = (
+export function inspectInvite(token: string): Promise<InviteDetails> {
+  return inviteRequest<InviteDetails>(token, "invite.inspect");
+}
+
+export function acceptInvite(
+  token: string,
+): Promise<{ context_id: number; character_id: number }> {
+  return inviteRequest<{ context_id: number; character_id: number }>(
+    token,
+    "invite.accept",
+  );
+}
+
+export function registerAndAcceptInvite(
   token: string,
   payload: { username: string; email: string; password: string },
-) =>
-  inviteRequest<{
+): Promise<{
+  context_id: number;
+  character_id: number;
+  username: string;
+}> {
+  return inviteRequest<{
     context_id: number;
     character_id: number;
     username: string;
   }>(token, "invite.register_and_accept", payload);
+}
 
-export const approveCampaignLevel = (contextId: number) =>
-  contextRequest(contextId, "campaign.level.approve");
+export function approveCampaignLevel(contextId: number): Promise<unknown> {
+  return contextRequest(contextId, "campaign.level.approve");
+}
 
-export const postHealth = (
+export function postHealth(
   contextId: number,
   payload: {
     character_id: number;
@@ -707,59 +908,71 @@ export const postHealth = (
     temporary_hp?: number;
     description?: string;
   },
-) => contextRequest<LedgerTransaction>(contextId, "characters.health.post", payload);
+): Promise<LedgerTransaction> {
+  return contextRequest<LedgerTransaction>(
+    contextId,
+    "characters.health.post",
+    payload,
+  );
+}
 
-export const changeCharacterSheetRecord = (
+export function changeCharacterSheetRecord(
   contextId: number,
   characterId: number,
   resource: "notes" | "features" | "spells" | "loadout" | "companions" | "effects",
   operation: "create" | "update" | "delete",
   fields: Record<string, unknown> = {},
   recordId?: number,
-) =>
-  contextRequest<Record<string, unknown> | null>(
+): Promise<Record<string, unknown> | null> {
+  const payload = {
+    character_id: characterId,
+    fields,
+    ...(recordId === undefined ? {} : { record_id: recordId }),
+  };
+
+  return contextRequest<Record<string, unknown> | null>(
     contextId,
     `characters.${resource}.${operation}`,
-    {
-      character_id: characterId,
-      fields,
-      ...(recordId === undefined ? {} : { record_id: recordId }),
-    },
+    payload,
   );
+}
 
-export const castCharacterSpell = (
+export function castCharacterSpell(
   contextId: number,
   characterId: number,
   spellId: number,
   slot?: string,
-) =>
-  contextRequest<Character>(contextId, "characters.spells.cast", {
+): Promise<Character> {
+  return contextRequest<Character>(contextId, "characters.spells.cast", {
     character_id: characterId,
     spell_id: spellId,
     ...(slot === undefined ? {} : { slot }),
   });
+}
 
-export const restCharacter = (
+export function restCharacter(
   contextId: number,
   characterId: number,
   kind: "short" | "long",
   currentHp?: number,
-) =>
-  contextRequest<Character>(contextId, "characters.rest", {
+): Promise<Character> {
+  return contextRequest<Character>(contextId, "characters.rest", {
     character_id: characterId,
     kind,
     ...(currentHp === undefined ? {} : { current_hp: currentHp }),
   });
+}
 
-export const setCharacterInspiration = (
+export function setCharacterInspiration(
   contextId: number,
   characterId: number,
   available: boolean,
-) =>
-  contextRequest<Character>(contextId, "characters.inspiration.set", {
+): Promise<Character> {
+  return contextRequest<Character>(contextId, "characters.inspiration.set", {
     character_id: characterId,
     available,
   });
+}
 
 export type BuilderEntry = {
   id: number;
@@ -779,31 +992,47 @@ export type BuilderDefinition = {
   background: BuilderEntry[];
   skills: string[];
 };
-export const getBuilderDefinition = (contextId: number) =>
-  contextRequest<BuilderDefinition>(contextId, "characters.builder.definition");
-export const getBuilderEntry = (contextId: number, entryId: number) =>
-  contextRequest<BuilderEntry & { kind: "race" | "class" | "background" }>(
+export function getBuilderDefinition(contextId: number): Promise<BuilderDefinition> {
+  return contextRequest<BuilderDefinition>(contextId, "characters.builder.definition");
+}
+
+export function getBuilderEntry(
+  contextId: number,
+  entryId: number,
+): Promise<BuilderEntry & { kind: "race" | "class" | "background" }> {
+  return contextRequest<BuilderEntry & { kind: "race" | "class" | "background" }>(
     contextId,
     "characters.builder.entry.get",
     { entry_id: entryId },
   );
-export const getCharacterBuilder = (contextId: number, characterId: number) =>
-  contextRequest<Record<string, unknown>>(contextId, "characters.builder.get", {
+}
+
+export function getCharacterBuilder(
+  contextId: number,
+  characterId: number,
+): Promise<Record<string, unknown>> {
+  return contextRequest<Record<string, unknown>>(contextId, "characters.builder.get", {
     character_id: characterId,
   });
-export const saveCharacterBuilder = (
+}
+export function saveCharacterBuilder(
   contextId: number,
   characterId: number,
   payload: Record<string, unknown>,
-) =>
-  contextRequest<Character>(contextId, "characters.builder.save", {
+): Promise<Character> {
+  return contextRequest<Character>(contextId, "characters.builder.save", {
     character_id: characterId,
     ...payload,
   });
-export const completeCharacterBuilder = (contextId: number, characterId: number) =>
-  contextRequest<Character>(contextId, "characters.builder.complete", {
+}
+export function completeCharacterBuilder(
+  contextId: number,
+  characterId: number,
+): Promise<Character> {
+  return contextRequest<Character>(contextId, "characters.builder.complete", {
     character_id: characterId,
   });
+}
 
 export type LevelUpDefinition = {
   character: Character;
@@ -813,51 +1042,74 @@ export type LevelUpDefinition = {
     Pick<BuilderEntry, "id" | "name" | "source" | "source_book" | "identifier">
   >;
 };
+export type LevelUpSubclass = {
+  identifier: string;
+  name: string;
+  source: string;
+  level: number;
+};
+
+export type LevelUpClass = {
+  id: number;
+  name: string;
+  source: string;
+  source_book: string;
+  class_level: number;
+  hit_die: number;
+  average_hp: number;
+  subclass_required: boolean;
+  subclasses: LevelUpSubclass[];
+};
+
+export type LevelUpGain = {
+  name: string;
+  identifier: string;
+  description: string;
+};
+
+export type LevelUpChoiceOption = LevelUpGain;
+
+export type LevelUpChoice = {
+  identifier: string;
+  name: string;
+  amount: number;
+  options: LevelUpChoiceOption[];
+};
+
 export type LevelUpRules = {
-  class: {
-    id: number;
-    name: string;
-    source: string;
-    source_book: string;
-    class_level: number;
-    hit_die: number;
-    average_hp: number;
-    subclass_required: boolean;
-    subclasses: Array<{
-      identifier: string;
-      name: string;
-      source: string;
-      level: number;
-    }>;
-  };
-  gains: Array<{ name: string; identifier: string; description: string }>;
+  class: LevelUpClass;
+  gains: LevelUpGain[];
   ability_score_improvement: boolean;
-  choices: Array<{
-    identifier: string;
-    name: string;
-    amount: number;
-    options: Array<{ name: string; identifier: string; description: string }>;
-  }>;
+  choices: LevelUpChoice[];
 };
 export type LevelUpPreview = {
   rules: LevelUpRules;
   before: Character["sheet"];
   after: Character["sheet"];
 };
-export const getLevelUpDefinition = (contextId: number, characterId: number) =>
-  contextRequest<LevelUpDefinition>(contextId, "characters.level_up.definition", {
-    character_id: characterId,
-  });
-export const getLevelUpClass = (
+export function getLevelUpDefinition(
+  contextId: number,
+  characterId: number,
+): Promise<LevelUpDefinition> {
+  return contextRequest<LevelUpDefinition>(
+    contextId,
+    "characters.level_up.definition",
+    {
+      character_id: characterId,
+    },
+  );
+}
+export function getLevelUpClass(
   contextId: number,
   characterId: number,
   classEntryId: number,
-) =>
-  contextRequest<LevelUpRules>(contextId, "characters.level_up.class.get", {
+): Promise<LevelUpRules> {
+  return contextRequest<LevelUpRules>(contextId, "characters.level_up.class.get", {
     character_id: characterId,
     class_entry_id: classEntryId,
   });
-export const previewLevelUp = (
+}
+export function previewLevelUp(
   contextId: number,
   characterId: number,
   payload: {
@@ -865,28 +1117,35 @@ export const previewLevelUp = (
     hp_increase?: number;
     ability_adjustments?: Record<string, number>;
   },
-) =>
-  contextRequest<LevelUpPreview>(contextId, "characters.level_up.preview", {
+): Promise<LevelUpPreview> {
+  return contextRequest<LevelUpPreview>(contextId, "characters.level_up.preview", {
     character_id: characterId,
     ...payload,
   });
+}
 export type LevelUpFeat = {
   id: number;
   name: string;
   source: string;
   source_book: string;
 };
-export const getLevelUpFeats = (contextId: number, characterId: number, query = "") =>
-  contextRequest<LevelUpFeat[]>(contextId, "characters.level_up.feats", {
+export function getLevelUpFeats(
+  contextId: number,
+  characterId: number,
+  query = "",
+): Promise<LevelUpFeat[]> {
+  return contextRequest<LevelUpFeat[]>(contextId, "characters.level_up.feats", {
     character_id: characterId,
     query,
   });
-export const completeLevelUp = (
+}
+export function completeLevelUp(
   contextId: number,
   characterId: number,
   payload: Record<string, unknown>,
-) =>
-  contextRequest<Character>(contextId, "characters.level_up.complete", {
+): Promise<Character> {
+  return contextRequest<Character>(contextId, "characters.level_up.complete", {
     character_id: characterId,
     ...payload,
   });
+}

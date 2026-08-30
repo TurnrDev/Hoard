@@ -17,6 +17,7 @@ import {
   type Item,
 } from "../api";
 import { useCampaignRefresh } from "../realtime";
+import { createSnackbarDismissHandler } from "../dismissibleMessage";
 const route = useRoute();
 const router = useRouter();
 const contextId = Number(route.params.id);
@@ -25,6 +26,8 @@ const characters = ref<Character[]>([]);
 const items = ref<Item[]>([]);
 const error = ref("");
 const notice = ref("");
+const clearErrorWhenClosed = createSnackbarDismissHandler(error);
+const clearNoticeWhenClosed = createSnackbarDismissHandler(notice);
 const activePcCount = computed(
   () =>
     characters.value.filter(
@@ -55,6 +58,14 @@ async function load(): Promise<void> {
 async function completed(message: string): Promise<void> {
   notice.value = message;
   await load();
+}
+
+function updateCalendar(calendar: Campaign["calendar"]): void {
+  if (!campaign.value) {
+    return;
+  }
+
+  campaign.value = { ...campaign.value, calendar };
 }
 
 async function approveLevel(): Promise<void> {
@@ -95,14 +106,14 @@ useCampaignRefresh(load);
     <v-snackbar
       :model-value="Boolean(error)"
       color="error"
-      @update:model-value="(visible) => !visible && (error = '')"
+      @update:model-value="clearErrorWhenClosed"
     >
       {{ error }}
     </v-snackbar>
     <v-snackbar
       :model-value="Boolean(notice)"
       color="success"
-      @update:model-value="(visible) => !visible && (notice = '')"
+      @update:model-value="clearNoticeWhenClosed"
     >
       {{ notice }}
     </v-snackbar>
@@ -146,7 +157,7 @@ useCampaignRefresh(load);
         <GmCalendarCard
           :context-id="contextId"
           :calendar="campaign.calendar"
-          @changed="(calendar) => (campaign = { ...campaign!, calendar })"
+          @changed="updateCalendar"
         />
       </v-col>
       <v-col

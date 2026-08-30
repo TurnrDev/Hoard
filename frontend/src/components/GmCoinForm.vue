@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { createMoneyTransfer, getCharacters, type Character } from "../api";
+import { createSnackbarDismissHandler } from "../dismissibleMessage";
 import CoinAmountPicker from "./CoinAmountPicker.vue";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 const props = defineProps<{ contextId: number }>();
@@ -10,6 +11,7 @@ const action = ref<"give" | "take">("give");
 const amounts = ref<Record<string, number>>({ pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 });
 const description = ref("");
 const error = ref("");
+const clearErrorWhenClosed = createSnackbarDismissHandler(error);
 const characters = ref<Character[]>([]);
 const selectedCharacter = computed(() =>
   characters.value.find((character) => character.id === characterId.value),
@@ -99,7 +101,7 @@ onMounted(async () => {
       <v-snackbar
         :model-value="Boolean(error)"
         color="error"
-        @update:model-value="(visible) => !visible && (error = '')"
+        @update:model-value="clearErrorWhenClosed"
       >
         {{ error }}
       </v-snackbar>

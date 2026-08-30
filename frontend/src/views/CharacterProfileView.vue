@@ -391,6 +391,14 @@ function closeAddItemDialog(): void {
   grantQuantity.value = 1;
 }
 
+function closeAddItemDialogWhenClosed(open: boolean): void {
+  if (open) {
+    return;
+  }
+
+  closeAddItemDialog();
+}
+
 function closeMoneyDialog(): void {
   moneyDialog.value = false;
   moneyAction.value = "spend";
@@ -400,6 +408,22 @@ function closeMoneyDialog(): void {
   moneyAmounts.value = { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 };
   moneyDestination.value = undefined;
   moneyDescription.value = "";
+}
+
+function closeMoneyDialogWhenClosed(open: boolean): void {
+  if (open) {
+    return;
+  }
+
+  closeMoneyDialog();
+}
+
+function closeItemActionWhenClosed(open: boolean): void {
+  if (open) {
+    return;
+  }
+
+  closeItemAction();
 }
 
 async function submitItemAction(): Promise<void> {
@@ -1556,7 +1580,7 @@ useCampaignRefresh(load);
     <v-dialog
       v-model="addItemOpen"
       max-width="560"
-      @update:model-value="(open) => !open && closeAddItemDialog()"
+      @update:model-value="closeAddItemDialogWhenClosed"
     >
       <v-card title="Add item">
         <v-card-text>
@@ -1589,7 +1613,7 @@ useCampaignRefresh(load);
     <v-dialog
       v-model="moneyDialog"
       max-width="620"
-      @update:model-value="(open) => !open && closeMoneyDialog()"
+      @update:model-value="closeMoneyDialogWhenClosed"
     >
       <v-card
         :title="
@@ -1798,7 +1822,7 @@ useCampaignRefresh(load);
     <v-dialog
       :model-value="Boolean(itemAction)"
       max-width="560"
-      @update:model-value="(value) => !value && closeItemAction()"
+      @update:model-value="closeItemActionWhenClosed"
     >
       <v-card
         :title="

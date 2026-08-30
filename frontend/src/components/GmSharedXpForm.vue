@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { createSharedXpAward, type Character } from "../api";
+import { createSnackbarDismissHandler } from "../dismissibleMessage";
 
 const props = defineProps<{
   contextId: number;
@@ -12,6 +13,7 @@ const emit = defineEmits<{ completed: [message: string] }>();
 const amount = ref(10);
 const description = ref("");
 const error = ref("");
+const clearErrorWhenClosed = createSnackbarDismissHandler(error);
 const recipients = computed(
   () =>
     props.characters.filter((item) => item.is_active && item.is_player_character)
@@ -91,7 +93,7 @@ async function submit() {
       <v-snackbar
         :model-value="Boolean(error)"
         color="error"
-        @update:model-value="(visible) => !visible && (error = '')"
+        @update:model-value="clearErrorWhenClosed"
       >
         {{ error }}
       </v-snackbar>
