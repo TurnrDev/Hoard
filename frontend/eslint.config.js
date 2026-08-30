@@ -56,7 +56,6 @@ export default [
           },
         },
       ],
-      "vue/html-indent": ["error", 2],
       "vue/multiline-html-element-content-newline": "error",
       "vue/require-default-prop": "off",
       "vue/block-tag-newline": [
