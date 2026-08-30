@@ -50,6 +50,8 @@ from .payloads import (
     CampaignMemberData,
     CampaignMembershipChangedEvent,
     CharacterHealthChangedEvent,
+    CharacterLifecycleData,
+    CharacterLifecycleEvent,
 )
 from .protocol import (
     CommandAcknowledgementEnvelope,
@@ -69,6 +71,7 @@ from .realtime import (
 )
 from .services import (
     CharacterHealthService,
+    CharacterLifecycleService,
     accept_invitation,
     approve_campaign_level,
     create_invitation,
@@ -631,6 +634,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.invites.revoke",
             "campaign.level.approve",
             "characters.health.post",
+            "characters.create",
+            "characters.update",
+            "characters.archive",
         }:
             response = CommandAcknowledgementEnvelope(
                 request_id=envelope.request_id
@@ -965,37 +971,26 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     @database_sync_to_async
     def _character_create(self, content: dict[str, object]) -> dict[str, object]:
         from .api import _character_data, _gm
-        from .services.health import create_health_baseline
 
         context = self._context()
         _gm(context)
         fields = content.get("fields")
         if not isinstance(fields, dict) or not fields.get("is_npc"):
             raise ValidationError("Only NPC creation is available from this command.")
-        allowed = {
-            "name",
-            "race",
-            "character_class",
-            "strength",
-            "dexterity",
-            "constitution",
-            "intelligence",
-            "wisdom",
-            "charisma",
-        }
-        values = {key: value for key, value in fields.items() if key in allowed}
-        character = Character.objects.create(
-            campaign=context.campaign, is_active=True, is_build_complete=True, **values
+        character = CharacterLifecycleService().create_npc(context, fields)
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterLifecycleEvent(
+                type="character.created",
+                character=CharacterLifecycleData(
+                    id=character.pk,
+                    name=character.name,
+                    is_active=character.is_active,
+                    is_archived=character.is_archived,
+                ),
+                request_id=str(content["request_id"]),
+            ),
         )
-        create_health_baseline(character, created_by=context)
-        record_character_history(
-            character,
-            reason=CharacterHistory.Reason.CREATE,
-            before=None,
-            created_by=context,
-            description="Created NPC",
-        )
-        notify_campaign_changed(context.campaign_id)
         return _character_data(character)
 
     @database_sync_to_async
@@ -1006,35 +1001,23 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         character = _editable_sheet_character(
             context, self._integer(content, "character_id")
         )
-        before = character_snapshot(character)
         fields = content.get("fields")
         if not isinstance(fields, dict):
             raise ValueError("fields must be an object.")
-        blocked = {"current_hp", "temporary_hp", "campaign", "context", "level"}
-        allowed = set(before) | {
-            "background_entry_id",
-            "race_entry_id",
-            "subrace_identifier",
-            "npc_level",
-            "spell_slot_current",
-            "proficiency_bonus_adjustment",
-        }
-        unknown = set(fields) - allowed
-        if unknown or set(fields) & blocked:
-            raise ValueError(
-                f"Unsupported character fields: {', '.join(sorted(unknown | (set(fields) & blocked)))}"
-            )
-        for key, value in fields.items():
-            setattr(character, key, value)
-        character.full_clean()
-        character.save()
-        record_character_history(
-            character,
-            reason=CharacterHistory.Reason.EDIT,
-            before=before,
-            created_by=context,
+        character = CharacterLifecycleService().update(context, character, fields)
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterLifecycleEvent(
+                type="character.updated",
+                character=CharacterLifecycleData(
+                    id=character.pk,
+                    name=character.name,
+                    is_active=character.is_active,
+                    is_archived=character.is_archived,
+                ),
+                request_id=str(content["request_id"]),
+            ),
         )
-        notify_campaign_changed(context.campaign_id)
         return _character_data(character)
 
     @database_sync_to_async
@@ -1045,19 +1028,20 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         character = _editable_sheet_character(
             context, self._integer(content, "character_id")
         )
-        before = character_snapshot(character)
-        character.is_archived = True
-        character.is_active = False
-        character.archived_at = timezone.now()
-        character.save(update_fields=("is_archived", "is_active", "archived_at"))
-        record_character_history(
-            character,
-            reason=CharacterHistory.Reason.EDIT,
-            before=before,
-            created_by=context,
-            description="Archived character",
+        character = CharacterLifecycleService().archive(context, character)
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterLifecycleEvent(
+                type="character.archived",
+                character=CharacterLifecycleData(
+                    id=character.pk,
+                    name=character.name,
+                    is_active=character.is_active,
+                    is_archived=character.is_archived,
+                ),
+                request_id=str(content["request_id"]),
+            ),
         )
-        notify_campaign_changed(context.campaign_id)
         return _character_data(character)
 
     @database_sync_to_async

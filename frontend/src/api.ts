@@ -589,8 +589,8 @@ export function createCharacter(
     charisma: number;
     is_npc?: boolean;
   },
-): Promise<Character> {
-  return contextRequest<Character>(campaignId, "characters.create", {
+): Promise<void> {
+  return contextRequest<void>(campaignId, "characters.create", {
     fields: payload,
   });
 }
@@ -598,8 +598,8 @@ export function createCharacter(
 export function archiveCharacter(
   campaignId: number,
   characterId: number,
-): Promise<Character> {
-  return contextRequest<Character>(campaignId, "characters.archive", {
+): Promise<void> {
+  return contextRequest<void>(campaignId, "characters.archive", {
     character_id: characterId,
   });
 }
@@ -709,12 +709,12 @@ export function updateCharacter(
   campaignId: number,
   characterId: number,
   payload: Record<string, unknown>,
-): Promise<Character> {
+): Promise<void> {
   const { class: characterClass, ...fields } = payload as {
     class?: string;
   } & Record<string, unknown>;
 
-  return contextRequest<Character>(campaignId, "characters.update", {
+  return contextRequest<void>(campaignId, "characters.update", {
     character_id: characterId,
     fields: { ...fields, character_class: characterClass },
   });

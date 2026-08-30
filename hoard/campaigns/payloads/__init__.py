@@ -6,7 +6,15 @@ from .calendar import (
     CampaignCalendarData,
 )
 from .campaign import CampaignLevelChangedEvent, CampaignStateChangedEvent
-from .characters import CharacterHealthChangedEvent, CharacterHealthCommand
+from .characters import (
+    CharacterCreateCommand,
+    CharacterHealthChangedEvent,
+    CharacterHealthCommand,
+    CharacterIdentifierCommand,
+    CharacterLifecycleData,
+    CharacterLifecycleEvent,
+    CharacterUpdateCommand,
+)
 from .invitations import (
     CampaignInvitationChangedEvent,
     CampaignInvitationData,
@@ -29,6 +37,11 @@ __all__ = [
     "CampaignStateChangedEvent",
     "CharacterHealthChangedEvent",
     "CharacterHealthCommand",
+    "CharacterCreateCommand",
+    "CharacterIdentifierCommand",
+    "CharacterLifecycleData",
+    "CharacterLifecycleEvent",
+    "CharacterUpdateCommand",
     "InvitationCreateCommand",
     "InvitationIdentifierCommand",
     "MemberDeactivationCommand",

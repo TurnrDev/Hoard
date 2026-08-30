@@ -184,7 +184,10 @@ def operation_definitions() -> dict[str, OperationDefinition]:
     from .payloads import (
         CalendarAdjustmentCommand,
         CampaignCalendarData,
+        CharacterCreateCommand,
         CharacterHealthCommand,
+        CharacterIdentifierCommand,
+        CharacterUpdateCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
         MemberDeactivationCommand,
@@ -221,6 +224,21 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         name="characters.health.post",
         kind=OperationKind.COMMAND,
         payload_model=CharacterHealthCommand,
+    )
+    definitions["characters.create"] = OperationDefinition(
+        name="characters.create",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterCreateCommand,
+    )
+    definitions["characters.update"] = OperationDefinition(
+        name="characters.update",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterUpdateCommand,
+    )
+    definitions["characters.archive"] = OperationDefinition(
+        name="characters.archive",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterIdentifierCommand,
     )
     definitions["campaign.invites.create"] = OperationDefinition(
         name="campaign.invites.create",

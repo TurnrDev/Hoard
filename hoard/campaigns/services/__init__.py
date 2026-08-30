@@ -9,6 +9,7 @@ from .actions import (
     transfer_item,
 )
 from .calendar import CampaignCalendarService
+from .characters import CharacterLifecycleService
 from .experience import (
     activate_character,
     award_shared_experience,
@@ -56,4 +57,5 @@ __all__ = [
     "approve_campaign_level",
     "CampaignCalendarService",
     "CharacterHealthService",
+    "CharacterLifecycleService",
 ]
