@@ -245,6 +245,41 @@ Page-oriented queries should group data that naturally belongs to one render ope
 
 Do not add application-wide snapshot, versioning, replay, or event-gap infrastructure.
 
+#### Implementation status
+
+Slice 1 is in progress. The following foundation work is complete:
+
+* The request, result, acknowledgement, error, event, reconnection,
+  authorization, subscription, and payload-size protocol is documented above.
+* The frontend generates UUIDv7 request identifiers, correlates requests, tracks
+  pending commands, dispatches domain events, and refreshes active page data
+  after a WebSocket reconnect.
+* A Pydantic protocol envelope and operation registry exist. Payload contracts
+  are grouped by domain under `hoard.campaigns.payloads`.
+* Calendar, membership/invitation, campaign-level, character lifecycle, and
+  character-health commands have typed payloads and authoritative semantic
+  events. Their migrated acknowledgements contain only the request identifier.
+* Calendar and character lifecycle mutations are now handled by named domain
+  services, and focused consumer tests cover UUIDv7 envelopes and two-client
+  calendar event fan-out.
+
+The following work remains before Slice 1 is complete:
+
+* Replace `FlexiblePayload` and raw dictionary results for every remaining
+  registered operation with domain Pydantic request, result, and event models.
+* Move remaining application logic out of consumers and `api.py` helpers into
+  named, class-based domain services. REST handlers must become compatibility
+  callers of those services rather than parallel implementations.
+* Replace every remaining `campaign.state_changed` compatibility notification
+  with an authorised domain-specific event, including builder, level-up,
+  import, sheet, ledger, inventory, money, XP, and Compendium changes.
+* Convert remaining commands to correlation-only acknowledgements and migrate
+  their frontend callers to the shared event/re-query path.
+* Update the full campaign test suite to use UUIDv7 identifiers and the
+  `query.result`, `query.error`, `command.ack`, and `command.error` envelopes;
+  then add coverage for typed contracts, semantic event recipient scope,
+  originator/peer parity, frontend errors, and reconnect re-query behaviour.
+
 ### 2. Session, contexts, and invitations
 
 * Add WebSocket queries and commands for acting contexts, campaign selection, invitation inspection, acceptance, registration, and member lifecycle.
