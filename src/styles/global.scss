@@ -1,0 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  --hoard-display: "Cinzel", "Inter", serif;
+  --hoard-body: "Inter", system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--hoard-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.v-application {
+  font-family: var(--hoard-body);
+}
+
+/* restrained fantasy: display face for names/headings only */
+.font-display {
+  font-family: var(--hoard-display) !important;
+  letter-spacing: 0.02em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* hide scrollbar on horizontal trays but keep scroll */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* subtle uppercase micro-labels used throughout dense sheets */
+.micro-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  opacity: 0.6;
+}
