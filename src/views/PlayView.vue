@@ -278,13 +278,8 @@ function isActive(cond: Condition) {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 10px;
-}
-@media (min-width: 600px) {
-  .stat-grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
 }
 .stat {
   display: flex;
