@@ -125,6 +125,10 @@ function go(to: string) {
     </v-app-bar>
 
     <v-main>
+      <!-- Mobile party rail: Instagram-stories style, pinned under the app bar -->
+      <div v-if="!mdAndUp" class="mobile-rail">
+        <PartyRail orientation="stories" />
+      </div>
       <div class="page-scroll">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -229,6 +233,14 @@ function go(to: string) {
   font-size: 0.8rem;
   background: rgba(255, 255, 255, 0.04);
   opacity: 0.85;
+}
+.mobile-rail {
+  padding: 8px 12px 0;
+  background: rgb(var(--v-theme-background));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .page-scroll {
   height: 100%;
