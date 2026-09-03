@@ -3,6 +3,7 @@ import { computed } from "vue"
 import { useCampaign } from "@/stores/campaign"
 import HpRing from "@/components/HpRing.vue"
 import HpControls from "@/components/HpControls.vue"
+import DeathSaves from "@/components/DeathSaves.vue"
 import AbilityBlock from "@/components/AbilityBlock.vue"
 import { ABILITY_NAME, formatMod, modFor, xpProgress } from "@/lib/dnd"
 import type { Condition } from "@/types"
@@ -60,10 +61,15 @@ function isActive(cond: Condition) {
     </header>
 
     <div class="grid">
+      <!-- Death saves take over the signature slot when downed -->
+      <v-card v-if="c.hp <= 0" class="pa-6 hp-card hp-card--down" color="surface-bright">
+        <DeathSaves :character-id="c.id" />
+      </v-card>
+
       <!-- HP card, the signature element -->
-      <v-card class="pa-5 hp-card" color="surface-bright">
+      <v-card v-else class="pa-6 hp-card" color="surface-bright">
         <div class="hp-card__ring">
-          <HpRing :hp="c.hp" :max-hp="c.maxHp" :temp-hp="c.tempHp" :size="180" :stroke="14" />
+          <HpRing :hp="c.hp" :max-hp="c.maxHp" :temp-hp="c.tempHp" :size="220" :stroke="16" />
         </div>
         <HpControls :character-id="c.id" />
         <v-btn
@@ -71,7 +77,7 @@ function isActive(cond: Condition) {
           size="small"
           color="secondary"
           prepend-icon="mdi-sleep"
-          class="mt-3"
+          class="mt-4"
           block
           @click="store.longRest(c.id)"
         >
@@ -80,7 +86,7 @@ function isActive(cond: Condition) {
       </v-card>
 
       <!-- Combat stats -->
-      <v-card class="pa-4" color="surface">
+      <v-card class="pa-4 combat-card" color="surface">
         <div class="micro-label mb-3">Combat</div>
         <div class="stat-grid">
           <div v-for="s in combatStats" :key="s.label" class="stat">
@@ -109,7 +115,7 @@ function isActive(cond: Condition) {
       </v-card>
 
       <!-- Abilities -->
-      <v-card class="pa-4" color="surface">
+      <v-card class="pa-4 abilities-card" color="surface">
         <div class="micro-label mb-3">Ability Scores</div>
         <AbilityBlock :abilities="c.abilities" />
         <v-divider class="my-4" />
@@ -120,7 +126,7 @@ function isActive(cond: Condition) {
       </v-card>
 
       <!-- Conditions -->
-      <v-card class="pa-4" color="surface">
+      <v-card class="pa-4 conditions-card" color="surface">
         <div class="micro-label mb-3">Conditions</div>
         <div class="conditions">
           <v-chip
@@ -231,21 +237,27 @@ function isActive(cond: Condition) {
   gap: 16px;
 }
 .hp-card {
-  grid-column: span 4;
+  grid-column: span 5;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+}
+.hp-card--down {
+  align-items: stretch;
+  justify-content: flex-start;
+  outline: 1px solid rgba(var(--v-theme-error), 0.4);
 }
 .hp-card__ring {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
-.grid > .v-card:nth-child(2) {
-  grid-column: span 8;
-}
-.grid > .v-card:nth-child(3) {
+.combat-card {
   grid-column: span 7;
 }
-.grid > .v-card:nth-child(4) {
+.abilities-card {
+  grid-column: span 7;
+}
+.conditions-card {
   grid-column: span 5;
 }
 .slots-card {
@@ -254,9 +266,9 @@ function isActive(cond: Condition) {
 
 @media (max-width: 900px) {
   .hp-card,
-  .grid > .v-card:nth-child(2),
-  .grid > .v-card:nth-child(3),
-  .grid > .v-card:nth-child(4) {
+  .combat-card,
+  .abilities-card,
+  .conditions-card {
     grid-column: span 12;
   }
   .char-head__xp {

@@ -71,6 +71,25 @@ export const useCampaign = defineStore("campaign", {
       else c.conditions.push(cond)
     },
 
+    // --- Death saves ------------------------------------------------------
+    setDeathSave(id: string, kind: "successes" | "failures", count: number) {
+      const c = this.charById(id)
+      if (!c) return
+      c.deathSaves[kind] = Math.max(0, Math.min(3, count))
+    },
+    resetDeathSaves(id: string) {
+      const c = this.charById(id)
+      if (!c) return
+      c.deathSaves.successes = 0
+      c.deathSaves.failures = 0
+    },
+    stabilize(id: string) {
+      const c = this.charById(id)
+      if (!c) return
+      c.deathSaves.successes = 3
+      c.deathSaves.failures = 0
+    },
+
     // --- Spell slots ------------------------------------------------------
     useSlot(id: string, level: number) {
       const c = this.charById(id)

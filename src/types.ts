@@ -129,6 +129,7 @@ export interface Character {
   maxHp: number
   tempHp: number
   hitDice: string
+  deathSaves: { successes: number; failures: number }
 
   spellcaster: boolean
   spellAbility?: AbilityKey
