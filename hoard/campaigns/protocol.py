@@ -131,8 +131,10 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.invites.resend",
         "campaign.invites.revoke",
         "campaign.level.approve",
+        "campaign.presence.heartbeat",
         "characters.create",
         "characters.update",
+        "characters.portrait.remove",
         "characters.archive",
         "characters.builder.save",
         "characters.builder.complete",
@@ -234,6 +236,11 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         name="characters.update",
         kind=OperationKind.COMMAND,
         payload_model=CharacterUpdateCommand,
+    )
+    definitions["characters.portrait.remove"] = OperationDefinition(
+        name="characters.portrait.remove",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterIdentifierCommand,
     )
     definitions["characters.archive"] = OperationDefinition(
         name="characters.archive",

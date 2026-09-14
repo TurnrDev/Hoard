@@ -5,6 +5,14 @@ export type ActingContext = CampaignContext;
 const storageKey = "hoard:last-context";
 
 export function contextPath(context: ActingContext): string {
+  if (context.kind === "gm") {
+    return `/c/${context.id}/gm`;
+  }
+
+  if (context.character_id) {
+    return `/c/${context.id}/characters/${context.character_id}`;
+  }
+
   return `/c/${context.id}`;
 }
 

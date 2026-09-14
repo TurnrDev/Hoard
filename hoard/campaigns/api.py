@@ -673,6 +673,7 @@ def _character_data(character: Character) -> dict[str, object]:
         "id": character.pk,
         "context_id": character.context_id,
         "name": character.name,
+        "portrait_url": character.portrait.url if character.portrait else None,
         "is_player_character": character.is_player_character,
         "is_active": character.is_active,
         "is_archived": character.is_archived,

@@ -4,6 +4,7 @@ import { v7 as uuid7 } from "uuid";
 
 let socket: ReconnectingWebSocket | undefined;
 let campaignId: number | undefined;
+let presenceHeartbeatTimer: number | undefined;
 const SOCKET_CONNECT_TIMEOUT_MS = 5_000;
 const SOCKET_CONNECT_POLL_MS = 50;
 export const campaignRefreshRevision = ref(0);
@@ -116,6 +117,7 @@ function open(): void {
     reconnectionDelayGrowFactor: 1,
   });
   socket.onopen = () => {
+    startPresenceHeartbeat();
     reconnectListeners.forEach((listener) => listener());
   };
   socket.onmessage = (event) => {
@@ -156,8 +158,24 @@ function open(): void {
     }
   };
   socket.onclose = () => {
+    stopPresenceHeartbeat();
     rejectPendingRequests("The campaign connection closed.");
   };
+}
+
+function startPresenceHeartbeat(): void {
+  stopPresenceHeartbeat();
+  void campaignRequest<void>("campaign.presence.heartbeat").catch(() => undefined);
+  presenceHeartbeatTimer = window.setInterval(() => {
+    void campaignRequest<void>("campaign.presence.heartbeat").catch(() => undefined);
+  }, 25_000);
+}
+
+function stopPresenceHeartbeat(): void {
+  if (presenceHeartbeatTimer !== undefined) {
+    window.clearInterval(presenceHeartbeatTimer);
+    presenceHeartbeatTimer = undefined;
+  }
 }
 
 export function connectCampaignRealtime(id: number): void {
@@ -180,6 +198,7 @@ export async function ensureCampaignRealtime(
 
 export function disconnectCampaignRealtime(): void {
   campaignId = undefined;
+  stopPresenceHeartbeat();
   socket?.close();
   socket = undefined;
   rejectPendingRequests("The campaign connection closed.");
@@ -317,7 +336,34 @@ export function subscribeRepositoryImport(
 }
 
 export function subscribeCampaignChanges(listener: () => void): () => void {
-  return subscribeDomainEvents(() => listener());
+  return subscribeDomainEvents((event) => {
+    if (event.type !== "campaign.presence_changed") {
+      listener();
+    }
+  });
+}
+
+export function subscribeCampaignPresence(
+  listener: (event: {
+    context_id: number;
+    connected: boolean;
+    last_seen_at: string | null;
+  }) => void,
+): () => void {
+  return subscribeDomainEvents((event) => {
+    if (
+      event.type === "campaign.presence_changed" &&
+      typeof event.context_id === "number" &&
+      typeof event.connected === "boolean" &&
+      (typeof event.last_seen_at === "string" || event.last_seen_at === null)
+    ) {
+      listener({
+        context_id: event.context_id,
+        connected: event.connected,
+        last_seen_at: event.last_seen_at,
+      });
+    }
+  });
 }
 
 export function subscribeDomainEvents(

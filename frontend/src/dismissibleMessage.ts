@@ -3,7 +3,7 @@ import type { Ref } from "vue";
 /**
  * Creates a snackbar visibility handler that clears its message after dismissal.
  *
- * Vuetify emits `false` when the snackbar closes; retaining the message until
+ * The notification adapter emits `false` when the message closes; retaining the message until
  * then lets its close transition render the message correctly.
  */
 export function createSnackbarDismissHandler(

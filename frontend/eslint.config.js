@@ -45,6 +45,9 @@ export default [
       },
     },
     rules: {
+      // PrimeVue exports direct component names such as Button and Dialog.
+      // They are locally imported and intentionally not HTML elements.
+      "vue/no-reserved-component-names": "off",
       "vue/html-closing-bracket-newline": [
         "error",
         {

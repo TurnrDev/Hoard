@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { contextPath } from "./context";
 
 describe("context routes", () => {
-  it("uses one opaque context identifier without query arguments", () => {
+  it("uses the player's own profile as their play destination", () => {
     expect(
       contextPath({
         id: 12,
@@ -12,6 +12,6 @@ describe("context routes", () => {
         character_id: 4,
         character_name: "Ama",
       }),
-    ).toBe("/c/12");
+    ).toBe("/c/12/characters/4");
   });
 });

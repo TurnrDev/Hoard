@@ -49,6 +49,7 @@ from .payloads import (
     CampaignLevelChangedEvent,
     CampaignMemberData,
     CampaignMembershipChangedEvent,
+    CampaignPresenceChangedEvent,
     CharacterHealthChangedEvent,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
@@ -352,12 +353,28 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         self.request_slots = asyncio.Semaphore(8)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        await self.record_presence()
+        await self.publish_presence(True)
 
     async def disconnect(self, close_code: int) -> None:
         for task in tuple(getattr(self, "request_tasks", ())):
             task.cancel()
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        if hasattr(self, "context_id"):
+            await self.remove_presence()
+            await self.publish_presence(False)
+
+    async def publish_presence(self, connected: bool) -> None:
+        event = CampaignPresenceChangedEvent(
+            context_id=self.context_id,
+            connected=connected,
+            last_seen_at=timezone.now().isoformat() if connected else None,
+        )
+        await self.channel_layer.group_send(
+            self.group_name,
+            {"type": "domain.event", "event": event.model_dump(mode="json")},
+        )
 
     async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
         message_type = content.get("type")
@@ -393,10 +410,12 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.invites.revoke": self._invite_revoke,
             "campaign.level.status": self._level_status,
             "campaign.level.approve": self._level_approve,
+            "campaign.presence.heartbeat": self._presence_heartbeat,
             "characters.list": self._character_list,
             "characters.get": self._character_get,
             "characters.create": self._character_create,
             "characters.update": self._character_update,
+            "characters.portrait.remove": self._character_portrait_remove,
             "characters.archive": self._character_archive,
             "characters.builder.definition": self._builder_definition,
             "characters.builder.entry.get": self._builder_entry_get,
@@ -633,9 +652,11 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.members.deactivate",
             "campaign.invites.revoke",
             "campaign.level.approve",
+            "campaign.presence.heartbeat",
             "characters.health.post",
             "characters.create",
             "characters.update",
+            "characters.portrait.remove",
             "characters.archive",
         }:
             response = CommandAcknowledgementEnvelope(
@@ -693,6 +714,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
         context = self._context()
         campaign = context.campaign
+        connected_context_ids = self.connected_context_ids(campaign.pk)
         return {
             **_context_data(context),
             "id": campaign.pk,
@@ -708,6 +730,25 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 mode="json"
             ),
             "party_money": _party_money(campaign),
+            "members": [
+                {
+                    "id": candidate.pk,
+                    "username": candidate.user.get_username(),
+                    "first_name": candidate.user.first_name,
+                    "last_name": candidate.user.last_name,
+                    "is_game_master": candidate.kind == CampaignContext.Kind.GM,
+                    "is_active": candidate.is_active,
+                    "connected": candidate.pk in connected_context_ids,
+                    "last_seen_at": (
+                        candidate.last_seen_at.isoformat()
+                        if candidate.last_seen_at
+                        else None
+                    ),
+                }
+                for candidate in CampaignContext.objects.filter(
+                    campaign=campaign
+                ).select_related("user")
+            ],
             "characters": [
                 _character_data(value) for value in _visible_characters(context)
             ],
@@ -740,17 +781,41 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         )
 
     @database_sync_to_async
+    def _presence_heartbeat(self, content: dict[str, object]) -> None:
+        last_seen_at = timezone.now()
+        CampaignContext.objects.filter(pk=self.context_id).update(
+            last_seen_at=last_seen_at,
+        )
+        notify_campaign_event(
+            self.campaign_id,
+            CampaignPresenceChangedEvent(
+                context_id=self.context_id,
+                connected=True,
+                last_seen_at=last_seen_at.isoformat(),
+            ),
+        )
+
+    @database_sync_to_async
     def _member_list(self, content: dict[str, object]) -> list[dict[str, object]]:
         from .api import _gm
 
         context = self._context()
         _gm(context)
+        connected_context_ids = self.connected_context_ids(context.campaign_id)
         return [
             {
                 "id": candidate.pk,
                 "username": candidate.user.get_username(),
+                "first_name": candidate.user.first_name,
+                "last_name": candidate.user.last_name,
                 "is_game_master": candidate.kind == CampaignContext.Kind.GM,
                 "is_active": candidate.is_active,
+                "connected": candidate.pk in connected_context_ids,
+                "last_seen_at": (
+                    candidate.last_seen_at.isoformat()
+                    if candidate.last_seen_at
+                    else None
+                ),
             }
             for candidate in CampaignContext.objects.filter(
                 campaign=context.campaign
@@ -798,6 +863,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 member=CampaignMemberData(
                     id=candidate.pk,
                     username=candidate.user.get_username(),
+                    first_name=candidate.user.first_name,
+                    last_name=candidate.user.last_name,
                     is_game_master=candidate.kind == CampaignContext.Kind.GM,
                     is_active=candidate.is_active,
                 ),
@@ -1018,6 +1085,21 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 request_id=str(content["request_id"]),
             ),
         )
+        return _character_data(character)
+
+    @database_sync_to_async
+    def _character_portrait_remove(
+        self, content: dict[str, object]
+    ) -> dict[str, object]:
+        from .api import _character_data, _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        character.portrait.delete(save=True)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
         return _character_data(character)
 
     @database_sync_to_async
@@ -2438,6 +2520,27 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if context is None:
             raise PermissionError("No active campaign context.")
         return context
+
+    @database_sync_to_async
+    def record_presence(self) -> None:
+        CampaignContext.objects.filter(pk=self.context_id).update(
+            last_seen_at=timezone.now(),
+        )
+
+    @database_sync_to_async
+    def remove_presence(self) -> None:
+        CampaignContext.objects.filter(pk=self.context_id).update(last_seen_at=None)
+
+    @staticmethod
+    def connected_context_ids(campaign_id: int) -> set[int]:
+        cutoff = timezone.now() - timedelta(seconds=60)
+
+        return set(
+            CampaignContext.objects.filter(
+                campaign_id=campaign_id,
+                last_seen_at__gte=cutoff,
+            ).values_list("pk", flat=True)
+        )
 
     @staticmethod
     def _incomplete_level_ups(campaign) -> list[dict[str, object]]:

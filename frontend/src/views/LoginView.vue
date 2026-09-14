@@ -1,88 +1,108 @@
-<script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+<template>
+  <main class="container py-5">
+    <section
+      class="row justify-content-center"
+      aria-labelledby="sign-in-heading"
+    >
+      <div class="col-12 col-sm-10 col-md-8 col-lg-5">
+        <div class="border rounded-3 p-4 p-md-5">
+          <header class="mb-4">
+            <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
+              Welcome back
+            </p>
+            <h1
+              id="sign-in-heading"
+              class="display-6"
+            >
+              Hoard
+            </h1>
+            <p class="mb-0 text-body-secondary">Campaign ledger and table tools</p>
+          </header>
+          <Message
+            v-if="error"
+            severity="error"
+          >
+            {{ error }}
+          </Message>
+          <form
+            class="d-grid gap-3"
+            @submit.prevent="submit"
+          >
+            <label class="d-grid gap-2">
+              <span class="fw-semibold">Username</span>
+              <InputText
+                v-model="username"
+                autocomplete="username"
+                required
+                fluid
+              />
+            </label>
+            <label class="d-grid gap-2">
+              <span class="fw-semibold">Password</span>
+              <InputText
+                v-model="password"
+                type="password"
+                autocomplete="current-password"
+                required
+                fluid
+              />
+            </label>
+            <Button
+              type="submit"
+              :loading="loading"
+              :disabled="!csrfReady"
+              label="Sign in"
+            />
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+</template>
+
+<script lang="ts">
+import { defineComponent } from "vue";
+import Button from "primevue/button";
+import InputText from "primevue/inputtext";
+import Message from "primevue/message";
 import { initialiseCsrf, login } from "../api";
 
-const router = useRouter();
-const route = useRoute();
-const username = ref("");
-const password = ref("");
-const error = ref("");
-const loading = ref(false);
-const csrfReady = ref(false);
-
-onMounted(async () => {
-  try {
-    await initialiseCsrf();
-    csrfReady.value = true;
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to initialise sign-in.";
-  }
-});
-
-async function submit(): Promise<void> {
-  loading.value = true;
-  error.value = "";
-  try {
-    if (!csrfReady.value) {
+export default defineComponent({
+  components: { Button, InputText, Message },
+  data() {
+    return { username: "", password: "", error: "", loading: false, csrfReady: false };
+  },
+  async mounted(): Promise<void> {
+    try {
       await initialiseCsrf();
-      csrfReady.value = true;
+      this.csrfReady = true;
+    } catch (exception) {
+      this.error =
+        exception instanceof Error
+          ? exception.message
+          : "Unable to initialise sign-in.";
     }
-    await login(username.value, password.value);
-    await router.push(typeof route.query.next === "string" ? route.query.next : "/");
-  } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to sign in.";
-  } finally {
-    loading.value = false;
-  }
-}
+  },
+  methods: {
+    async submit(): Promise<void> {
+      this.loading = true;
+      this.error = "";
+      try {
+        if (!this.csrfReady) {
+          await initialiseCsrf();
+          this.csrfReady = true;
+        }
+        await login(this.username, this.password);
+        await this.$router.push(
+          typeof this.$route.query.next === "string" ? this.$route.query.next : "/",
+        );
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to sign in.";
+      } finally {
+        this.loading = false;
+      }
+    },
+  },
+});
 </script>
-
-<template>
-  <v-container
-    class="fill-height"
-    style="max-width: 440px"
-  >
-    <v-card
-      class="pa-6"
-      elevation="8"
-    >
-      <v-card-title class="text-h4 text-primary font-weight-black">Hoard</v-card-title>
-      <v-card-subtitle>Campaign ledger and table tools</v-card-subtitle>
-      <v-card-text class="pt-6">
-        <v-alert
-          v-if="error"
-          type="error"
-          class="mb-4"
-        >
-          {{ error }}
-        </v-alert>
-        <v-form @submit.prevent="submit">
-          <v-text-field
-            v-model="username"
-            label="Username"
-            autocomplete="username"
-            required
-          />
-          <v-text-field
-            v-model="password"
-            label="Password"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
-          <v-btn
-            block
-            color="primary"
-            type="submit"
-            :loading="loading"
-            :disabled="!csrfReady"
-          >
-            Sign in
-          </v-btn>
-        </v-form>
-      </v-card-text>
-    </v-card>
-  </v-container>
-</template>

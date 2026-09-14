@@ -1,4 +1,28 @@
-<script setup lang="ts">
+<template>
+  <label class="d-grid gap-2">
+    <span class="fw-semibold">{{ label }}</span>
+    <AutoComplete
+      :model-value="modelValue"
+      :suggestions="suggestions"
+      :option-label="displayTitle"
+      option-value="name"
+      :loading="loading"
+      :disabled="disabled"
+      :multiple="multiple"
+      :show-clear="!multiple"
+      dropdown
+      fluid
+      @complete="search"
+      @update:model-value="$emit('update:modelValue', $event)"
+    />
+    <small class="text-body-secondary">{{ hint }}</small>
+  </label>
+</template>
+
+<script lang="ts">
+import { defineComponent, type PropType } from "vue";
+import AutoComplete from "primevue/autocomplete";
+
 export type CompendiumChoice = {
   identifier?: string;
   name: string;
@@ -6,80 +30,53 @@ export type CompendiumChoice = {
   level?: number;
 };
 
-withDefaults(
-  defineProps<{
-    modelValue?: string | string[];
-    items?: CompendiumChoice[];
-    label: string;
-    hint?: string;
-    loading?: boolean;
-    disabled?: boolean;
-    multiple?: boolean;
-    chips?: boolean;
-  }>(),
-  {
-    modelValue: "",
-    items: () => [],
-    hint: "Compendium suggestion or custom override",
-    loading: false,
-    disabled: false,
-    multiple: false,
-    chips: false,
+export default defineComponent({
+  components: { AutoComplete },
+  props: {
+    modelValue: {
+      type: [String, Array] as PropType<string | string[]>,
+      default: "",
+    },
+    items: {
+      type: Array as PropType<CompendiumChoice[]>,
+      default: () => [],
+    },
+    label: { type: String, required: true },
+    hint: {
+      type: String,
+      default: "Compendium suggestion or custom override",
+    },
+    loading: { type: Boolean, default: false },
+    disabled: { type: Boolean, default: false },
+    multiple: { type: Boolean, default: false },
+    chips: { type: Boolean, default: false },
   },
-);
+  emits: ["update:modelValue"],
+  data() {
+    return {
+      query: "",
+    };
+  },
+  computed: {
+    suggestions(): CompendiumChoice[] {
+      const normalizedQuery = this.query.trim().toLowerCase();
 
-defineEmits<{ "update:modelValue": [value: string | string[]] }>();
+      if (!normalizedQuery) {
+        return this.items;
+      }
 
-function choiceName(value: unknown): string {
-  return typeof value === "object" && value !== null && "name" in value
-    ? String(value.name)
-    : String(value ?? "");
-}
-
-function choiceSource(value: unknown): string {
-  return typeof value === "object" && value !== null && "source" in value
-    ? String(value.source)
-    : "Custom override";
-}
-
-function displayTitle(item: CompendiumChoice): string {
-  return `${item.name} — ${item.source}`;
-}
+      return this.items.filter((item) =>
+        this.displayTitle(item).toLowerCase().includes(normalizedQuery),
+      );
+    },
+  },
+  methods: {
+    search(event: { query: string }): void {
+      this.query = event.query;
+    },
+    displayTitle(item: CompendiumChoice): string {
+      return `${item.name} — ${item.source}`;
+    },
+  },
+});
 </script>
-
-<template>
-  <v-combobox
-    :model-value="modelValue"
-    :items="items"
-    :item-title="displayTitle"
-    item-value="name"
-    :label="label"
-    :hint="hint"
-    persistent-hint
-    :loading="loading"
-    :disabled="disabled"
-    :multiple="multiple"
-    :chips="chips"
-    :return-object="false"
-    no-data-text="No Compendium suggestions match. Enter a custom override if allowed."
-    @update:model-value="$emit('update:modelValue', $event)"
-  >
-    <template #item="{ props, item }">
-      <v-list-item
-        v-bind="props"
-        :title="choiceName(item.raw)"
-        :subtitle="choiceSource(item.raw)"
-      />
-    </template>
-    <template #selection="{ item }">
-      <v-chip v-if="multiple">
-        {{ choiceName(item.raw) }}
-        <span class="text-medium-emphasis ml-1">· {{ choiceSource(item.raw) }}</span>
-      </v-chip>
-      <template v-else>
-        <span>{{ choiceName(item.raw) }}</span>
-        <span class="text-medium-emphasis ml-2">— {{ choiceSource(item.raw) }}</span>
-      </template>
-    </template>
-  </v-combobox>
-</template>

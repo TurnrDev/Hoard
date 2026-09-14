@@ -1,6 +1,6 @@
 # Hoard frontend
 
-Vue 3, TypeScript, Vite, and Vuetify power Hoard's campaign UI.
+Vue 3, TypeScript, Vite, and PrimeVue 5 power Hoard's campaign UI.
 
 ```sh
 npm install

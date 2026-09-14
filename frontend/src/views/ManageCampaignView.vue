@@ -1,6 +1,265 @@
-<script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+<template>
+  <section aria-labelledby="management-title">
+    <header
+      class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-5"
+    >
+      <div>
+        <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
+          Game Master only
+        </p>
+        <h1
+          id="management-title"
+          class="display-5 mb-0"
+        >
+          {{ campaign?.name }} management
+        </h1>
+      </div>
+      <Button
+        :as="'router-link'"
+        :to="`/c/${campaignId}/gm`"
+        icon="mdi mdi-arrow-left"
+        label="GM desk"
+        outlined
+      />
+    </header>
+    <Message
+      v-if="error"
+      severity="error"
+      closable
+      @click:close="error = ''"
+    >
+      {{ error }}
+    </Message>
+
+    <div class="row g-4">
+      <div class="col-12 col-xl-7">
+        <section
+          class="border rounded-3 p-3 p-md-4 h-100"
+          aria-labelledby="members-heading"
+        >
+          <header class="mb-3">
+            <h2
+              id="members-heading"
+              class="h3"
+            >
+              Members
+            </h2>
+          </header>
+          <div class="d-grid gap-3">
+            <form
+              class="row g-2"
+              @submit.prevent="invitePlayer"
+            >
+              <div class="col-12 col-md">
+                <label
+                  class="visually-hidden"
+                  for="invitation-email"
+                >
+                  Email address
+                </label>
+                <InputText
+                  id="invitation-email"
+                  v-model="invitationEmail"
+                  type="email"
+                  placeholder="Email (optional)"
+                  fluid
+                />
+              </div>
+              <div class="col-12 col-md-auto">
+                <Button
+                  type="submit"
+                  :loading="busy"
+                  label="Invite player"
+                />
+              </div>
+            </form>
+            <Message
+              v-if="invitationLink"
+              severity="success"
+            >
+              <p class="fw-semibold mb-2">Shareable invitation link</p>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <code class="text-break">{{ invitationLink }}</code>
+                <Button
+                  size="small"
+                  label="Copy"
+                  @click="copyInvite(invitationLink)"
+                />
+              </div>
+            </Message>
+            <ul class="list-group">
+              <li
+                v-for="member in members"
+                :key="member.id"
+                class="list-group-item d-flex align-items-center justify-content-between gap-3"
+              >
+                <div>
+                  <strong>{{ member.username }}</strong>
+                  <span class="d-block small text-body-secondary">
+                    {{
+                      member.is_active
+                        ? member.is_game_master
+                          ? "Game master"
+                          : "Player"
+                        : "Inactive"
+                    }}
+                  </span>
+                </div>
+                <Button
+                  icon="mdi-account-remove"
+                  text
+                  :disabled="!member.is_active"
+                  :aria-label="`Deactivate ${member.username}`"
+                  @click="deactivate(member)"
+                />
+              </li>
+            </ul>
+            <h3 class="h4 mt-2">Invitations</h3>
+            <ul class="list-group">
+              <li
+                v-for="invitation in invitations"
+                :key="invitation.id"
+                class="list-group-item d-flex align-items-center justify-content-between gap-3"
+              >
+                <div>
+                  <strong>{{ invitation.email || "Shareable link" }}</strong>
+                  <span class="d-block small text-body-secondary">
+                    {{ displayIdentifier(invitation.status) }} · expires
+                    {{ new Date(invitation.expires_at).toLocaleString() }}
+                  </span>
+                </div>
+                <div class="d-flex gap-1">
+                  <Button
+                    v-if="invitation.status === 'pending'"
+                    icon="mdi-email-sync-outline"
+                    text
+                    :aria-label="`Resend invitation to ${invitation.email || 'shareable link'}`"
+                    @click="resend(invitation)"
+                  />
+                  <Button
+                    v-if="invitation.status === 'pending'"
+                    icon="mdi-link-off"
+                    text
+                    :aria-label="`Revoke invitation to ${invitation.email || 'shareable link'}`"
+                    @click="revoke(invitation)"
+                  />
+                </div>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
+      <div class="col-12 col-xl-5">
+        <section
+          class="border rounded-3 p-3 p-md-4 mb-4"
+          aria-labelledby="campaign-tools-heading"
+        >
+          <header>
+            <h2
+              id="campaign-tools-heading"
+              class="h3"
+            >
+              Campaign tools
+            </h2>
+          </header>
+          <div>
+            <p class="text-body-secondary">
+              Manage the campaign’s equipment in the dedicated compendium.
+            </p>
+            <Button
+              :as="'router-link'"
+              :to="`/c/${campaignId}/compendium`"
+              icon="mdi mdi-book-open-variant"
+              label="Open compendium"
+            />
+          </div>
+        </section>
+      </div>
+      <div class="col-12 col-xl-5">
+        <section
+          class="border rounded-3 p-3 p-md-4"
+          aria-labelledby="characters-heading"
+        >
+          <header>
+            <h2
+              id="characters-heading"
+              class="h3"
+            >
+              NPCs
+            </h2>
+          </header>
+          <div class="d-grid gap-3">
+            <form
+              class="row g-2"
+              @submit.prevent="createNpc"
+            >
+              <div class="col-12">
+                <InputText
+                  v-model="characterName"
+                  placeholder="NPC name"
+                  fluid
+                />
+              </div>
+              <div class="col-6">
+                <InputText
+                  v-model="characterRace"
+                  placeholder="Race"
+                  fluid
+                />
+              </div>
+              <div class="col-6">
+                <InputText
+                  v-model="characterClass"
+                  placeholder="Class"
+                  fluid
+                />
+              </div>
+              <div class="col-12">
+                <Button
+                  type="submit"
+                  label="Create NPC"
+                />
+              </div>
+            </form>
+            <ul class="list-group">
+              <li
+                v-for="character in characters"
+                :key="character.id"
+                class="list-group-item d-flex align-items-center justify-content-between gap-3"
+              >
+                <div>
+                  <strong>{{ character.name }}</strong>
+                  <span class="d-block small text-body-secondary">
+                    {{
+                      character.is_archived
+                        ? "Archived"
+                        : character.is_active
+                          ? "Active"
+                          : "Inactive"
+                    }}
+                  </span>
+                </div>
+                <Button
+                  v-if="!character.is_archived"
+                  icon="mdi-archive"
+                  text
+                  :aria-label="`Archive ${character.name}`"
+                  @click="archive(character)"
+                />
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+import Button from "primevue/button";
+import InputText from "primevue/inputtext";
+import Message from "primevue/message";
+import { defineComponent } from "vue";
 import {
   archiveCharacter,
   createInvitation,
@@ -17,319 +276,147 @@ import {
   type CampaignMember,
   type Character,
 } from "../api";
-import { useCampaignRefresh } from "../realtime";
+import { campaignRefreshRevision } from "../realtime";
 import { displayIdentifier } from "../display";
 
-const route = useRoute();
-const router = useRouter();
-const campaignId = Number(route.params.id);
-const campaign = ref<Campaign>();
-const members = ref<CampaignMember[]>([]);
-const invitations = ref<CampaignInvitation[]>([]);
-const characters = ref<Character[]>([]);
-const invitationEmail = ref("");
-const invitationLink = ref("");
-const characterName = ref("");
-const characterRace = ref("Human");
-const characterClass = ref("Fighter");
-const error = ref("");
-const busy = ref(false);
-
-async function load(): Promise<void> {
-  try {
-    const next = await getCampaign(campaignId);
-    if (!next.is_game_master) {
-      await router.replace(`/c/${campaignId}`);
-      return;
-    }
-    campaign.value = next;
-    [members.value, characters.value, invitations.value] = await Promise.all([
-      getMembers(campaignId),
-      getCharacters(campaignId),
-      getInvitations(campaignId),
-    ]);
-  } catch (exception) {
-    error.value =
-      exception instanceof Error
-        ? exception.message
-        : "Unable to load campaign management.";
-  }
-}
-
-async function createNpc(): Promise<void> {
-  if (!characterName.value.trim()) {
-    return;
-  }
-  try {
-    await createCharacter(campaignId, {
-      name: characterName.value.trim(),
-      race: characterRace.value,
-      character_class: characterClass.value,
-      strength: 10,
-      dexterity: 10,
-      constitution: 10,
-      intelligence: 10,
-      wisdom: 10,
-      charisma: 10,
-      is_npc: true,
-    });
-    characterName.value = "";
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to create NPC.";
-  }
-}
-
-async function archive(character: Character): Promise<void> {
-  try {
-    await archiveCharacter(campaignId, character.id);
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to archive character.";
-  }
-}
-
-async function invitePlayer(): Promise<void> {
-  busy.value = true;
-  try {
-    const invitation = await createInvitation(campaignId, invitationEmail.value.trim());
-    invitationEmail.value = "";
-    invitationLink.value = invitation.link ?? "";
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to invite player.";
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function copyInvite(link: string): Promise<void> {
-  await navigator.clipboard.writeText(link);
-}
-
-async function resend(invitation: CampaignInvitation): Promise<void> {
-  try {
-    const updated = await resendInvitation(campaignId, invitation.id);
-    invitationLink.value = updated.link ?? "";
-    await load();
-  } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to resend.";
-  }
-}
-
-async function revoke(invitation: CampaignInvitation): Promise<void> {
-  try {
-    await revokeInvitation(campaignId, invitation.id);
-    await load();
-  } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to revoke.";
-  }
-}
-
-async function deactivate(member: CampaignMember): Promise<void> {
-  try {
-    await removeMember(campaignId, member.id);
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to remove member.";
-  }
-}
-
-onMounted(load);
-useCampaignRefresh(load);
+export default defineComponent({
+  components: { Button, InputText, Message },
+  data() {
+    return {
+      campaign: undefined as Campaign | undefined,
+      members: [] as CampaignMember[],
+      invitations: [] as CampaignInvitation[],
+      characters: [] as Character[],
+      invitationEmail: "",
+      invitationLink: "",
+      characterName: "",
+      characterRace: "Human",
+      characterClass: "Fighter",
+      error: "",
+      busy: false,
+    };
+  },
+  computed: {
+    campaignId(): number {
+      return Number(this.$route.params.id);
+    },
+    campaignRefresh(): number {
+      return campaignRefreshRevision.value;
+    },
+  },
+  watch: {
+    campaignRefresh(): void {
+      void this.load();
+    },
+  },
+  mounted() {
+    void this.load();
+  },
+  methods: {
+    displayIdentifier,
+    async load(): Promise<void> {
+      try {
+        const next = await getCampaign(this.campaignId);
+        if (!next.is_game_master) {
+          await this.$router.replace(`/c/${this.campaignId}`);
+          return;
+        }
+        this.campaign = next;
+        [this.members, this.characters, this.invitations] = await Promise.all([
+          getMembers(this.campaignId),
+          getCharacters(this.campaignId),
+          getInvitations(this.campaignId),
+        ]);
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to load campaign management.";
+      }
+    },
+    async createNpc(): Promise<void> {
+      if (!this.characterName.trim()) {
+        return;
+      }
+      try {
+        await createCharacter(this.campaignId, {
+          name: this.characterName.trim(),
+          race: this.characterRace,
+          character_class: this.characterClass,
+          strength: 10,
+          dexterity: 10,
+          constitution: 10,
+          intelligence: 10,
+          wisdom: 10,
+          charisma: 10,
+          is_npc: true,
+        });
+        this.characterName = "";
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to create NPC.";
+      }
+    },
+    async archive(character: Character): Promise<void> {
+      try {
+        await archiveCharacter(this.campaignId, character.id);
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to archive character.";
+      }
+    },
+    async invitePlayer(): Promise<void> {
+      this.busy = true;
+      try {
+        const invitation = await createInvitation(
+          this.campaignId,
+          this.invitationEmail.trim(),
+        );
+        this.invitationEmail = "";
+        this.invitationLink = invitation.link ?? "";
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to invite player.";
+      } finally {
+        this.busy = false;
+      }
+    },
+    async copyInvite(link: string): Promise<void> {
+      await navigator.clipboard.writeText(link);
+    },
+    async resend(invitation: CampaignInvitation): Promise<void> {
+      try {
+        const updated = await resendInvitation(this.campaignId, invitation.id);
+        this.invitationLink = updated.link ?? "";
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to resend.";
+      }
+    },
+    async revoke(invitation: CampaignInvitation): Promise<void> {
+      try {
+        await revokeInvitation(this.campaignId, invitation.id);
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to revoke.";
+      }
+    },
+    async deactivate(member: CampaignMember): Promise<void> {
+      try {
+        await removeMember(this.campaignId, member.id);
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to remove member.";
+      }
+    },
+  },
+});
 </script>
-
-<template>
-  <v-container style="max-width: 1100px">
-    <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4">{{ campaign?.name }} management</h1>
-      <v-btn
-        :to="`/c/${campaignId}`"
-        prepend-icon="mdi-arrow-left"
-      >
-        Campaign
-      </v-btn>
-    </div>
-    <v-alert
-      v-if="error"
-      type="error"
-      closable
-      @click:close="error = ''"
-    >
-      {{ error }}
-    </v-alert>
-
-    <v-row>
-      <v-col
-        cols="12"
-        md="7"
-      >
-        <v-card>
-          <v-card-title>Members</v-card-title>
-          <v-card-text>
-            <v-form
-              class="d-flex ga-2 mb-4"
-              @submit.prevent="invitePlayer"
-            >
-              <v-text-field
-                v-model="invitationEmail"
-                label="Email (optional)"
-                type="email"
-                hide-details
-              />
-              <v-btn
-                type="submit"
-                :loading="busy"
-              >
-                Invite player
-              </v-btn>
-            </v-form>
-            <v-alert
-              v-if="invitationLink"
-              type="success"
-              class="mb-4"
-            >
-              <div class="text-caption mb-1">Shareable invitation link</div>
-              <div class="d-flex align-center ga-2">
-                <code class="text-truncate">{{ invitationLink }}</code>
-                <v-btn
-                  size="small"
-                  @click="copyInvite(invitationLink)"
-                >
-                  Copy
-                </v-btn>
-              </div>
-            </v-alert>
-            <v-list>
-              <v-list-item
-                v-for="member in members"
-                :key="member.id"
-              >
-                <v-list-item-title>{{ member.username }}</v-list-item-title>
-                <v-list-item-subtitle>
-                  {{
-                    member.is_active
-                      ? member.is_game_master
-                        ? "Game master"
-                        : "Player"
-                      : "Inactive"
-                  }}
-                </v-list-item-subtitle>
-                <template #append>
-                  <v-btn
-                    icon="mdi-account-remove"
-                    variant="text"
-                    :disabled="!member.is_active"
-                    :aria-label="`Deactivate ${member.username}`"
-                    @click="deactivate(member)"
-                  />
-                </template>
-              </v-list-item>
-            </v-list>
-            <div class="text-overline text-secondary mt-5">Invitations</div>
-            <v-list density="compact">
-              <v-list-item
-                v-for="invitation in invitations"
-                :key="invitation.id"
-                :title="invitation.email || 'Shareable link'"
-                :subtitle="`${displayIdentifier(invitation.status)} · expires ${new Date(invitation.expires_at).toLocaleString()}`"
-              >
-                <template #append>
-                  <v-btn
-                    v-if="invitation.status === 'pending'"
-                    icon="mdi-email-sync-outline"
-                    variant="text"
-                    :aria-label="`Resend invitation to ${invitation.email || 'shareable link'}`"
-                    @click="resend(invitation)"
-                  />
-                  <v-btn
-                    v-if="invitation.status === 'pending'"
-                    icon="mdi-link-off"
-                    variant="text"
-                    :aria-label="`Revoke invitation to ${invitation.email || 'shareable link'}`"
-                    @click="revoke(invitation)"
-                  />
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col
-        cols="12"
-        md="5"
-      >
-        <v-card>
-          <v-card-title>Campaign tools</v-card-title>
-          <v-card-text>
-            <p class="mb-4">
-              Manage the campaign’s equipment in the dedicated compendium.
-            </p>
-            <v-btn
-              :to="`/c/${campaignId}/compendium`"
-              prepend-icon="mdi-book-open-variant"
-            >
-              Open compendium
-            </v-btn>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12">
-        <v-card>
-          <v-card-title>Characters</v-card-title>
-          <v-card-text>
-            <v-form
-              class="d-flex flex-wrap ga-2 mb-4"
-              @submit.prevent="createNpc"
-            >
-              <v-text-field
-                v-model="characterName"
-                label="NPC name"
-                hide-details
-              />
-              <v-text-field
-                v-model="characterRace"
-                label="Race"
-                hide-details
-              />
-              <v-text-field
-                v-model="characterClass"
-                label="Class"
-                hide-details
-              />
-              <v-btn type="submit">Create NPC</v-btn>
-            </v-form>
-            <v-list density="compact">
-              <v-list-item
-                v-for="character in characters"
-                :key="character.id"
-                :title="character.name"
-                :subtitle="
-                  character.is_archived
-                    ? 'Archived'
-                    : character.is_active
-                      ? 'Active'
-                      : 'Inactive'
-                "
-              >
-                <template #append>
-                  <v-btn
-                    v-if="!character.is_archived"
-                    icon="mdi-archive"
-                    variant="text"
-                    :aria-label="`Archive ${character.name}`"
-                    @click="archive(character)"
-                  />
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
-</template>

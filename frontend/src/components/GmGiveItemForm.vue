@@ -1,5 +1,57 @@
-<script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+<template>
+  <section
+    class="gm-action-form"
+    aria-labelledby="give-item-heading"
+  >
+    <header>
+      <h2 id="give-item-heading">
+        <span
+          class="mdi mdi-gift"
+          aria-hidden="true"
+        />
+        Give item
+      </h2>
+    </header>
+    <GmCharacterSelect
+      :characters="characters"
+      @selected="characterId = $event"
+    />
+    <ItemPickerDialog
+      v-model="itemId"
+      :candidates="candidates"
+      label="Item to grant"
+    />
+    <label class="form-field">
+      <span>Quantity</span>
+      <InputNumber
+        v-model="quantity"
+        :min="1"
+      />
+    </label>
+    <label class="form-field">
+      <span>Reason</span>
+      <Textarea v-model="description" />
+    </label>
+    <Message
+      v-if="error"
+      severity="error"
+    >
+      {{ error }}
+    </Message>
+    <Button
+      :disabled="!characterId || !itemId"
+      label="Give item"
+      @click="submit"
+    />
+  </section>
+</template>
+
+<script lang="ts">
+import { defineComponent, type PropType } from "vue";
+import Button from "primevue/button";
+import InputNumber from "primevue/inputnumber";
+import Message from "primevue/message";
+import Textarea from "primevue/textarea";
 import {
   createInventoryTransaction,
   getCharacters,
@@ -7,108 +59,69 @@ import {
   type Item,
 } from "../api";
 import type { PickerCandidate } from "../itemPicker";
-import { createSnackbarDismissHandler } from "../dismissibleMessage";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
-const props = defineProps<{
-  contextId: number;
-  items: Item[];
-}>();
-const emit = defineEmits<{ completed: [message: string] }>();
-const characterId = ref<number>();
-const itemId = ref<number>();
-const quantity = ref(1);
-const description = ref("");
-const error = ref("");
-const clearErrorWhenClosed = createSnackbarDismissHandler(error);
-const characters = ref<Character[]>([]);
-const candidates = computed<PickerCandidate[]>(() =>
-  props.items.map((item) => ({ item })),
-);
-const selectedCharacter = computed(() =>
-  characters.value.find((character) => character.id === characterId.value),
-);
-const selectedItem = computed(() =>
-  props.items.find((item) => item.id === itemId.value),
-);
-
-async function submit() {
-  try {
-    error.value = "";
-    await createInventoryTransaction(props.contextId, {
-      from_character_id: null,
-      to_character_id: characterId.value ?? null,
-      item_id: itemId.value ?? 0,
-      quantity: quantity.value,
-      description: description.value,
-    });
-    emit(
-      "completed",
-      `Granted ${selectedCharacter.value?.name ?? "character"} ${quantity.value} × ${selectedItem.value?.name ?? "item"}.`,
-    );
-    itemId.value = undefined;
-    quantity.value = 1;
-    description.value = "";
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to give item.";
-  }
-}
-
-onMounted(async () => {
-  characters.value = await getCharacters(props.contextId);
+export default defineComponent({
+  components: {
+    Button,
+    InputNumber,
+    Message,
+    Textarea,
+    GmCharacterSelect,
+    ItemPickerDialog,
+  },
+  props: {
+    contextId: { type: Number, required: true },
+    items: { type: Array as PropType<Item[]>, required: true },
+  },
+  emits: ["completed"],
+  data() {
+    return {
+      characterId: undefined as number | undefined,
+      itemId: undefined as number | undefined,
+      quantity: 1,
+      description: "",
+      error: "",
+      characters: [] as Character[],
+    };
+  },
+  computed: {
+    candidates(): PickerCandidate[] {
+      return this.items.map((item) => ({ item }));
+    },
+    selectedCharacter(): Character | undefined {
+      return this.characters.find((character) => character.id === this.characterId);
+    },
+    selectedItem(): Item | undefined {
+      return this.items.find((item) => item.id === this.itemId);
+    },
+  },
+  async mounted(): Promise<void> {
+    this.characters = await getCharacters(this.contextId);
+  },
+  methods: {
+    async submit(): Promise<void> {
+      try {
+        this.error = "";
+        await createInventoryTransaction(this.contextId, {
+          from_character_id: null,
+          to_character_id: this.characterId ?? null,
+          item_id: this.itemId ?? 0,
+          quantity: this.quantity,
+          description: this.description,
+        });
+        this.$emit(
+          "completed",
+          `Granted ${this.selectedCharacter?.name ?? "character"} ${this.quantity} × ${this.selectedItem?.name ?? "item"}.`,
+        );
+        this.itemId = undefined;
+        this.quantity = 1;
+        this.description = "";
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to give item.";
+      }
+    },
+  },
 });
 </script>
-<template>
-  <v-card
-    class="pa-2 h-100"
-    color="surface"
-  >
-    <v-card-title class="text-h5">
-      <v-icon
-        color="primary"
-        class="mr-2"
-      >
-        mdi-gift
-      </v-icon>
-      Give item
-    </v-card-title>
-    <v-card-text>
-      <GmCharacterSelect
-        :characters="characters"
-        @selected="characterId = $event"
-      />
-      <ItemPickerDialog
-        v-model="itemId"
-        :candidates="candidates"
-        label="Item to grant"
-      />
-      <v-number-input
-        v-model.number="quantity"
-        control-variant="split"
-        :min="1"
-        label="Quantity"
-      />
-      <v-textarea
-        v-model="description"
-        label="Reason"
-      />
-      <v-snackbar
-        :model-value="Boolean(error)"
-        color="error"
-        @update:model-value="clearErrorWhenClosed"
-      >
-        {{ error }}
-      </v-snackbar>
-      <v-btn
-        block
-        color="primary"
-        size="large"
-        :disabled="!characterId || !itemId"
-        @click="submit"
-      >
-        Give item
-      </v-btn>
-    </v-card-text>
-  </v-card>
-</template>

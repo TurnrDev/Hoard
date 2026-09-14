@@ -1,6 +1,105 @@
-<script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+<template>
+  <main class="container py-5">
+    <section
+      v-if="details"
+      class="row justify-content-center"
+      aria-labelledby="invite-heading"
+    >
+      <div class="col-12 col-md-9 col-lg-6">
+        <div class="border rounded-3 p-4 p-md-5">
+          <header class="mb-4">
+            <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
+              Campaign invitation
+            </p>
+            <h1
+              id="invite-heading"
+              class="display-6"
+            >
+              Join {{ details.campaign_name }}
+            </h1>
+            <p class="mb-0 text-body-secondary">
+              Invitation expires {{ new Date(details.expires_at).toLocaleString() }}
+            </p>
+          </header>
+          <Message
+            v-if="error"
+            severity="error"
+          >
+            {{ error }}
+          </Message>
+          <template v-if="details.authenticated">
+            <p>Accept as {{ details.username }}.</p>
+            <Button
+              :loading="busy"
+              label="Accept invitation"
+              @click="accept"
+            />
+          </template>
+          <template v-else>
+            <RouterLink :to="{ path: '/login', query: { next: $route.fullPath } }">
+              Sign in to an existing account
+            </RouterLink>
+            <h2 class="h4 mt-4">Create an account</h2>
+            <form
+              class="d-grid gap-3"
+              @submit.prevent="register"
+            >
+              <label class="d-grid gap-2">
+                <span class="fw-semibold">Username</span>
+                <InputText
+                  v-model="username"
+                  required
+                  fluid
+                />
+              </label>
+              <label class="d-grid gap-2">
+                <span class="fw-semibold">Email</span>
+                <InputText
+                  v-model="email"
+                  type="email"
+                  required
+                  fluid
+                />
+              </label>
+              <label class="d-grid gap-2">
+                <span class="fw-semibold">Password</span>
+                <InputText
+                  v-model="password"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                  fluid
+                />
+              </label>
+              <Button
+                type="submit"
+                :loading="busy"
+                label="Create account and join"
+              />
+            </form>
+          </template>
+        </div>
+      </div>
+    </section>
+    <ProgressSpinner
+      v-else-if="!error"
+      aria-label="Loading invitation"
+    />
+    <Message
+      v-else
+      severity="error"
+    >
+      {{ error }}
+    </Message>
+  </main>
+</template>
+
+<script lang="ts">
+import { defineComponent } from "vue";
+import Button from "primevue/button";
+import InputText from "primevue/inputtext";
+import Message from "primevue/message";
+import ProgressSpinner from "primevue/progressspinner";
 import {
   acceptInvite,
   initialiseCsrf,
@@ -10,144 +109,66 @@ import {
   type InviteDetails,
 } from "../api";
 
-const route = useRoute();
-const router = useRouter();
-const token = String(route.params.token);
-const details = ref<InviteDetails>();
-const username = ref("");
-const email = ref("");
-const password = ref("");
-const error = ref("");
-const busy = ref(false);
-
-onMounted(async () => {
-  try {
-    details.value = await inspectInvite(token);
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Invalid invitation.";
-  }
+export default defineComponent({
+  components: { Button, InputText, Message, ProgressSpinner },
+  data() {
+    return {
+      details: undefined as InviteDetails | undefined,
+      username: "",
+      email: "",
+      password: "",
+      error: "",
+      busy: false,
+    };
+  },
+  computed: {
+    token(): string {
+      return String(this.$route.params.token);
+    },
+  },
+  async mounted(): Promise<void> {
+    try {
+      this.details = await inspectInvite(this.token);
+    } catch (exception) {
+      this.error =
+        exception instanceof Error ? exception.message : "Invalid invitation.";
+    }
+  },
+  methods: {
+    async accept(): Promise<void> {
+      this.busy = true;
+      try {
+        const result = await acceptInvite(this.token);
+        await this.$router.replace(
+          `/c/${result.context_id}/characters/${result.character_id}/build`,
+        );
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to accept.";
+      } finally {
+        this.busy = false;
+      }
+    },
+    async register(): Promise<void> {
+      this.busy = true;
+      try {
+        const result = await registerAndAcceptInvite(this.token, {
+          username: this.username,
+          email: this.email,
+          password: this.password,
+        });
+        await initialiseCsrf();
+        await login(this.username, this.password);
+        await this.$router.replace(
+          `/c/${result.context_id}/characters/${result.character_id}/build`,
+        );
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to register.";
+      } finally {
+        this.busy = false;
+      }
+    },
+  },
 });
-
-async function accept(): Promise<void> {
-  busy.value = true;
-  try {
-    const result = await acceptInvite(token);
-    await router.replace(
-      `/c/${result.context_id}/characters/${result.character_id}/build`,
-    );
-  } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : "Unable to accept.";
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function register(): Promise<void> {
-  busy.value = true;
-  try {
-    const result = await registerAndAcceptInvite(token, {
-      username: username.value,
-      email: email.value,
-      password: password.value,
-    });
-    await initialiseCsrf();
-    await login(username.value, password.value);
-    await router.replace(
-      `/c/${result.context_id}/characters/${result.character_id}/build`,
-    );
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to register.";
-  } finally {
-    busy.value = false;
-  }
-}
 </script>
-
-<template>
-  <v-container
-    class="page-shell page-centered"
-    style="max-width: 620px"
-  >
-    <v-card
-      v-if="details"
-      class="pa-4"
-    >
-      <v-card-title>Join {{ details.campaign_name }}</v-card-title>
-      <v-card-subtitle>
-        Invitation expires {{ new Date(details.expires_at).toLocaleString() }}
-      </v-card-subtitle>
-      <v-card-text>
-        <v-alert
-          v-if="error"
-          type="error"
-          class="mb-4"
-        >
-          {{ error }}
-        </v-alert>
-        <template v-if="details.authenticated">
-          <p class="mb-4">Accept as {{ details.username }}.</p>
-          <v-btn
-            color="primary"
-            block
-            :loading="busy"
-            @click="accept"
-          >
-            Accept invitation
-          </v-btn>
-        </template>
-        <template v-else>
-          <v-btn
-            block
-            variant="tonal"
-            class="mb-6"
-            :to="{ path: '/login', query: { next: route.fullPath } }"
-          >
-            Sign in to an existing account
-          </v-btn>
-          <div class="text-overline text-secondary mb-2">Create an account</div>
-          <v-form @submit.prevent="register">
-            <v-text-field
-              v-model="username"
-              label="Username"
-              required
-            />
-            <v-text-field
-              v-model="email"
-              label="Email"
-              type="email"
-              required
-            />
-            <v-text-field
-              v-model="password"
-              label="Password"
-              type="password"
-              autocomplete="new-password"
-              required
-            />
-            <v-btn
-              color="primary"
-              type="submit"
-              block
-              :loading="busy"
-            >
-              Create account and join
-            </v-btn>
-          </v-form>
-        </template>
-      </v-card-text>
-    </v-card>
-    <v-progress-circular
-      v-else-if="!error"
-      indeterminate
-      color="primary"
-    />
-    <v-alert
-      v-else
-      type="error"
-    >
-      {{ error }}
-    </v-alert>
-  </v-container>
-</template>

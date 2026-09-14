@@ -28,8 +28,21 @@ class CampaignMemberData(BaseModel):
 
     id: int
     username: str
+    first_name: str
+    last_name: str
     is_game_master: bool
     is_active: bool
+    connected: bool = False
+    last_seen_at: str | None = None
+
+
+class CampaignPresenceChangedEvent(BaseModel):
+    """Authoritative connectivity state for one acting context."""
+
+    type: Literal["campaign.presence_changed"] = "campaign.presence_changed"
+    context_id: int
+    connected: bool
+    last_seen_at: str | None = None
 
 
 class CampaignInvitationData(BaseModel):

@@ -192,6 +192,32 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(accepted.status_code, 204)
         self.assertEqual(repeated.status_code, 404)
 
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_character_portrait_upload_returns_a_media_url(self) -> None:
+        self.client.force_login(self.player_user)
+        response = self.client.post(
+            f"/api/uploads/character-portraits/{self.pc.pk}/{self.character.pk}/",
+            {
+                "file": SimpleUploadedFile(
+                    "portrait.png",
+                    b"\x89PNG\r\n\x1a\nportrait-test",
+                    content_type="image/png",
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["portrait_url"].startswith("/media/"))
+        self.character.refresh_from_db()
+        self.assertTrue(self.character.portrait.name.endswith(".png"))
+
     def test_transaction_response_has_an_immutable_timestamp(self) -> None:
         response = self.socket_request(
             self.gm_user,

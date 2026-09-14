@@ -122,6 +122,8 @@ class ContextSocketTests(TransactionTestCase):
         communicator.scope["user"] = self.user
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
+        presence_event = await communicator.receive_json_from(timeout=1)
+        self.assertEqual(presence_event["type"], "campaign.presence_changed")
         with patch.object(ContextConsumer, "_builder_definition", slow_definition):
             slow_request_id = request_id()
             quick_request_id = request_id()
@@ -157,7 +159,10 @@ class ContextSocketTests(TransactionTestCase):
         first.scope["user"] = self.user
         second.scope["user"] = self.user
         self.assertTrue((await first.connect())[0])
+        await first.receive_json_from(timeout=1)
         self.assertTrue((await second.connect())[0])
+        await first.receive_json_from(timeout=1)
+        await second.receive_json_from(timeout=1)
 
         command_request_id = request_id()
         await first.send_json_to(
@@ -176,6 +181,58 @@ class ContextSocketTests(TransactionTestCase):
         await second.disconnect()
 
         return first_messages, second_message, command_request_id
+
+    async def presence_change_events(self):
+        player = await database_sync_to_async(get_user_model().objects.create_user)(
+            username="presence-player"
+        )
+        player_context = await database_sync_to_async(CampaignContext.objects.create)(
+            campaign=self.campaign,
+            user=player,
+            kind=CampaignContext.Kind.PC,
+        )
+        game_master_socket = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/contexts/{self.context.pk}/"
+        )
+        player_socket = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/contexts/{player_context.pk}/"
+        )
+        game_master_socket.scope["user"] = self.user
+        player_socket.scope["user"] = player
+        self.assertTrue((await game_master_socket.connect())[0])
+        await game_master_socket.receive_json_from(timeout=1)
+        self.assertTrue((await player_socket.connect())[0])
+        connected_event = await game_master_socket.receive_json_from(timeout=1)
+        await player_socket.receive_json_from(timeout=1)
+        await player_socket.disconnect()
+        disconnected_event = await game_master_socket.receive_json_from(timeout=1)
+        await game_master_socket.disconnect()
+
+        return connected_event, disconnected_event, player_context.pk
+
+    def test_connection_changes_are_broadcast_to_campaign_contexts(self) -> None:
+        connected, disconnected, context_id = async_to_sync(
+            self.presence_change_events
+        )()
+
+        self.assertEqual(
+            connected,
+            {
+                "type": "campaign.presence_changed",
+                "context_id": context_id,
+                "connected": True,
+                "last_seen_at": connected["last_seen_at"],
+            },
+        )
+        self.assertEqual(
+            disconnected,
+            {
+                "type": "campaign.presence_changed",
+                "context_id": context_id,
+                "connected": False,
+                "last_seen_at": None,
+            },
+        )
 
     def test_calendar_command_fans_out_the_same_authoritative_event(self) -> None:
         first_messages, second_message, command_request_id = async_to_sync(
@@ -223,6 +280,37 @@ class ContextSocketTests(TransactionTestCase):
 
         self.assertEqual(response["type"], "query.result")
         self.assertIsInstance(response["data"]["characters"][0]["archived_at"], str)
+
+    def test_player_campaign_response_includes_party_members(self) -> None:
+        self.user.first_name = "Alice"
+        self.user.last_name = "Smith"
+        self.user.save(update_fields=("first_name", "last_name"))
+        player = get_user_model().objects.create_user(username="party-player")
+        player_context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=player,
+            kind=CampaignContext.Kind.PC,
+        )
+
+        message = {"type": "campaign.get", "request_id": request_id()}
+        response = async_to_sync(self.socket_request)(
+            player,
+            player_context.pk,
+            message,
+        )
+
+        self.assertEqual(response["type"], "query.result")
+        self.assertEqual(
+            {member["username"] for member in response["data"]["members"]},
+            {"socket-user", "party-player"},
+        )
+        members = {
+            member["username"]: member for member in response["data"]["members"]
+        }
+        self.assertEqual(members["socket-user"]["first_name"], "Alice")
+        self.assertEqual(members["socket-user"]["last_name"], "Smith")
+        self.assertEqual(members["party-player"]["first_name"], "")
+        self.assertEqual(members["party-player"]["last_name"], "")
 
     def test_context_socket_rejects_a_different_user(self) -> None:
         stranger = get_user_model().objects.create_user(username="stranger")

@@ -37,8 +37,12 @@ export type CampaignCalendar = {
 export type CampaignMember = {
   id: number;
   username: string;
+  first_name: string;
+  last_name: string;
   is_game_master: boolean;
   is_active: boolean;
+  connected: boolean;
+  last_seen_at: string | null;
 };
 
 export type EquipmentMetadata = {
@@ -211,6 +215,7 @@ export type Character = {
   id: number;
   context_id: number | null;
   name: string;
+  portrait_url: string | null;
   is_player_character: boolean;
   is_active: boolean;
   is_archived: boolean;
@@ -264,6 +269,7 @@ export type Campaign = CampaignSummary & {
   incomplete_level_ups: IncompleteLevelUp[];
   calendar: CampaignCalendar;
   party_money: Record<string, number | string>;
+  members: CampaignMember[];
   characters: Character[];
 };
 
@@ -717,6 +723,29 @@ export function updateCharacter(
   return contextRequest<void>(campaignId, "characters.update", {
     character_id: characterId,
     fields: { ...fields, character_class: characterClass },
+  });
+}
+
+export function uploadCharacterPortrait(
+  contextId: number,
+  characterId: number,
+  file: File,
+): Promise<{ portrait_url: string }> {
+  const body = new FormData();
+  body.append("file", file);
+
+  return request<{ portrait_url: string }>(
+    `/api/uploads/character-portraits/${contextId}/${characterId}/`,
+    { method: "POST", body },
+  );
+}
+
+export function removeCharacterPortrait(
+  contextId: number,
+  characterId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.portrait.remove", {
+    character_id: characterId,
   });
 }
 export type InventoryTransactionInput = {

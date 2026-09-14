@@ -15,17 +15,26 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, re_path
 from django.urls.resolvers import URLPattern
 
 from hoard.campaigns.api import api
 from hoard.campaigns.frontend import frontend
-from hoard.campaigns.views import cah_upload
+from hoard.campaigns.views import cah_upload, character_portrait_upload
 
 urlpatterns: list[URLPattern] = [
     path("admin/", admin.site.urls),
     path("api/uploads/character-imports/<str:upload_id>/", cah_upload),
+    path(
+        "api/uploads/character-portraits/<int:context_id>/<int:character_id>/",
+        character_portrait_upload,
+    ),
     path("api/", api.urls),
-    re_path(r"^(?!api/|admin/).*$", frontend),
+    re_path(r"^(?!api/|admin/|media/).*$", frontend),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

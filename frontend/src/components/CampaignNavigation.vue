@@ -1,18 +1,13 @@
 <template>
-  <nav
-    v-if="contextId"
-    aria-label="Campaign navigation"
-  >
-    <ul class="campaign-navigation">
+  <nav aria-label="Campaign navigation">
+    <ul class="campaign-navigation list-unstyled mb-0">
       <li>
-        <RouterLink
-          :to="activeContext ? contextPath(activeContext) : `/c/${contextId}`"
-        >
+        <RouterLink :to="contextPath(activeContext)">
           <span
-            class="mdi mdi-home-variant-outline"
+            class="mdi mdi-play-circle-outline"
             aria-hidden="true"
           />
-          Home
+          <span>Play</span>
         </RouterLink>
       </li>
       <li>
@@ -21,12 +16,7 @@
             class="mdi mdi-account-group-outline"
             aria-hidden="true"
           />
-          Characters
-          <span
-            v-if="hasIncompleteLevelUps"
-            class="mdi mdi-alert-circle campaign-navigation__warning"
-            aria-label="Level-up incomplete"
-          />
+          <span>Characters</span>
         </RouterLink>
       </li>
       <li>
@@ -35,7 +25,7 @@
             class="mdi mdi-book-open-variant-outline"
             aria-hidden="true"
           />
-          Compendium
+          <span>Compendium</span>
         </RouterLink>
       </li>
       <li>
@@ -44,16 +34,25 @@
             class="mdi mdi-notebook-outline"
             aria-hidden="true"
           />
-          Ledger
+          <span>Ledger</span>
         </RouterLink>
       </li>
-      <li v-if="activeContext?.kind === 'gm'">
+      <li v-if="activeContext.kind === 'gm'">
+        <RouterLink :to="`/c/${contextId}/gm`">
+          <span
+            class="mdi mdi-shield-crown-outline"
+            aria-hidden="true"
+          />
+          <span>GM desk</span>
+        </RouterLink>
+      </li>
+      <li v-if="activeContext.kind === 'gm'">
         <RouterLink :to="`/c/${contextId}/manage`">
           <span
             class="mdi mdi-cog-outline"
             aria-hidden="true"
           />
-          Manage
+          <span>Manage</span>
         </RouterLink>
       </li>
     </ul>
@@ -62,14 +61,16 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import { contextPath, type ActingContext } from "../context";
+import type { ActingContext } from "../context";
+import { contextPath } from "../context";
 
 export default defineComponent({
   props: {
     contextId: { type: Number, required: true },
-    activeContext: { type: Object as PropType<ActingContext>, required: false },
-    hasIncompleteLevelUps: { type: Boolean, default: false },
+    activeContext: { type: Object as PropType<ActingContext>, required: true },
   },
-  methods: { contextPath },
+  methods: {
+    contextPath,
+  },
 });
 </script>

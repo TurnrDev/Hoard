@@ -145,6 +145,7 @@ class CampaignContext(models.Model):
 
     kind = models.CharField(max_length=2, choices=Kind.choices)
     is_active = models.BooleanField(default=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -212,6 +213,7 @@ class Character(models.Model):
     is_build_complete = models.BooleanField("Is Build Complete", default=True)
     archived_at = models.DateTimeField("Archived At", null=True, blank=True)
     name = models.CharField("Character Name", max_length=200)
+    portrait = models.FileField(upload_to="character-portraits/", blank=True)
     race = models.CharField(max_length=100, blank=True)
     character_class = models.CharField("Class", max_length=100, blank=True)
     background = models.CharField(max_length=100, blank=True)

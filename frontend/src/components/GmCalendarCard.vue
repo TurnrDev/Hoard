@@ -1,62 +1,83 @@
-<script setup lang="ts">
-import { computed, ref } from "vue";
-import { adjustCalendar, type CampaignCalendar } from "../api";
-import { formatCampaignDate } from "../calendar";
-
-const props = defineProps<{ contextId: number; calendar: CampaignCalendar }>();
-const busy = ref(false);
-const error = ref("");
-const canDecrement = computed(() => props.calendar.year > 1 || props.calendar.day > 1);
-
-async function adjust(amount: -1 | 1): Promise<void> {
-  busy.value = true;
-  error.value = "";
-  try {
-    await adjustCalendar(props.contextId, amount);
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to update date.";
-  } finally {
-    busy.value = false;
-  }
-}
-</script>
-
 <template>
-  <v-card class="profile-card h-100">
-    <v-card-text class="d-flex align-center justify-space-between h-100">
+  <section
+    class="border rounded-3 p-3 p-md-4 h-100"
+    aria-labelledby="campaign-date-heading"
+  >
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div>
-        <div class="text-h5">{{ formatCampaignDate(calendar) }}</div>
-        <div class="text-caption">{{ calendar.era_name }}</div>
+        <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
+          In-world date
+        </p>
+        <h2
+          id="campaign-date-heading"
+          class="h3 mb-1"
+        >
+          {{ formatCampaignDate(calendar) }}
+        </h2>
+        <p class="mb-0 text-body-secondary">{{ calendar.era_name }}</p>
       </div>
-      <v-alert
+      <Message
         v-if="error"
-        density="compact"
-        type="error"
-        class="mt-3"
+        severity="error"
       >
         {{ error }}
-      </v-alert>
-      <div class="d-flex ga-1">
-        <v-btn
-          icon="mdi-minus"
-          size="small"
-          variant="text"
+      </Message>
+      <div class="d-flex gap-2">
+        <Button
+          icon="mdi mdi-minus"
+          text
           :disabled="!canDecrement"
           :loading="busy"
           aria-label="Decrement campaign date by one day"
           @click="adjust(-1)"
         />
-        <v-btn
-          icon="mdi-plus"
-          size="small"
-          variant="text"
-          color="primary"
+        <Button
+          icon="mdi mdi-plus"
+          text
           :loading="busy"
           aria-label="Increment campaign date by one day"
           @click="adjust(1)"
         />
       </div>
-    </v-card-text>
-  </v-card>
+    </div>
+  </section>
 </template>
+
+<script lang="ts">
+import { defineComponent, type PropType } from "vue";
+import Button from "primevue/button";
+import Message from "primevue/message";
+import { adjustCalendar, type CampaignCalendar } from "../api";
+import { formatCampaignDate } from "../calendar";
+
+export default defineComponent({
+  components: { Button, Message },
+  props: {
+    contextId: { type: Number, required: true },
+    calendar: { type: Object as PropType<CampaignCalendar>, required: true },
+  },
+  data() {
+    return { busy: false, error: "" };
+  },
+  computed: {
+    canDecrement(): boolean {
+      return this.calendar.year > 1 || this.calendar.day > 1;
+    },
+  },
+  methods: {
+    formatCampaignDate,
+    async adjust(amount: -1 | 1): Promise<void> {
+      this.busy = true;
+      this.error = "";
+      try {
+        await adjustCalendar(this.contextId, amount);
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to update date.";
+      } finally {
+        this.busy = false;
+      }
+    },
+  },
+});
+</script>

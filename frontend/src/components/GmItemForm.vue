@@ -1,5 +1,81 @@
-<script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+<template>
+  <section
+    class="border rounded-3 p-3 p-md-4 h-100"
+    aria-labelledby="items-heading"
+  >
+    <header class="mb-3">
+      <h3
+        id="items-heading"
+        class="h4"
+      >
+        <span
+          class="mdi mdi-package-variant"
+          aria-hidden="true"
+        />
+        Items
+      </h3>
+    </header>
+    <GmCharacterSelect
+      :characters="characters"
+      @selected="characterId = $event"
+    />
+    <div class="d-flex gap-2 my-3">
+      <Button
+        :outlined="action !== 'give'"
+        label="Give"
+        @click="action = 'give'"
+      />
+      <Button
+        severity="danger"
+        :outlined="action !== 'take'"
+        label="Take"
+        @click="action = 'take'"
+      />
+    </div>
+    <ItemPickerDialog
+      v-model="itemId"
+      :candidates="candidates"
+      :label="action === 'give' ? 'Item' : 'Item in inventory'"
+    />
+    <label class="d-grid gap-2 mt-3">
+      <span class="fw-semibold">Quantity</span>
+      <InputNumber
+        v-model="quantity"
+        :min="1"
+        fluid
+      />
+    </label>
+    <label class="d-grid gap-2 mt-3">
+      <span class="fw-semibold">Reason</span>
+      <Textarea
+        v-model="description"
+        rows="2"
+        fluid
+      />
+    </label>
+    <Message
+      v-if="error"
+      severity="error"
+    >
+      {{ error }}
+    </Message>
+    <div class="d-flex justify-content-end mt-3">
+      <Button
+        :severity="action === 'give' ? 'primary' : 'danger'"
+        :disabled="!characterId || !itemId || quantity < 1"
+        :label="`Confirm ${action}`"
+        @click="submit"
+      />
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+import { defineComponent, type PropType } from "vue";
+import Button from "primevue/button";
+import InputNumber from "primevue/inputnumber";
+import Message from "primevue/message";
+import Textarea from "primevue/textarea";
 import {
   createInventoryTransaction,
   getCharacters,
@@ -10,130 +86,80 @@ import type { PickerCandidate } from "../itemPicker";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
 
-const props = defineProps<{ contextId: number; items: Item[] }>();
-const emit = defineEmits<{ completed: [message: string] }>();
-const characterId = ref<number>();
-const itemId = ref<number>();
-const quantity = ref(1);
-const description = ref("");
-const action = ref<"give" | "take">("give");
-const error = ref("");
-const characters = ref<Character[]>([]);
-const selectedCharacter = computed(() =>
-  characters.value.find((item) => item.id === characterId.value),
-);
-const candidates = computed<PickerCandidate[]>(() =>
-  action.value === "give"
-    ? props.items.map((item) => ({ item }))
-    : (selectedCharacter.value?.inventory.flatMap((entry) => {
-        const item = props.items.find((value) => value.id === entry.item_id);
-        return item ? [{ item, quantity: entry.quantity }] : [];
-      }) ?? []),
-);
-const selectedItem = computed(() =>
-  props.items.find((item) => item.id === itemId.value),
-);
-
-watch(candidates, (values) => {
-  if (!values.some(({ item }) => item.id === itemId.value)) {
-    itemId.value = undefined;
-  }
-});
-
-async function submit(): Promise<void> {
-  try {
-    error.value = "";
-    await createInventoryTransaction(props.contextId, {
-      from_character_id: action.value === "take" ? (characterId.value ?? null) : null,
-      to_character_id: action.value === "give" ? (characterId.value ?? null) : null,
-      item_id: itemId.value ?? 0,
-      quantity: quantity.value,
-      description: description.value,
-    });
-    emit(
-      "completed",
-      `${action.value === "give" ? "Gave" : "Took"} ${quantity.value} × ${selectedItem.value?.name ?? "item"}.`,
-    );
-    itemId.value = undefined;
-    quantity.value = 1;
-    description.value = "";
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to move item.";
-  }
-}
-
-onMounted(async () => {
-  characters.value = await getCharacters(props.contextId);
+export default defineComponent({
+  components: {
+    Button,
+    InputNumber,
+    Message,
+    Textarea,
+    GmCharacterSelect,
+    ItemPickerDialog,
+  },
+  props: {
+    contextId: { type: Number, required: true },
+    items: { type: Array as PropType<Item[]>, required: true },
+  },
+  emits: ["completed"],
+  data() {
+    return {
+      characterId: undefined as number | undefined,
+      itemId: undefined as number | undefined,
+      quantity: 1,
+      description: "",
+      action: "give" as "give" | "take",
+      error: "",
+      characters: [] as Character[],
+    };
+  },
+  computed: {
+    selectedCharacter(): Character | undefined {
+      return this.characters.find((item) => item.id === this.characterId);
+    },
+    candidates(): PickerCandidate[] {
+      return this.action === "give"
+        ? this.items.map((item) => ({ item }))
+        : (this.selectedCharacter?.inventory.flatMap((entry) => {
+            const item = this.items.find((value) => value.id === entry.item_id);
+            return item ? [{ item, quantity: entry.quantity }] : [];
+          }) ?? []);
+    },
+    selectedItem(): Item | undefined {
+      return this.items.find((item) => item.id === this.itemId);
+    },
+  },
+  watch: {
+    candidates(values: PickerCandidate[]): void {
+      if (!values.some(({ item }) => item.id === this.itemId)) {
+        this.itemId = undefined;
+      }
+    },
+  },
+  async mounted(): Promise<void> {
+    this.characters = await getCharacters(this.contextId);
+  },
+  methods: {
+    async submit(): Promise<void> {
+      try {
+        this.error = "";
+        await createInventoryTransaction(this.contextId, {
+          from_character_id: this.action === "take" ? (this.characterId ?? null) : null,
+          to_character_id: this.action === "give" ? (this.characterId ?? null) : null,
+          item_id: this.itemId ?? 0,
+          quantity: this.quantity,
+          description: this.description,
+        });
+        this.$emit(
+          "completed",
+          `${this.action === "give" ? "Gave" : "Took"} ${this.quantity} × ${this.selectedItem?.name ?? "item"}.`,
+        );
+        this.itemId = undefined;
+        this.quantity = 1;
+        this.description = "";
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to move item.";
+      }
+    },
+  },
 });
 </script>
-
-<template>
-  <v-card
-    class="pa-2 h-100 action-card"
-    color="surface"
-  >
-    <v-card-title class="text-h6">
-      <v-icon
-        color="primary"
-        class="mr-2"
-      >
-        mdi-package-variant
-      </v-icon>
-      Items
-    </v-card-title>
-    <v-card-text>
-      <GmCharacterSelect
-        :characters="characters"
-        @selected="characterId = $event"
-      />
-      <v-btn-toggle
-        v-model="action"
-        mandatory
-        divided
-        class="mb-4 w-100"
-        color="primary"
-      >
-        <v-btn value="give">Give</v-btn>
-        <v-btn
-          value="take"
-          color="error"
-        >
-          Take
-        </v-btn>
-      </v-btn-toggle>
-      <ItemPickerDialog
-        v-model="itemId"
-        :candidates="candidates"
-        :label="action === 'give' ? 'Item' : 'Item in inventory'"
-      />
-      <v-number-input
-        v-model.number="quantity"
-        control-variant="split"
-        :min="1"
-        label="Quantity"
-      />
-      <v-textarea
-        v-model="description"
-        label="Reason"
-        rows="2"
-      />
-      <v-alert
-        v-if="error"
-        type="error"
-        density="compact"
-        class="mb-3"
-      >
-        {{ error }}
-      </v-alert>
-      <v-btn
-        block
-        :color="action === 'give' ? 'primary' : 'error'"
-        :disabled="!characterId || !itemId || quantity < 1"
-        @click="submit"
-      >
-        Confirm {{ action }}
-      </v-btn>
-    </v-card-text>
-  </v-card>
-</template>

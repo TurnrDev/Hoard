@@ -1,133 +1,33 @@
-<script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import {
-  getCampaign,
-  getTransactions,
-  reverseTransaction,
-  type Campaign,
-  type LedgerTransaction,
-} from "../api";
-import { useCampaignRefresh } from "../realtime";
-import { displayCoin, displayIdentifier } from "../display";
-
-const campaignId = Number(useRoute().params.id);
-const campaign = ref<Campaign>();
-const transactions = ref<LedgerTransaction[]>([]);
-const error = ref("");
-const reversing = ref<LedgerTransaction>();
-
-function names(transaction: LedgerTransaction, positive: boolean): string {
-  return [
-    ...new Set(
-      transaction.entries
-        .filter((entry) => (positive ? entry.amount > 0 : entry.amount < 0))
-        .map((entry) => entry.account_name),
-    ),
-  ].join(", ");
-}
-
-function amount(transaction: LedgerTransaction): string {
-  if (transaction.ledger === "health") {
-    return [
-      transaction.current_hp_delta
-        ? `${transaction.current_hp_delta > 0 ? "+" : ""}${transaction.current_hp_delta} HP`
-        : "",
-      transaction.temporary_hp_delta
-        ? `${transaction.temporary_hp_delta > 0 ? "+" : ""}${transaction.temporary_hp_delta} temp HP`
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  }
-  if (transaction.ledger === "character") {
-    return `${Object.keys(transaction.changes ?? {}).length} field changes`;
-  }
-  if (transaction.ledger.startsWith("audit.")) {
-    return `${Object.keys(transaction.changes ?? {}).length} recorded changes`;
-  }
-  return transaction.entries
-    .filter((entry) => entry.amount > 0)
-    .map(
-      (entry) =>
-        `${entry.amount} ${entry.item_name ?? (entry.denomination ? displayCoin(entry.denomination) : "XP")}`,
-    )
-    .join(" · ");
-}
-
-function typeIcon(transaction: LedgerTransaction): string {
-  return (
-    {
-      experience: "mdi-star-four-points",
-      money: "mdi-cash-multiple",
-      inventory: "mdi-package-variant",
-      health: "mdi-heart-pulse",
-      character: "mdi-account-edit-outline",
-    }[transaction.ledger] ?? "mdi-book-open-variant"
-  );
-}
-
-function canReverse(transaction: LedgerTransaction): boolean {
-  return Boolean(
-    campaign.value?.is_game_master &&
-    ["inventory", "money", "experience"].includes(transaction.ledger) &&
-    !transaction.is_reversed &&
-    !transaction.reversal_of_id,
-  );
-}
-
-async function load(): Promise<void> {
-  try {
-    const [next, history] = await Promise.all([
-      getCampaign(campaignId),
-      getTransactions(campaignId),
-    ]);
-    campaign.value = next;
-    transactions.value = history.results;
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to load ledger.";
-  }
-}
-
-async function reverse(): Promise<void> {
-  if (!reversing.value) {
-    return;
-  }
-  try {
-    await reverseTransaction(campaignId, reversing.value);
-    reversing.value = undefined;
-    await load();
-  } catch (exception) {
-    error.value =
-      exception instanceof Error ? exception.message : "Unable to reverse transaction.";
-  }
-}
-
-onMounted(load);
-useCampaignRefresh(load);
-</script>
-
 <template>
-  <v-container class="page-shell">
-    <header class="page-heading">
+  <section aria-labelledby="ledger-title">
+    <header class="mb-5">
       <div>
-        <div class="text-overline text-secondary">Immutable audit history</div>
-        <h1>Ledger</h1>
+        <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
+          Immutable audit history
+        </p>
+        <h1
+          id="ledger-title"
+          class="display-5 mb-0"
+        >
+          Ledger
+        </h1>
       </div>
     </header>
-    <v-alert
+    <Message
       v-if="error"
-      type="error"
+      severity="error"
       closable
       class="mb-4"
       @click:close="error = ''"
     >
       {{ error }}
-    </v-alert>
-    <v-card>
-      <v-table class="a11y-table ledger-table">
-        <caption class="visually-hidden">Immutable campaign audit history</caption>
+    </Message>
+    <section
+      class="table-responsive border rounded-3"
+      aria-labelledby="ledger-title"
+    >
+      <table class="table table-striped table-hover align-middle mb-0">
+        <caption>Immutable campaign audit history</caption>
         <thead>
           <tr>
             <th scope="col">Real datetime</th>
@@ -138,7 +38,12 @@ useCampaignRefresh(load);
             <th scope="col">Amount</th>
             <th scope="col">Description</th>
             <th scope="col">By</th>
-            <th scope="col"><span class="visually-hidden">Actions</span></th>
+            <th
+              scope="col"
+              class="text-end"
+            >
+              <span class="visually-hidden">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -151,66 +56,218 @@ useCampaignRefresh(load);
             </th>
             <td>{{ transaction.campaign_date ?? "Campaign date unavailable" }}</td>
             <td>
-              <v-icon
-                :icon="typeIcon(transaction)"
-                size="small"
-                color="primary"
+              <span
+                :class="['mdi', typeIcon(transaction)]"
+                aria-hidden="true"
               />
-              {{ transaction.ledger_label ?? displayIdentifier(transaction.ledger) }}
+              {{
+                transaction.ledger_label ??
+                displayTransactionIdentifier(transaction.ledger)
+              }}
             </td>
             <td>{{ names(transaction, false) }}</td>
             <td>{{ names(transaction, true) }}</td>
-            <td>{{ amount(transaction) }}</td>
+            <td class="tabular-nums">{{ amount(transaction) }}</td>
             <td>
               {{ transaction.description || "—" }}
               <span
                 v-if="transaction.is_reversed"
-                class="text-error"
+                class="badge text-bg-secondary ms-1"
               >
                 (reversed)
               </span>
             </td>
             <td>{{ transaction.actor || "—" }}</td>
-            <td>
-              <v-btn
+            <td class="text-end">
+              <Button
                 v-if="canReverse(transaction)"
                 icon="mdi-undo"
                 size="small"
-                variant="text"
-                :aria-label="`Reverse ${transaction.ledger_label ?? displayIdentifier(transaction.ledger)} transaction`"
+                text
+                :aria-label="`Reverse ${transaction.ledger_label ?? displayTransactionIdentifier(transaction.ledger)} transaction`"
                 @click="reversing = transaction"
               />
             </td>
           </tr>
         </tbody>
-      </v-table>
-    </v-card>
-    <v-dialog
-      :model-value="Boolean(reversing)"
-      max-width="480"
-      @update:model-value="
-        (open) => {
+      </table>
+    </section>
+    <Dialog
+      :visible="Boolean(reversing)"
+      modal
+      :style="{ width: 'min(30rem, calc(100vw - 2rem))' }"
+      @update:visible="
+        (open: boolean) => {
           if (!open) {
             reversing = undefined;
           }
         }
       "
     >
-      <v-card title="Reverse transaction">
-        <v-card-text>
+      <section
+        class="d-grid gap-3"
+        aria-labelledby="reverse-transaction-heading"
+      >
+        <h2
+          id="reverse-transaction-heading"
+          class="h3"
+        >
+          Reverse transaction
+        </h2>
+        <p class="mb-0">
           This creates the final compensating entry. The original remains in history.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="reversing = undefined">Cancel</v-btn>
-          <v-btn
-            color="error"
+        </p>
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            label="Cancel"
+            severity="secondary"
+            outlined
+            @click="reversing = undefined"
+          />
+          <Button
+            severity="danger"
+            label="Reverse"
             @click="reverse"
-          >
-            Reverse
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-container>
+          />
+        </footer>
+      </section>
+    </Dialog>
+  </section>
 </template>
+
+<script lang="ts">
+import Button from "primevue/button";
+import Dialog from "primevue/dialog";
+import Message from "primevue/message";
+import { defineComponent } from "vue";
+import {
+  getCampaign,
+  getTransactions,
+  reverseTransaction,
+  type Campaign,
+  type LedgerTransaction,
+} from "../api";
+import { campaignRefreshRevision } from "../realtime";
+import { displayCoin, displayIdentifier } from "../display";
+
+export default defineComponent({
+  components: { Button, Dialog, Message },
+  data() {
+    return {
+      campaign: undefined as Campaign | undefined,
+      transactions: [] as LedgerTransaction[],
+      error: "",
+      reversing: undefined as LedgerTransaction | undefined,
+    };
+  },
+  computed: {
+    campaignId(): number {
+      return Number(this.$route.params.id);
+    },
+    campaignRefresh(): number {
+      return campaignRefreshRevision.value;
+    },
+  },
+  watch: {
+    campaignRefresh(): void {
+      void this.load();
+    },
+  },
+  mounted() {
+    void this.load();
+  },
+  methods: {
+    displayTransactionIdentifier(value: string): string {
+      return displayIdentifier(value);
+    },
+    names(transaction: LedgerTransaction, positive: boolean): string {
+      return [
+        ...new Set(
+          transaction.entries
+            .filter((entry) => (positive ? entry.amount > 0 : entry.amount < 0))
+            .map((entry) => entry.account_name),
+        ),
+      ].join(", ");
+    },
+
+    amount(transaction: LedgerTransaction): string {
+      if (transaction.ledger === "health") {
+        return [
+          transaction.current_hp_delta
+            ? `${transaction.current_hp_delta > 0 ? "+" : ""}${transaction.current_hp_delta} HP`
+            : "",
+          transaction.temporary_hp_delta
+            ? `${transaction.temporary_hp_delta > 0 ? "+" : ""}${transaction.temporary_hp_delta} temp HP`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+      }
+      if (transaction.ledger === "character") {
+        return `${Object.keys(transaction.changes ?? {}).length} field changes`;
+      }
+      if (transaction.ledger.startsWith("audit.")) {
+        return `${Object.keys(transaction.changes ?? {}).length} recorded changes`;
+      }
+      return transaction.entries
+        .filter((entry) => entry.amount > 0)
+        .map(
+          (entry) =>
+            `${entry.amount} ${entry.item_name ?? (entry.denomination ? displayCoin(entry.denomination) : "XP")}`,
+        )
+        .join(" · ");
+    },
+
+    typeIcon(transaction: LedgerTransaction): string {
+      return (
+        {
+          experience: "mdi-star-four-points",
+          money: "mdi-cash-multiple",
+          inventory: "mdi-package-variant",
+          health: "mdi-heart-pulse",
+          character: "mdi-account-edit-outline",
+        }[transaction.ledger] ?? "mdi-book-open-variant"
+      );
+    },
+
+    canReverse(transaction: LedgerTransaction): boolean {
+      return Boolean(
+        this.campaign?.is_game_master &&
+        ["inventory", "money", "experience"].includes(transaction.ledger) &&
+        !transaction.is_reversed &&
+        !transaction.reversal_of_id,
+      );
+    },
+
+    async load(): Promise<void> {
+      try {
+        const [next, history] = await Promise.all([
+          getCampaign(this.campaignId),
+          getTransactions(this.campaignId),
+        ]);
+        this.campaign = next;
+        this.transactions = history.results;
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to load ledger.";
+      }
+    },
+
+    async reverse(): Promise<void> {
+      if (!this.reversing) {
+        return;
+      }
+      try {
+        await reverseTransaction(this.campaignId, this.reversing);
+        this.reversing = undefined;
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to reverse transaction.";
+      }
+    },
+  },
+});
+</script>

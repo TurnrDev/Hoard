@@ -1,37 +1,49 @@
-<script setup lang="ts">
-import { computed, ref, watch } from "vue";
+<script lang="ts">
+import { defineComponent, type PropType } from "vue";
+import Select from "primevue/select";
 import type { Character } from "../api";
 
-const props = defineProps<{ characters: Character[] }>();
-const emit = defineEmits<{ selected: [characterId: number | undefined] }>();
-const selectedId = ref<number>();
-
-const options = computed(() =>
-  props.characters.map((character) => ({
-    title: character.name,
-    value: character.id,
-  })),
-);
-
-watch(
-  () => props.characters,
-  (characters) => {
-    if (!characters.some((character) => character.id === selectedId.value)) {
-      selectedId.value = characters[0]?.id;
-    }
-    emit("selected", selectedId.value);
+export default defineComponent({
+  components: { Select },
+  props: { characters: { type: Array as PropType<Character[]>, required: true } },
+  emits: ["selected"],
+  data() {
+    return { selectedId: undefined as number | undefined };
   },
-  { immediate: true },
-);
-watch(selectedId, (characterId) => emit("selected", characterId));
+  computed: {
+    options(): Array<{ label: string; value: number }> {
+      return this.characters.map((character) => ({
+        label: character.name,
+        value: character.id,
+      }));
+    },
+  },
+  watch: {
+    characters: {
+      immediate: true,
+      handler(characters: Character[]): void {
+        if (!characters.some((character) => character.id === this.selectedId)) {
+          this.selectedId = characters[0]?.id;
+        }
+        this.$emit("selected", this.selectedId);
+      },
+    },
+    selectedId(characterId: number | undefined): void {
+      this.$emit("selected", characterId);
+    },
+  },
+});
 </script>
 
 <template>
-  <v-select
-    v-model="selectedId"
-    :items="options"
-    item-title="title"
-    item-value="value"
-    label="Character"
-  />
+  <label class="d-grid gap-2">
+    <span class="fw-semibold">Character</span>
+    <Select
+      v-model="selectedId"
+      :options="options"
+      option-label="label"
+      option-value="value"
+      fluid
+    />
+  </label>
 </template>

@@ -176,6 +176,8 @@ USE_TZ: bool = True
 STATIC_URL: str = "static/"
 STATICFILES_DIRS: list[Path] = [FRONTEND_DIST_DIR]
 STATIC_ROOT: Path = BASE_DIR / "staticfiles"
+MEDIA_URL: str = "media/"
+MEDIA_ROOT: Path = BASE_DIR / "media"
 
 DJANGO_VITE: dict[str, dict[str, object]] = {
     "default": {
