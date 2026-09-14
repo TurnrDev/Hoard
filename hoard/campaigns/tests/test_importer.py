@@ -126,9 +126,7 @@ class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
 
     def test_commit_allows_field_overrides_and_preserving_sheet_sections(self) -> None:
         source = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"
-        CharacterNote.objects.create(
-            character=self.character, title="Keep", body="Existing note"
-        )
+        CharacterNote.objects.create(character=self.character, body="Existing note")
         begun = self.socket_request(
             self.context.user,
             self.context.pk,
@@ -163,5 +161,6 @@ class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(self.character.background, "")
         self.assertEqual(self.character.languages, ["Common", "Choose 1"])
         self.assertEqual(
-            list(self.character.notes.values_list("title", flat=True)), ["Keep"]
+            list(self.character.notes.values_list("body", flat=True)),
+            ["Existing note"],
         )

@@ -101,7 +101,6 @@ describe("API client", () => {
 
   it("creates, updates, and removes character notes over the context socket", async () => {
     await changeCharacterSheetRecord(8, 2, "notes", "create", {
-      title: "Plans",
       body: "Visit the old mill.",
     });
     await changeCharacterSheetRecord(
@@ -110,7 +109,6 @@ describe("API client", () => {
       "notes",
       "update",
       {
-        title: "New plans",
         body: "Avoid the old mill.",
       },
       17,
@@ -120,14 +118,12 @@ describe("API client", () => {
     expect(campaignRequest).toHaveBeenNthCalledWith(1, "characters.notes.create", {
       character_id: 2,
       fields: {
-        title: "Plans",
         body: "Visit the old mill.",
       },
     });
     expect(campaignRequest).toHaveBeenNthCalledWith(2, "characters.notes.update", {
       character_id: 2,
       fields: {
-        title: "New plans",
         body: "Avoid the old mill.",
       },
       record_id: 17,

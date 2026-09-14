@@ -926,21 +926,6 @@
 
                 <div class="mb-3">
                   <label
-                    for="note-title"
-                    class="form-label"
-                  >
-                    Title
-                  </label>
-                  <InputText
-                    id="note-title"
-                    v-model="noteTitle"
-                    class="w-100"
-                    autocomplete="off"
-                  />
-                </div>
-
-                <div class="mb-3">
-                  <label
                     for="note-body"
                     class="form-label"
                   >
@@ -953,6 +938,7 @@
                     rows="5"
                     auto-resize
                   />
+                  <div class="form-text">Markdown formatting is supported.</div>
                 </div>
 
                 <div class="d-flex flex-wrap justify-content-end gap-2">
@@ -979,15 +965,16 @@
                 class="list-group list-group-flush"
               >
                 <li
-                  v-for="note in character.notes"
+                  v-for="(note, noteIndex) in character.notes"
                   :key="note.id"
                   class="list-group-item bg-transparent px-0 py-3"
                 >
                   <article>
-                    <header
-                      class="d-flex align-items-start justify-content-between gap-3 mb-2"
-                    >
-                      <h3 class="h6 mb-0">{{ note.title || "Note" }}</h3>
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                      <MarkdownContent
+                        :source="note.body"
+                        class="flex-grow-1 overflow-hidden"
+                      />
                       <div
                         v-if="ownCharacter"
                         class="d-flex flex-shrink-0 gap-1"
@@ -998,7 +985,7 @@
                           text
                           rounded
                           size="small"
-                          :aria-label="`Edit ${note.title || 'note'}`"
+                          :aria-label="`Edit note ${noteIndex + 1}`"
                           :disabled="noteEditorOpen || noteBusy"
                           @click="startEditingNote(note)"
                         />
@@ -1008,18 +995,12 @@
                           text
                           rounded
                           size="small"
-                          :aria-label="`Remove ${note.title || 'note'}`"
+                          :aria-label="`Remove note ${noteIndex + 1}`"
                           :disabled="noteEditorOpen || noteBusy"
                           @click="askToRemoveNote(note)"
                         />
                       </div>
-                    </header>
-                    <p
-                      v-if="note.body"
-                      class="mb-0 sheet-copy"
-                    >
-                      {{ note.body }}
-                    </p>
+                    </div>
                   </article>
                 </li>
               </ul>
@@ -1320,11 +1301,7 @@
       :style="{ width: 'min(30rem, calc(100vw - 2rem))' }"
       @update:visible="closeNoteRemovalWhenClosed"
     >
-      <p class="mb-4">
-        Remove
-        <strong>{{ noteToRemove?.title || "this note" }}</strong>
-        ? This cannot be undone.
-      </p>
+      <p class="mb-4">Remove this note? This cannot be undone.</p>
       <footer class="d-flex flex-wrap justify-content-end gap-2">
         <Button
           label="Cancel"
@@ -1967,6 +1944,7 @@ import CharacterAvatar from "../components/CharacterAvatar.vue";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import ConditionManager from "../components/ConditionManager.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
+import MarkdownContent from "../components/MarkdownContent.vue";
 import PlayerEncounterActions from "../components/PlayerEncounterActions.vue";
 import SheetDisclosure from "../components/SheetDisclosure.vue";
 import { displayCoin, displayIdentifier, formatCoinPouch } from "../display";
@@ -2047,6 +2025,7 @@ export default defineComponent({
     CalculationBreakdown,
     CharacterAvatar,
     ItemPickerDialog,
+    MarkdownContent,
     PlayerEncounterActions,
     SheetDisclosure,
   },
@@ -2104,7 +2083,6 @@ export default defineComponent({
       effectValue: 0,
       noteEditorOpen: false,
       editingNoteId: undefined as number | undefined,
-      noteTitle: "",
       noteBody: "",
       noteBusy: false,
       noteRemoveOpen: false,
@@ -2277,7 +2255,7 @@ export default defineComponent({
       return this.ownCharacter || Boolean(this.campaign?.is_game_master);
     },
     noteIsEmpty(): boolean {
-      return !this.noteTitle.trim() && !this.noteBody.trim();
+      return !this.noteBody.trim();
     },
     canDamage(): boolean {
       const sheet = this.character?.sheet;
@@ -2665,13 +2643,11 @@ export default defineComponent({
     },
     startAddingNote(): void {
       this.editingNoteId = undefined;
-      this.noteTitle = "";
       this.noteBody = "";
       this.noteEditorOpen = true;
     },
     startEditingNote(note: CharacterNote): void {
       this.editingNoteId = note.id;
-      this.noteTitle = note.title;
       this.noteBody = note.body;
       this.noteEditorOpen = true;
     },
@@ -2682,7 +2658,6 @@ export default defineComponent({
 
       this.noteEditorOpen = false;
       this.editingNoteId = undefined;
-      this.noteTitle = "";
       this.noteBody = "";
     },
     async saveNote(): Promise<void> {
@@ -2701,14 +2676,12 @@ export default defineComponent({
           "notes",
           operation,
           {
-            title: this.noteTitle.trim(),
             body: this.noteBody.trim(),
           },
           this.editingNoteId,
         );
         this.noteEditorOpen = false;
         this.editingNoteId = undefined;
-        this.noteTitle = "";
         this.noteBody = "";
         this.showSuccess(operation === "create" ? "Note added." : "Note updated.");
         await this.load();

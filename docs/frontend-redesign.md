@@ -710,13 +710,15 @@ PartyRail is a live campaign roster with two explicit modes.
   instead of legacy page classes and handles failed context queries explicitly,
   and invitation registration provides username, email, and password-manager
   autocomplete metadata.
-- 2026-09-14: made character notes manageable from the playable profile. Owners
-  can add or edit a titled multiline note inline, cancel an unfinished edit, and
-  remove a note through an explicit confirmation. Notes are private player data:
-  only the owning PC context receives or mutates them, including when the same
-  campaign is viewed by its game master. All note mutations use the existing
-  WebSocket sheet-record commands, refresh from shared campaign state, and
-  report successful outcomes through Toasts.
+- 2026-09-14: made character notes manageable from the playable profile. Notes
+  are body-only Markdown records rather than titled documents. Owners can add or
+  edit a multiline note inline, cancel an unfinished edit, and remove a note
+  through an explicit confirmation. Rendered Markdown is sanitized before being
+  inserted into the page. Notes are private player data: only the owning PC
+  context receives or mutates them, including when the same campaign is viewed
+  by its game master. All note mutations use the existing WebSocket sheet-record
+  commands, refresh from shared campaign state, and report successful outcomes
+  through Toasts.
 
 ## Open questions
 

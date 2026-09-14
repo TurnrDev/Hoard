@@ -19,6 +19,8 @@
     "@primeuix/themes": "^2.0.3",
     "axios": "^1.20.0",
     "bootstrap": "^5.3.8",
+    "dompurify": "^3.4.15",
+    "marked": "^18.0.13",
     "primevue": "^4.5.5",
     "reconnecting-websocket": "^4.4.0",
     "uuid": "^14.0.2",

@@ -244,12 +244,12 @@ def parse_cah(raw: bytes) -> CahPreview:
     notes = []
     about = source.get("about")
     if isinstance(about, str) and about.strip():
-        notes.append({"title": "About", "body": about, "raw": {"about": about}})
+        notes.append({"body": about, "raw": {"about": about}})
     for note in _list(source.get("notes")):
         row = _dict(note)
         body = row.get("text")
         if isinstance(body, str) and body.strip():
-            notes.append({"title": "", "body": body, "raw": row})
+            notes.append({"body": body, "raw": row})
     spells = [
         entry
         for value in _list(source.get("spells"))

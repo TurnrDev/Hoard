@@ -164,7 +164,6 @@ class CahCommit(Schema):
 
 class SheetRecord(Schema):
     name: str = ""
-    title: str = ""
     body: str = ""
     description: str = ""
     notes: str = ""
@@ -814,7 +813,7 @@ def _character_data(
         ],
         "notes": (
             [
-                {"id": note.pk, "title": note.title, "body": note.body}
+                {"id": note.pk, "body": note.body}
                 for note in character.notes.all()
             ]
             if notes_are_visible
@@ -1199,10 +1198,8 @@ def _enabled_entry(campaign: Campaign, entry_id: int | None, kind: str | None = 
 @contexts.post("/{context_id}/characters/{character_id}/notes/", response={201: dict})
 def note_create(request, context_id: int, character_id: int, payload: SheetRecord):
     character = notes_character(_context_access(request, context_id), character_id)
-    note = CharacterNote.objects.create(
-        character=character, title=payload.title, body=payload.body
-    )
-    return 201, {"id": note.pk, "title": note.title, "body": note.body}
+    note = CharacterNote.objects.create(character=character, body=payload.body)
+    return 201, {"id": note.pk, "body": note.body}
 
 
 @contexts.post(
@@ -1503,11 +1500,10 @@ def note_update(
 ):
     context = _context_access(request, context_id)
     note = note_record(context, character_id, record_id)
-    for field in ("title", "body"):
-        if field in payload.model_fields_set:
-            setattr(note, field, getattr(payload, field))
+    if "body" in payload.model_fields_set:
+        note.body = payload.body
     note.save()
-    return {"id": note.pk, "title": note.title, "body": note.body}
+    return {"id": note.pk, "body": note.body}
 
 
 @contexts.delete(
@@ -1824,9 +1820,7 @@ def cah_commit(request, context_id: int, payload: CahCommit):
             target.notes.all().delete()
             CharacterNote.objects.bulk_create(
                 [
-                    CharacterNote(
-                        character=target, title=row["title"], body=row["body"]
-                    )
+                    CharacterNote(character=target, body=row["body"])
                     for row in draft["collections"]["notes"]
                 ]
             )

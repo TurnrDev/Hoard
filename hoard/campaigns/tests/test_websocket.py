@@ -338,7 +338,6 @@ class ContextSocketTests(TransactionTestCase):
         )
         note = CharacterNote.objects.create(
             character=character,
-            title="Secret",
             body="The game master must not receive this.",
         )
 
@@ -379,7 +378,6 @@ class ContextSocketTests(TransactionTestCase):
             [
                 {
                     "id": note.pk,
-                    "title": "Secret",
                     "body": "The game master must not receive this.",
                 }
             ],

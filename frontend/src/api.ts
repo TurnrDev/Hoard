@@ -151,7 +151,6 @@ export type CharacterInventoryItem = {
 
 export type CharacterNote = {
   id: number;
-  title: string;
   body: string;
 };
 
