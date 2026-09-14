@@ -10,6 +10,8 @@
     v-else
     class="campaign-shell min-vh-100"
   >
+    <Toast :position="toastPosition" />
+
     <a
       class="visually-hidden-focusable skip-link border bg-body text-body px-3 py-2"
       href="#main-content"
@@ -157,6 +159,7 @@ import Drawer from "primevue/drawer";
 import type { MenuItem } from "primevue/menuitem";
 import Message from "primevue/message";
 import TieredMenu from "primevue/tieredmenu";
+import Toast from "primevue/toast";
 import { defineComponent } from "vue";
 import {
   getCampaign,
@@ -187,6 +190,7 @@ import {
   readThemePreferences,
   type ThemePreferences,
 } from "./theme";
+import { alertCurrentTurn } from "./turnAlert";
 
 export default defineComponent({
   components: {
@@ -197,6 +201,7 @@ export default defineComponent({
     PartyRail,
     Button,
     TieredMenu,
+    Toast,
   },
   data() {
     const themePreferences = readThemePreferences();
@@ -216,11 +221,16 @@ export default defineComponent({
       unsubscribeCampaignReconnect: undefined as (() => void) | undefined,
       unsubscribeCampaignPresence: undefined as (() => void) | undefined,
       presenceSweepTimer: undefined as number | undefined,
+      observedCurrentCombatantId: undefined as number | null | undefined,
+      phoneViewport: false,
     };
   },
   computed: {
     contextId(): number {
       return Number(this.$route.params.id);
+    },
+    toastPosition(): "bottom-center" | "bottom-right" {
+      return this.phoneViewport ? "bottom-center" : "bottom-right";
     },
     isPublicRoute(): boolean {
       return this.$route.path === "/login" || this.$route.path.startsWith("/invites/");
@@ -340,10 +350,13 @@ export default defineComponent({
     },
   },
   mounted(): void {
+    this.updateViewportMode();
+    window.addEventListener("resize", this.updateViewportMode);
     this.presenceSweepTimer = window.setInterval(this.expireStalePresence, 10_000);
     void this.loadContexts();
   },
   beforeUnmount(): void {
+    window.removeEventListener("resize", this.updateViewportMode);
     this.unsubscribeCampaignChanges?.();
     this.unsubscribeCampaignReconnect?.();
     this.unsubscribeCampaignPresence?.();
@@ -355,6 +368,9 @@ export default defineComponent({
   methods: {
     contextPath,
     formatCampaignDate,
+    updateViewportMode(): void {
+      this.phoneViewport = window.matchMedia("(max-width: 767.98px)").matches;
+    },
     toggleAccountMenu(event: Event): void {
       const menu = this.$refs.accountMenu as { toggle: (event: Event) => void };
 
@@ -399,12 +415,40 @@ export default defineComponent({
     async refreshCampaignChrome(context: ActingContext): Promise<void> {
       try {
         const campaign = await getCampaign(context.id);
+        const currentCombatantId = campaign.encounter?.current_combatant_id ?? null;
+        const shouldAlertCurrentPlayer =
+          this.observedCurrentCombatantId !== undefined &&
+          currentCombatantId !== null &&
+          currentCombatantId !== this.observedCurrentCombatantId &&
+          context.kind === "pc" &&
+          campaign.encounter?.combatants.some(
+            (combatant) =>
+              combatant.id === currentCombatantId &&
+              combatant.character_id === context.character_id,
+          );
 
         this.campaign = campaign;
+        this.observedCurrentCombatantId = currentCombatantId;
         this.members = campaign.members;
         this.incompleteLevelUps = campaign.incomplete_level_ups.map(
           (levelUp) => levelUp.character_name,
         );
+
+        if (shouldAlertCurrentPlayer) {
+          alertCurrentTurn();
+          const currentCombatant = campaign.encounter?.combatants.find(
+            (combatant) => combatant.id === currentCombatantId,
+          );
+
+          this.$toast.add({
+            severity: "info",
+            summary: "Your turn",
+            detail: currentCombatant
+              ? `${currentCombatant.name} is up.`
+              : "Your initiative is current.",
+            life: 5_000,
+          });
+        }
       } catch {
         this.campaign = undefined;
         this.members = [];
@@ -470,6 +514,7 @@ export default defineComponent({
       this.campaign = undefined;
       this.members = [];
       this.incompleteLevelUps = [];
+      this.observedCurrentCombatantId = undefined;
 
       if (!context) {
         disconnectCampaignRealtime();

@@ -61,7 +61,9 @@ from .payloads import (
     EncounterCharacterAddCommand,
     EncounterCombatantAddCommand,
     EncounterCombatantIdentifierCommand,
+    EncounterCombatantReorderCommand,
     EncounterCombatantUpdateCommand,
+    EncounterCurrentCombatantCommand,
 )
 from .protocol import (
     CommandAcknowledgementEnvelope,
@@ -94,8 +96,10 @@ from .services import (
     remove_character_condition,
     remove_combatant,
     remove_combatant_condition,
+    reorder_combatants,
     set_character_condition,
     set_combatant_condition,
+    set_current_combatant,
     start_encounter,
     update_combatant,
 )
@@ -440,7 +444,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.encounter.combatants.add_character": self.combatant_add_character,
             "campaign.encounter.combatants.add": self.combatant_add,
             "campaign.encounter.combatants.update": self.combatant_update,
+            "campaign.encounter.combatants.reorder": self.combatant_reorder,
             "campaign.encounter.combatants.remove": self.combatant_remove,
+            "campaign.encounter.current.set": self.encounter_current_set,
             "campaign.encounter.conditions.set": self.combatant_condition_set,
             "campaign.encounter.conditions.remove": self.combatant_condition_remove,
             "characters.conditions.set": self.character_condition_set,
@@ -696,7 +702,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.encounter.combatants.add_character",
             "campaign.encounter.combatants.add",
             "campaign.encounter.combatants.update",
+            "campaign.encounter.combatants.reorder",
             "campaign.encounter.combatants.remove",
+            "campaign.encounter.current.set",
             "campaign.encounter.conditions.set",
             "campaign.encounter.conditions.remove",
             "characters.conditions.set",
@@ -864,6 +872,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             context,
             command.character_id,
             command.initiative,
+            command.show_hp_bar,
+            command.show_hp_numbers,
         )
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
@@ -883,10 +893,24 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
     @database_sync_to_async
+    def combatant_reorder(self, content: dict[str, object]) -> None:
+        command = EncounterCombatantReorderCommand.model_validate(content)
+        context = self._context()
+        reorder_combatants(context, command.combatant_ids)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
     def combatant_remove(self, content: dict[str, object]) -> None:
         command = EncounterCombatantIdentifierCommand.model_validate(content)
         context = self._context()
         remove_combatant(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def encounter_current_set(self, content: dict[str, object]) -> None:
+        command = EncounterCurrentCombatantCommand.model_validate(content)
+        context = self._context()
+        set_current_combatant(context, command.combatant_id)
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
     @database_sync_to_async

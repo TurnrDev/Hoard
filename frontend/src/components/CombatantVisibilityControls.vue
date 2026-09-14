@@ -1,49 +1,65 @@
 <template>
-  <fieldset class="party-rail__visibility-controls">
+  <fieldset>
     <legend class="visually-hidden">{{ combatant.name }} visibility</legend>
-    <div class="d-flex flex-column gap-2">
-      <label class="d-flex align-items-center gap-2 small">
-        <Checkbox
-          :model-value="combatant.show_hp_bar"
-          binary
-          @update:model-value="updateHpBar"
-        />
-        <span>Show HP bar</span>
-      </label>
-      <label class="d-flex align-items-center gap-2 small">
-        <Checkbox
-          :model-value="combatant.show_hp_numbers"
-          binary
-          @update:model-value="updateHpNumbers"
-        />
-        <span>Show HP numbers</span>
-      </label>
+    <div class="d-flex gap-1">
+      <Button
+        type="button"
+        icon="mdi mdi-heart-pulse"
+        size="small"
+        rounded
+        :outlined="!combatant.show_hp_bar"
+        :severity="combatant.show_hp_bar ? 'success' : 'secondary'"
+        :aria-pressed="combatant.show_hp_bar"
+        :aria-label="hpBarLabel"
+        :title="hpBarLabel"
+        @click="updateHpBar"
+      />
+      <Button
+        type="button"
+        icon="mdi mdi-numeric"
+        size="small"
+        rounded
+        :outlined="!combatant.show_hp_numbers"
+        :severity="combatant.show_hp_numbers ? 'success' : 'secondary'"
+        :aria-pressed="combatant.show_hp_numbers"
+        :aria-label="hpNumbersLabel"
+        :title="hpNumbersLabel"
+        @click="updateHpNumbers"
+      />
     </div>
   </fieldset>
 </template>
 
 <script lang="ts">
+import Button from "primevue/button";
 import { defineComponent, type PropType } from "vue";
-import Checkbox from "primevue/checkbox";
 import type { PartyRailCombatant } from "./partyRailTypes";
 
 export default defineComponent({
-  components: { Checkbox },
+  components: { Button },
   props: {
     combatant: { type: Object as PropType<PartyRailCombatant>, required: true },
   },
   emits: ["update-visibility"],
+  computed: {
+    hpBarLabel(): string {
+      return `${this.combatant.show_hp_bar ? "Hide" : "Show"} ${this.combatant.name} HP bar to players`;
+    },
+    hpNumbersLabel(): string {
+      return `${this.combatant.show_hp_numbers ? "Hide" : "Show"} ${this.combatant.name} HP numbers to players`;
+    },
+  },
   methods: {
-    updateHpBar(showHpBar: boolean): void {
+    updateHpBar(): void {
       this.$emit("update-visibility", {
         combatantId: this.combatant.id,
-        show_hp_bar: showHpBar,
+        show_hp_bar: !this.combatant.show_hp_bar,
       });
     },
-    updateHpNumbers(showHpNumbers: boolean): void {
+    updateHpNumbers(): void {
       this.$emit("update-visibility", {
         combatantId: this.combatant.id,
-        show_hp_numbers: showHpNumbers,
+        show_hp_numbers: !this.combatant.show_hp_numbers,
       });
     },
   },

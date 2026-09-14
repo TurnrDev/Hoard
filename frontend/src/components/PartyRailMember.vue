@@ -1,76 +1,26 @@
 <template>
-  <li
-    class="party-rail__entry party-rail__entry--character align-items-center"
-    :class="[
-      `party-rail__entry--${healthState}`,
-      { 'party-rail__entry--has-conditions': character.conditions.length },
-    ]"
-  >
-    <OverlayBadge
-      :value="connected ? '✓' : '○'"
-      :severity="connected ? 'success' : 'secondary'"
-      :aria-label="`${label} — ${connected ? 'Connected' : 'Offline'}`"
-    >
-      <CharacterAvatar
-        class="party-rail__avatar"
-        :character="character"
-        size="rail"
-      />
-    </OverlayBadge>
-    <div
-      v-if="expanded"
-      class="party-rail__character-details"
-    >
-      <span class="party-rail__entry-name d-block text-truncate">{{ label }}</span>
-      <span class="visually-hidden">— {{ connected ? "Connected" : "Offline" }}</span>
-      <ConditionIndicators
-        v-if="character.conditions.length"
-        class="my-1"
-        :combatant-name="label"
-        :conditions="character.conditions"
-        expanded
-      />
-      <span class="d-block text-truncate small text-body-secondary tabular-nums">
-        {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }} HP
-      </span>
-      <ProgressBar
-        :value="healthPercentage"
-        :show-value="false"
-        :aria-label="`${label} health: ${character.sheet.current_hp} of ${character.sheet.max_hp}`"
-      />
-    </div>
-    <ProgressBar
-      v-else
-      class="party-rail__compact-health"
-      :value="healthPercentage"
-      :show-value="false"
-      :aria-label="`${label} health: ${character.sheet.current_hp} of ${character.sheet.max_hp}`"
-    />
-    <ConditionIndicators
-      v-if="!expanded && character.conditions.length"
-      class="justify-content-center"
-      :combatant-name="label"
-      :conditions="character.conditions"
-    />
-  </li>
+  <PartyRailEntry
+    class="party-rail__entry--character"
+    :name="label"
+    :portrait-url="character.portrait_url"
+    :conditions="character.conditions"
+    :connected="connected"
+    show-presence
+    :expanded="expanded"
+    :current-hp="character.sheet.current_hp"
+    :max-hp="character.sheet.max_hp"
+    :health-percentage="healthPercentage"
+  />
 </template>
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import OverlayBadge from "primevue/overlaybadge";
-import ProgressBar from "primevue/progressbar";
 import type { Character } from "../api";
 import type { ActingContext } from "../context";
-import CharacterAvatar from "./CharacterAvatar.vue";
-import ConditionIndicators from "./ConditionIndicators.vue";
+import PartyRailEntry from "./PartyRailEntry.vue";
 
 export default defineComponent({
-  components: {
-    CharacterAvatar,
-    ConditionIndicators,
-    OverlayBadge,
-    ProgressBar,
-  },
+  components: { PartyRailEntry },
   props: {
     character: { type: Object as PropType<Character>, required: true },
     activeContext: { type: Object as PropType<ActingContext>, required: true },
@@ -99,17 +49,6 @@ export default defineComponent({
           (this.character.sheet.current_hp / this.character.sheet.max_hp) * 100,
         ),
       );
-    },
-    healthState(): "critical" | "wounded" | "healthy" {
-      if (this.healthPercentage <= 25) {
-        return "critical";
-      }
-
-      if (this.healthPercentage <= 60) {
-        return "wounded";
-      }
-
-      return "healthy";
     },
   },
 });

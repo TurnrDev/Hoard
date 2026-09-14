@@ -244,6 +244,11 @@ Do not expand already-clear expressions merely for the sake of verbosity.
 
 ## Frontend accessibility baseline
 
+- Use PrimeVue Toast as the standard presentation for transient alerts,
+  confirmations, and asynchronous command outcomes. Keep Message for persistent
+  page state, inline guidance, and validation that must remain visible in context.
+  Toasts must use concise text and an appropriate non-colour icon/severity cue.
+
 - Target WCAG 2.2 AA. Do not use colour as the only indication of state, meaning, or
   destructive actions; pair it with clear text, an icon, pattern, or another cue.
 - Use native semantic HTML whenever possible. Data tables need a caption, `th` cells

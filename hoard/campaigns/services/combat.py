@@ -79,6 +79,8 @@ def add_character_combatant(
     context: CampaignContext,
     character_id: int,
     initiative: int,
+    show_hp_bar: bool = False,
+    show_hp_numbers: bool = False,
 ) -> EncounterCombatant:
     """Add an existing campaign character to the active encounter."""
     require_game_master(context)
@@ -97,8 +99,8 @@ def add_character_combatant(
         character=character,
         name=character.name,
         initiative=initiative,
-        show_hp_bar=character.is_player_character,
-        show_hp_numbers=character.is_player_character,
+        show_hp_bar=character.is_player_character or show_hp_bar,
+        show_hp_numbers=character.is_player_character or show_hp_numbers,
     )
 
     return combatant
@@ -203,6 +205,66 @@ def update_combatant(
         combatant.save(update_fields=tuple(updates))
 
     return combatant
+
+
+def set_current_combatant(
+    context: CampaignContext,
+    combatant_id: int | None,
+) -> Encounter:
+    """Set the active encounter's current initiative entry, or clear it."""
+    require_game_master(context)
+    encounter = active_encounter(context)
+
+    if combatant_id is None:
+        encounter.current_combatant = None
+    else:
+        combatant = encounter_combatant(context, combatant_id)
+        encounter.current_combatant = combatant
+
+    encounter.save(update_fields=("current_combatant",))
+
+    return encounter
+
+
+@transaction.atomic
+def reorder_combatants(
+    context: CampaignContext,
+    combatant_ids: list[int],
+) -> list[EncounterCombatant]:
+    """Reassign initiative values to persist the supplied combatant order."""
+    require_game_master(context)
+    encounter = active_encounter(context)
+    combatants = list(
+        encounter.combatants.select_for_update().filter(pk__in=combatant_ids)
+    )
+    combatants_by_id = {combatant.pk: combatant for combatant in combatants}
+    existing_ids = set(encounter.combatants.values_list("pk", flat=True))
+
+    if set(combatant_ids) != existing_ids:
+        raise ValidationError("Combatant order must include every initiative entry.")
+
+    initiatives = sorted(
+        (combatant.initiative for combatant in combatants),
+        reverse=True,
+    )
+    initiatives_are_unique = len(initiatives) == len(set(initiatives))
+    if not initiatives_are_unique:
+        highest = min(100, max(max(initiatives), -100 + len(initiatives) - 1))
+        initiatives = [highest - index for index in range(len(initiatives))]
+
+    ordered_combatants = [combatants_by_id[combatant_id] for combatant_id in combatant_ids]
+    changed_combatants = []
+    for combatant, initiative in zip(ordered_combatants, initiatives, strict=True):
+        if combatant.initiative == initiative:
+            continue
+
+        combatant.initiative = initiative
+        changed_combatants.append(combatant)
+
+    if changed_combatants:
+        EncounterCombatant.objects.bulk_update(changed_combatants, ("initiative",))
+
+    return ordered_combatants
 
 
 @transaction.atomic
@@ -546,6 +608,7 @@ def encounter_data(context: CampaignContext) -> dict[str, object] | None:
     return {
         "id": encounter.pk,
         "started_at": encounter.started_at.isoformat(),
+        "current_combatant_id": encounter.current_combatant_id,
         "combatants": [
             combatant_data(combatant, is_game_master=is_game_master)
             for combatant in combatants

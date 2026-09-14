@@ -34,14 +34,6 @@
       {{ error }}
     </Message>
     <Message
-      v-if="notice"
-      severity="success"
-      closable
-      @close="clearNoticeWhenClosed(false)"
-    >
-      {{ notice }}
-    </Message>
-    <Message
       v-if="campaign?.incomplete_level_ups.length"
       severity="error"
     >
@@ -94,6 +86,14 @@
         </section>
       </div>
     </div>
+    <GmEncounterControl
+      v-if="campaign"
+      class="mb-5"
+      :campaign="campaign"
+      :characters="characters"
+      :context-id="contextId"
+      @completed="completed"
+    />
     <section
       v-if="campaign"
       aria-labelledby="gm-actions-heading"
@@ -151,6 +151,7 @@ import { formatGoldValue } from "../money";
 import { formatCoinPouch } from "../display";
 import GmCoinForm from "../components/GmCoinForm.vue";
 import GmCalendarCard from "../components/GmCalendarCard.vue";
+import GmEncounterControl from "../components/GmEncounterControl.vue";
 import GmItemForm from "../components/GmItemForm.vue";
 import GmSharedXpForm from "../components/GmSharedXpForm.vue";
 import {
@@ -171,6 +172,7 @@ export default defineComponent({
     ProgressBar,
     GmCoinForm,
     GmCalendarCard,
+    GmEncounterControl,
     GmItemForm,
     GmSharedXpForm,
   },
@@ -180,7 +182,6 @@ export default defineComponent({
       characters: [] as Character[],
       items: [] as Item[],
       error: "",
-      notice: "",
     };
   },
   computed: {
@@ -212,11 +213,6 @@ export default defineComponent({
         this.error = "";
       }
     },
-    clearNoticeWhenClosed(value: boolean): void {
-      if (!value) {
-        this.notice = "";
-      }
-    },
     async load(): Promise<void> {
       try {
         const [nextCampaign, nextCharacters, nextItems] = await Promise.all([
@@ -240,14 +236,22 @@ export default defineComponent({
     },
 
     async completed(message: string): Promise<void> {
-      this.notice = message;
+      this.$toast.add({
+        severity: "success",
+        summary: message,
+        life: 4_000,
+      });
       await this.load();
     },
 
     async approveLevel(): Promise<void> {
       try {
         await approveCampaignLevel(this.contextId);
-        this.notice = "Campaign level approved.";
+        this.$toast.add({
+          severity: "success",
+          summary: "Campaign level approved.",
+          life: 4_000,
+        });
         await this.load();
       } catch (exception) {
         this.error =

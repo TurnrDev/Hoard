@@ -118,6 +118,11 @@ Command validation or execution failures return a correlated `command.error`:
 }
 ```
 
+Frontend clients present transient command outcomes and live-event alerts with
+PrimeVue Toast. Toasts appear at the bottom centre on phones and bottom right on
+larger screens. Persistent errors, validation details, and state that must remain
+available in context use an inline Message instead.
+
 Commands that genuinely start asynchronous work, such as repository imports, may acknowledge acceptance first and later report progress or failure through correlated events.
 
 Ordinary synchronous mutations should not introduce an artificial asynchronous lifecycle.

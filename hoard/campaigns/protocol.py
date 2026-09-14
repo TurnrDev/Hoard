@@ -136,8 +136,10 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.encounter.end",
         "campaign.encounter.combatants.add_character",
         "campaign.encounter.combatants.add",
+        "campaign.encounter.combatants.reorder",
         "campaign.encounter.combatants.update",
         "campaign.encounter.combatants.remove",
+        "campaign.encounter.current.set",
         "campaign.encounter.conditions.set",
         "campaign.encounter.conditions.remove",
         "characters.conditions.set",
@@ -207,7 +209,9 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         EncounterCharacterAddCommand,
         EncounterCombatantAddCommand,
         EncounterCombatantIdentifierCommand,
+        EncounterCombatantReorderCommand,
         EncounterCombatantUpdateCommand,
+        EncounterCurrentCombatantCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
         MemberDeactivationCommand,
@@ -256,10 +260,20 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         kind=OperationKind.COMMAND,
         payload_model=EncounterCombatantUpdateCommand,
     )
+    definitions["campaign.encounter.combatants.reorder"] = OperationDefinition(
+        name="campaign.encounter.combatants.reorder",
+        kind=OperationKind.COMMAND,
+        payload_model=EncounterCombatantReorderCommand,
+    )
     definitions["campaign.encounter.combatants.remove"] = OperationDefinition(
         name="campaign.encounter.combatants.remove",
         kind=OperationKind.COMMAND,
         payload_model=EncounterCombatantIdentifierCommand,
+    )
+    definitions["campaign.encounter.current.set"] = OperationDefinition(
+        name="campaign.encounter.current.set",
+        kind=OperationKind.COMMAND,
+        payload_model=EncounterCurrentCombatantCommand,
     )
     definitions["campaign.encounter.conditions.set"] = OperationDefinition(
         name="campaign.encounter.conditions.set",

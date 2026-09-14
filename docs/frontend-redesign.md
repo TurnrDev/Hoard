@@ -83,8 +83,10 @@ PartyRail
 ├── GameMasterPresence
 ├── PartyRoster (out of combat)
 │   └── PartyRailMember
+│       └── PartyRailEntry
 └── InitiativeTracker (in combat)
     └── InitiativeCombatant
+        ├── PartyRailEntry
         └── CombatantVisibilityControls (GM only)
 ```
 
@@ -100,10 +102,11 @@ the rail for a player context.
 
 On desktop, PartyRail is narrow by default and can expand without navigating
 away from the current page. The compact rail keeps each token/avatar, status
-icon, concise HP state, and initiative position visible. The expanded rail adds
-names, HP numbers, condition names/details, and GM-only combat controls. Use a
-visible labelled toggle with aria-expanded state; it must be keyboard-operable
-and must not depend on hover.
+icon, and concise HP state visible. The expanded rail adds names, HP numbers,
+condition names/details, and GM-only combat controls. Initiative values are
+available only within those GM controls and are not displayed on rail entries.
+Use a visible labelled toggle with aria-expanded state; it must be
+keyboard-operable and must not depend on hover.
 
 ## Application shell
 
@@ -127,8 +130,8 @@ The shell has three columns below the campaign header:
 
 3. Global PartyRail
    - Compact by default. It is a narrow vertical sequence of avatars/tokens with
-     OverlayBadges, compact HP bars, condition icons, and initiative positions
-     during combat.
+     OverlayBadges, compact HP bars, and condition icons. During combat, the same
+     entries are sorted into initiative order without exposing initiative values.
    - The GM is always first and visibly separated from players/combatants.
    - Expanding the rail widens the application-shell column and correspondingly
      reflows the main workspace; it does not open a floating overlay.
@@ -224,6 +227,11 @@ PartyRail is a live campaign roster with two explicit modes.
   the character name and current HP.
 - Player entries show an avatar or initials fallback, connectivity status,
   character name, and HP.
+- A character's first active condition replaces the connectivity OverlayBadge
+  on their avatar so the more urgent play state remains visible in the compact
+  rail. Connectivity remains in the badge's accessible description. Further
+  conditions appear only in the expanded rail, preventing badges from colliding
+  in the compact horizontal and vertical layouts.
 - Use only the presence states the system can report reliably: Connected and
   Offline. Do not infer Away, busy, or similar states from browser visibility.
 - Connectivity comes from the acting context's campaign WebSocket. Connecting
@@ -251,8 +259,19 @@ PartyRail is a live campaign roster with two explicit modes.
 - A character may have more than one position in the initiative order. Those
   entries have independent initiative values but share character-owned HP and
   conditions.
-- Each combatant entry can show a token/avatar, name, initiative position, and
-  applicable health information.
+- The encounter stores the exact initiative entry whose turn is current. The GM
+  can select a turn directly or move backward and forward through the order,
+  including repeated positions for the same character.
+- Highlight the current entry in both the Party Rail and GM encounter controls
+  with an icon and structural emphasis, not colour alone. When a player's own
+  entry becomes current, attempt a short vibration and fall back to a brief tone
+  where browser permissions and device support allow it.
+- GM encounter controls provide quick damage, healing, and condition actions for
+  each combatant. Character health changes retain the normal health ledger;
+  encounter-only health remains transient encounter state.
+- Each combatant entry can show a token/avatar, name, and applicable health
+  information. Initiative values remain GM-only and live in the expanded combat
+  controls rather than the rail presentation.
 - Each combatant entry shows active status-condition icons. Icons must have an
   accessible text equivalent and expose the condition name and relevant details
   on keyboard focus as well as pointer hover.
@@ -351,6 +370,11 @@ PartyRail is a live campaign roster with two explicit modes.
 
 ## Accessibility baseline
 
+- PrimeVue Toast is the standard transient feedback surface for alerts,
+  confirmations, and asynchronous command outcomes. Position Toasts at the
+  bottom centre on phone layouts and bottom right on larger viewports. Reserve
+  Message for persistent page state, inline guidance, and validation that users
+  need to revisit in context.
 - Target WCAG 2.2 AA.
 - Use semantic landmarks, headings, native forms, and native tables whenever
   possible.
@@ -508,6 +532,45 @@ PartyRail is a live campaign roster with two explicit modes.
   out-of-combat application, cause-by-cause editing, and removal. All mutations
   use WebSocket commands and refresh through campaign events; the ledger remains
   the immutable history rather than the source of active state.
+- 2026-09-14: added the GM encounter desk. Starting combat automatically enrols
+  active player characters at initiative 0; the GM can then edit initiative,
+  add repeated character turns, search for Compendium creatures, add generic
+  NPCs, configure player-facing HP visibility, remove initiative entries, and
+  end combat. Encounter lifecycle and participant mutations use WebSocket
+  commands and campaign refresh events.
+- 2026-09-14: unified roster members and initiative combatants around the shared
+  `PartyRailEntry` presentation component. Combat changes ordering and supplies
+  extra participants and GM controls, while the avatar, condition badge, name,
+  and health presentation stay consistent. Numeric initiative remains available
+  only in expanded GM controls and is not displayed in the rail.
+- 2026-09-14: combined character, Compendium creature, and generic NPC enrolment
+  into one encounter form. Selecting an existing character hides the
+  creature-specific fields; leaving it blank reveals creature search, a generic
+  label, and explicit HP. Initiative remains a shared field. Every non-player
+  entry exposes independent player-facing HP bar and HP-number visibility both
+  when it is added and afterward in the GM encounter table; player-character HP
+  remains visible.
+- 2026-09-14: simplified the active encounter list into an automatically saved
+  initiative order. The GM can drag entries or use accessible move-earlier and
+  move-later controls; one atomic WebSocket command persists the resulting
+  order. The initiative number is a compact dialog trigger for entering an
+  exact value. Type and Save columns were removed, and the two NPC health
+  visibility settings are icon toggle buttons with accessible pressed states.
+- 2026-09-14: added explicit current-turn tracking against an exact initiative
+  entry, with direct selection and wrapping previous/next GM controls. The
+  current row and rail entry receive non-colour visual emphasis. Per-combatant
+  shortcuts now expose damage, healing, and condition management; player-owned
+  health uses ledger-backed health commands while encounter-only HP updates the
+  active encounter. Player clients attempt vibration, then a short audio cue,
+  when their own initiative entry becomes current.
+- 2026-09-14: turn alerts now always attempt the short audio cue independently
+  of vibration and also show a five-second PrimeVue Toast. The Toast sits at the
+  bottom centre on phones and bottom right on larger screens. Toast is now the
+  standard transient-alert pattern; persistent contextual information remains a
+  Message.
+- 2026-09-14: GM command confirmations, including combat damage and healing,
+  now use the shell Toast host instead of inserting a full-width success Message
+  into the GM desk layout.
 
 ## Open questions
 

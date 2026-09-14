@@ -2,10 +2,10 @@
   <Avatar
     class="character-avatar flex-shrink-0 overflow-hidden"
     :class="`character-avatar--${size}`"
-    :label="character.portrait_url ? undefined : initials(character.name)"
-    :image="character.portrait_url || undefined"
+    :label="imageUrl ? undefined : initials(displayName)"
+    :image="imageUrl || undefined"
     shape="circle"
-    :aria-label="`${character.name} profile picture`"
+    :aria-label="`${displayName} profile picture`"
   />
 </template>
 
@@ -17,10 +17,23 @@ import type { Character } from "../api";
 export default defineComponent({
   components: { Avatar },
   props: {
-    character: { type: Object as PropType<Character>, required: true },
+    character: { type: Object as PropType<Character>, default: undefined },
+    name: { type: String, default: "" },
+    portraitUrl: {
+      type: String as PropType<string | null>,
+      default: null,
+    },
     size: {
       type: String as PropType<"menu" | "rail" | "preview" | "profile">,
       default: "preview",
+    },
+  },
+  computed: {
+    displayName(): string {
+      return this.character?.name || this.name || "Unknown character";
+    },
+    imageUrl(): string | null {
+      return this.character?.portrait_url || this.portraitUrl;
     },
   },
   methods: {

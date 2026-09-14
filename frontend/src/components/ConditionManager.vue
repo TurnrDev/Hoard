@@ -94,10 +94,14 @@
 
   <Button
     v-else-if="canEdit"
-    label="Conditions"
+    :label="iconOnly ? undefined : 'Conditions'"
     icon="mdi mdi-bandage"
     size="small"
+    :text="iconOnly"
+    :rounded="iconOnly"
     outlined
+    :aria-label="iconOnly ? `Manage ${targetName} conditions` : undefined"
+    :title="iconOnly ? `Manage ${targetName} conditions` : undefined"
     @click="openNewCondition"
   />
 
@@ -228,6 +232,7 @@ export default defineComponent({
     targetId: { type: [Number, String], required: true },
     canEdit: { type: Boolean, default: false },
     triggerOnly: { type: Boolean, default: false },
+    iconOnly: { type: Boolean, default: false },
   },
   emits: ["apply", "remove"],
   data() {

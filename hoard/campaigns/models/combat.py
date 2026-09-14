@@ -21,6 +21,13 @@ class Encounter(models.Model):
         on_delete=models.SET_NULL,
         related_name="started_encounters",
     )
+    current_combatant = models.ForeignKey(
+        "campaigns.EncounterCombatant",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
     is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
@@ -41,7 +48,8 @@ class Encounter(models.Model):
 
         self.is_active = False
         self.ended_at = timezone.now()
-        self.save(update_fields=("is_active", "ended_at"))
+        self.current_combatant = None
+        self.save(update_fields=("is_active", "ended_at", "current_combatant"))
 
     def __str__(self) -> str:
         return f"{self.campaign} encounter {self.pk}"

@@ -170,12 +170,7 @@ select:focus-visible {
   height: 3.75rem;
 }
 
-.party-rail:not(.party-rail--expanded) .party-rail__entry--has-conditions {
-  flex-basis: auto;
-  height: auto;
-}
-
-.party-rail:not(.party-rail--expanded) .party-rail__entry > .p-overlaybadge {
+.party-rail:not(.party-rail--expanded) .party-rail__entry > .position-relative {
   flex: 0 0 2.75rem;
   width: 2.75rem;
   height: 2.75rem;

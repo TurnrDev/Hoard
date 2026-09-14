@@ -263,7 +263,26 @@ export type EncounterCombatant = {
 export type Encounter = {
   id: number;
   started_at: string;
+  current_combatant_id: number | null;
   combatants: EncounterCombatant[];
+};
+
+export type CompendiumSearchEntry = {
+  id: number;
+  name: string;
+  description: string;
+  kind: string;
+  source: string;
+};
+
+export type EncounterCombatantInput = {
+  name: string;
+  creature_entry_id?: number;
+  initiative: number;
+  current_hp?: number;
+  max_hp?: number;
+  show_hp_bar: boolean;
+  show_hp_numbers: boolean;
 };
 
 export type ConditionMutation = {
@@ -1107,6 +1126,83 @@ export function updateEncounterCombatant(
   return contextRequest<void>(contextId, "campaign.encounter.combatants.update", {
     combatant_id: combatantId,
     ...fields,
+  });
+}
+
+export function reorderEncounterCombatants(
+  contextId: number,
+  combatantIds: number[],
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.reorder", {
+    combatant_ids: combatantIds,
+  });
+}
+
+export function setCurrentEncounterCombatant(
+  contextId: number,
+  combatantId: number | null,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.current.set", {
+    combatant_id: combatantId,
+  });
+}
+
+export function startEncounter(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.start");
+}
+
+export function endEncounter(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.end");
+}
+
+export function addCharacterToEncounter(
+  contextId: number,
+  characterId: number,
+  initiative: number,
+  visibility?: {
+    show_hp_bar: boolean;
+    show_hp_numbers: boolean;
+  },
+): Promise<void> {
+  return contextRequest<void>(
+    contextId,
+    "campaign.encounter.combatants.add_character",
+    {
+      character_id: characterId,
+      initiative,
+      ...visibility,
+    },
+  );
+}
+
+export function addEncounterCombatant(
+  contextId: number,
+  combatant: EncounterCombatantInput,
+): Promise<void> {
+  return contextRequest<void>(
+    contextId,
+    "campaign.encounter.combatants.add",
+    combatant,
+  );
+}
+
+export function removeEncounterCombatant(
+  contextId: number,
+  combatantId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.remove", {
+    combatant_id: combatantId,
+  });
+}
+
+export function searchCompendiumEntries(
+  contextId: number,
+  kind: string,
+  query = "",
+): Promise<CompendiumSearchEntry[]> {
+  return contextRequest<CompendiumSearchEntry[]>(contextId, "compendium.search", {
+    kind,
+    query,
   });
 }
 

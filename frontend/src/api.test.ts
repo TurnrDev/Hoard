@@ -1,14 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { campaignRequest, ensureCampaignRealtime } from "./realtime";
 import {
+  addCharacterToEncounter,
+  addEncounterCombatant,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
+  endEncounter,
   initialiseCsrf,
   login,
   removeCharacterCondition,
+  removeEncounterCombatant,
+  reorderEncounterCombatants,
+  setCurrentEncounterCombatant,
   setCharacterCondition,
   setCombatantCondition,
+  startEncounter,
   updateEncounterCombatant,
 } from "./api";
 
@@ -139,5 +146,73 @@ describe("API client", () => {
         show_hp_numbers: false,
       },
     );
+  });
+
+  it("manages the encounter lifecycle over the context socket", async () => {
+    await startEncounter(8);
+    await addCharacterToEncounter(8, 2, 18, {
+      show_hp_bar: true,
+      show_hp_numbers: false,
+    });
+    await addEncounterCombatant(8, {
+      name: "Goblin 2",
+      creature_entry_id: 44,
+      initiative: 12,
+      current_hp: 7,
+      max_hp: 7,
+      show_hp_bar: true,
+      show_hp_numbers: false,
+    });
+    await reorderEncounterCombatants(8, [31, 30]);
+    await setCurrentEncounterCombatant(8, 30);
+    await removeEncounterCombatant(8, 31);
+    await endEncounter(8);
+
+    expect(campaignRequest).toHaveBeenNthCalledWith(1, "campaign.encounter.start", {});
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      2,
+      "campaign.encounter.combatants.add_character",
+      {
+        character_id: 2,
+        initiative: 18,
+        show_hp_bar: true,
+        show_hp_numbers: false,
+      },
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      3,
+      "campaign.encounter.combatants.add",
+      {
+        name: "Goblin 2",
+        creature_entry_id: 44,
+        initiative: 12,
+        current_hp: 7,
+        max_hp: 7,
+        show_hp_bar: true,
+        show_hp_numbers: false,
+      },
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      4,
+      "campaign.encounter.combatants.reorder",
+      {
+        combatant_ids: [31, 30],
+      },
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      5,
+      "campaign.encounter.current.set",
+      {
+        combatant_id: 30,
+      },
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      6,
+      "campaign.encounter.combatants.remove",
+      {
+        combatant_id: 31,
+      },
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(7, "campaign.encounter.end", {});
   });
 });

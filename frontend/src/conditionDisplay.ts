@@ -4,7 +4,7 @@ export const conditionIcons: Record<string, string> = {
   blinded: "mdi-eye-off-outline",
   charmed: "mdi-heart-outline",
   deafened: "mdi-ear-hearing-off",
-  exhaustion: "mdi-battery-low",
+  exhaustion: "mdi-sleep",
   frightened: "mdi-emoticon-frown-outline",
   grappled: "mdi-handcuffs",
   incapacitated: "mdi-account-cancel-outline",

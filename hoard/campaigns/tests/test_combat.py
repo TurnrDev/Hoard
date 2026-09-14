@@ -9,8 +9,10 @@ from hoard.campaigns.services.combat import (
     encounter_data,
     finish_encounter,
     remove_character_condition,
+    reorder_combatants,
     set_character_condition,
     set_combatant_condition,
+    set_current_combatant,
     start_encounter,
 )
 
@@ -50,16 +52,64 @@ class EncounterServiceTests(TestCase):
 
         second_position = add_character_combatant(self.gm, self.hero.pk, 8)
         self.assertEqual(second_position.character, self.hero)
+        self.assertTrue(second_position.show_hp_bar)
+        self.assertTrue(second_position.show_hp_numbers)
         self.assertEqual(encounter.combatants.filter(character=self.hero).count(), 2)
+
+        set_current_combatant(self.gm, second_position.pk)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.current_combatant, second_position)
+        self.assertEqual(
+            encounter_data(self.player)["current_combatant_id"],
+            second_position.pk,
+        )
+
+        non_player_character = make_character(
+            self.campaign,
+            name="Guide",
+            active=True,
+            context=False,
+        )
+        guide_position = add_character_combatant(
+            self.gm,
+            non_player_character.pk,
+            6,
+            show_hp_bar=True,
+            show_hp_numbers=False,
+        )
+        self.assertTrue(guide_position.show_hp_bar)
+        self.assertFalse(guide_position.show_hp_numbers)
+
+        reordered = reorder_combatants(
+            self.gm,
+            [guide_position.pk, combatant.pk, second_position.pk],
+        )
+        self.assertEqual(
+            [(entry.pk, entry.initiative) for entry in reordered],
+            [
+                (guide_position.pk, 8),
+                (combatant.pk, 6),
+                (second_position.pk, 0),
+            ],
+        )
+
+        with self.assertRaises(ValidationError):
+            reorder_combatants(self.gm, [combatant.pk])
 
         finish_encounter(self.gm)
         encounter.refresh_from_db()
         self.assertFalse(encounter.is_active)
         self.assertIsNotNone(encounter.ended_at)
+        self.assertIsNone(encounter.current_combatant)
 
     def test_players_cannot_manage_encounters(self) -> None:
         with self.assertRaises(PermissionError):
             start_encounter(self.player)
+
+        encounter = start_encounter(self.gm)
+        combatant = encounter.combatants.get()
+        with self.assertRaises(PermissionError):
+            set_current_combatant(self.player, combatant.pk)
 
     def test_hidden_monster_health_is_filtered_for_players(self) -> None:
         start_encounter(self.gm)

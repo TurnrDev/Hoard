@@ -1,6 +1,7 @@
 import "@mdi/font/css/materialdesignicons.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import PrimeVue from "primevue/config";
+import ToastService from "primevue/toastservice";
 import { createApp } from "vue";
 import App from "./App.vue";
 import router from "./router";
@@ -28,4 +29,5 @@ app.use(PrimeVue, {
   },
 });
 
+app.use(ToastService);
 app.use(router).mount("#app");

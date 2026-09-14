@@ -59,8 +59,12 @@
       <InitiativeTracker
         v-if="inCombat"
         :combatants="combatants"
+        :characters="campaign.characters"
+        :members="members"
+        :active-context="activeContext"
         :expanded="expanded"
         :can-manage="canManageCombatants"
+        :current-combatant-id="campaign.encounter?.current_combatant_id ?? null"
         @apply-condition="forwardApplyCondition"
         @remove-condition="forwardRemoveCondition"
         @update-visibility="$emit('update-combatant-visibility', $event)"

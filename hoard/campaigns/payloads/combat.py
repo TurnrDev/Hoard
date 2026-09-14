@@ -28,6 +28,12 @@ class EncounterCombatantIdentifierCommand(BaseModel):
     combatant_id: int = Field(gt=0)
 
 
+class EncounterCurrentCombatantCommand(BaseModel):
+    """Set or clear the exact initiative entry whose turn is current."""
+
+    combatant_id: int | None = Field(default=None, gt=0)
+
+
 class CharacterConditionIdentifierCommand(BaseModel):
     """A command removing one condition cause or every cause of one condition."""
 
@@ -67,6 +73,8 @@ class EncounterCharacterAddCommand(BaseModel):
 
     character_id: int = Field(gt=0)
     initiative: int = Field(default=0, ge=-100, le=100)
+    show_hp_bar: bool = False
+    show_hp_numbers: bool = False
 
 
 class EncounterCombatantAddCommand(BaseModel):
@@ -100,6 +108,20 @@ class EncounterCombatantUpdateCommand(EncounterCombatantIdentifierCommand):
     max_hp: int | None = Field(default=None, ge=1)
     show_hp_bar: bool | None = None
     show_hp_numbers: bool | None = None
+
+
+class EncounterCombatantReorderCommand(BaseModel):
+    """Set the complete display order for the active encounter."""
+
+    combatant_ids: list[int] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_unique_combatants(self) -> EncounterCombatantReorderCommand:
+        """Reject an order containing the same combatant more than once."""
+        if len(self.combatant_ids) != len(set(self.combatant_ids)):
+            raise ValueError("Combatant order cannot contain duplicates.")
+
+        return self
 
 
 class CombatantConditionCommand(EncounterCombatantIdentifierCommand):
