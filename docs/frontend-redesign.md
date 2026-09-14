@@ -751,6 +751,9 @@ PartyRail is a live campaign roster with two explicit modes.
   is stored as a browser-only preference. The pouch or decimal-value choice now
   survives reloads and follows the user between characters and campaign contexts
   in the same browser, without adding server state.
+- 2026-09-14: removed the redundant visible Note field label from the note editor.
+  Its add/edit heading supplies the visual context and the textarea retains an
+  explicit accessible name.
 
 ## Open questions
 

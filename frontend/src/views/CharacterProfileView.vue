@@ -978,18 +978,13 @@
                 </h3>
 
                 <div class="mb-3">
-                  <label
-                    for="note-body"
-                    class="form-label"
-                  >
-                    Note
-                  </label>
                   <Textarea
                     id="note-body"
                     v-model="noteBody"
                     class="w-100"
                     rows="5"
                     auto-resize
+                    aria-label="Note body"
                   />
                   <div class="form-text">Markdown formatting is supported.</div>
                 </div>
