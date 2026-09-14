@@ -62,12 +62,48 @@
           </div>
         </fieldset>
 
-        <p
+        <div
           v-else-if="currentCombatant"
-          class="text-body-secondary mb-0"
+          class="text-body-secondary"
         >
-          Finish your actions, then pass initiative to the next combatant.
-        </p>
+          <p class="mb-2">Use these in any order:</p>
+          <ul class="d-flex flex-wrap column-gap-3 row-gap-1 list-unstyled mb-2">
+            <li class="d-flex align-items-center gap-1 fw-semibold text-body">
+              <span
+                class="mdi mdi-lightning-bolt-outline"
+                aria-hidden="true"
+              />
+              Action
+            </li>
+            <li class="d-flex align-items-center gap-1 fw-semibold text-body">
+              <span
+                class="mdi mdi-plus-circle-outline"
+                aria-hidden="true"
+              />
+              Bonus action
+            </li>
+            <li class="d-flex align-items-center gap-1 fw-semibold text-body">
+              <span
+                class="mdi mdi-run"
+                aria-hidden="true"
+              />
+              {{ movementLabel }}
+            </li>
+          </ul>
+          <aside
+            class="d-flex align-items-start gap-2 rounded bg-body-tertiary p-2 mb-0 small"
+            aria-label="Turn tip"
+          >
+            <span
+              class="mdi mdi-information-slab-circle-outline fs-5 flex-shrink-0"
+              aria-hidden="true"
+            />
+            <p class="mb-0">
+              <strong>Tip:</strong>
+              Need two bonus actions? Trade your action for a second bonus action.
+            </p>
+          </aside>
+        </div>
         <p
           v-else
           class="text-body-secondary mb-0"
@@ -97,8 +133,8 @@
 </template>
 
 <script lang="ts">
-import Button from "primevue/button";
 import Badge from "primevue/badge";
+import Button from "primevue/button";
 import Message from "primevue/message";
 import { defineComponent, type PropType } from "vue";
 import { chooseInitiativeTie, endPlayerTurn, type EncounterCombatant } from "../api";
@@ -112,6 +148,7 @@ export default defineComponent({
   props: {
     contextId: { type: Number, required: true },
     characterId: { type: Number, required: true },
+    movementSpeed: { type: String, default: "" },
     currentCombatantId: {
       type: Number as PropType<number | null>,
       default: null,
@@ -207,6 +244,11 @@ export default defineComponent({
 
       return "Get ready, your turn is next";
     },
+    movementLabel(): string {
+      const distance = this.movementSpeed.match(/\d+/)?.[0];
+
+      return distance ? `${distance} feet of movement` : "Movement";
+    },
     tieOutcome(): string {
       if (!this.tieCombatant) {
         return "";
@@ -239,7 +281,7 @@ export default defineComponent({
         detail: agreementReached
           ? `${winner.name} will go first.`
           : `No agreement was reached, so Hoard selected ${winner.name}.`,
-        life: 5_000,
+        closable: true,
       });
     },
     async chooseTie(combatantId: number): Promise<void> {

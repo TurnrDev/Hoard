@@ -9,6 +9,7 @@
       :character-id="character.id"
       :current-combatant-id="campaign.encounter.current_combatant_id"
       :combatants="campaign.encounter.combatants"
+      :movement-speed="character.sheet.speed"
     />
 
     <header
