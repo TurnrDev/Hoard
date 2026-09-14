@@ -26,7 +26,7 @@
       v-if="error"
       severity="error"
       closable
-      @click:close="error = ''"
+      @close="error = ''"
     >
       {{ error }}
     </Message>

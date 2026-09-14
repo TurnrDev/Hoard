@@ -1,4 +1,6 @@
 <template>
+  <Toast :position="toastPosition" />
+
   <main
     v-if="isPublicRoute"
     class="min-vh-100"
@@ -10,8 +12,6 @@
     v-else
     class="campaign-shell min-vh-100"
   >
-    <Toast :position="toastPosition" />
-
     <a
       class="visually-hidden-focusable skip-link border bg-body text-body px-3 py-2"
       href="#main-content"
@@ -91,11 +91,14 @@
 
     <div
       class="campaign-layout"
-      :class="{ 'campaign-layout--rail-expanded': partyRailExpanded }"
+:class="{
+      'campaign-layout--contextless': !activeContext,
+      'campaign-layout--rail-expanded': partyRailExpanded,
+    }"
     >
-      <aside class="campaign-navigation-panel d-none d-lg-block border-end p-3">
+      <aside v-if="activeContext"
+class="campaign-navigation-panel d-none d-lg-block border-end p-3">
         <CampaignNavigation
-          v-if="activeContext"
           :context-id="contextId"
           :active-context="activeContext"
         />
@@ -264,15 +267,15 @@ export default defineComponent({
         value: ThemePreferences["colourMode"];
       }> = [
         { label: "System", value: "system" },
-        { label: "Light", value: "light" },
+          { label: "Light (Pedo mode)", value: "light" },
         { label: "Dark", value: "dark" },
       ];
       const palettes: Array<{
         label: string;
         value: ThemePreferences["palette"];
       }> = [
-        { label: "Normal", value: "normal" },
-        { label: "Red-green colourblind friendly", value: "colourblind" },
+          { label: "Melly? What colour?", value: "normal" },
+          { label: "Melly-vision", value: "colourblind" },
       ];
 
       return [

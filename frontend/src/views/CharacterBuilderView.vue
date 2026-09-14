@@ -46,12 +46,12 @@
       severity="error"
       closable
       class="mb-4"
-      @click:close="error = ''"
+      @close="error = ''"
     >
       {{ error }}
     </Message>
     <ProgressBar
-      :model-value="(step / 6) * 100"
+      :value="(step / 6) * 100"
       class="mb-5"
     />
     <section class="border rounded-3 p-3 p-md-4">
@@ -255,8 +255,7 @@
         </template>
         <template v-else-if="step === 3">
           <Message
-            type="info"
-            variant="tonal"
+            severity="info"
             class="mb-4"
           >
             Choose the class receiving each campaign level. Subclass fields allow

@@ -52,8 +52,18 @@
 
       <div
         class="party-rail__separator d-flex align-items-center gap-2 fw-bold text-uppercase"
+        role="separator"
       >
+        <span
+          class="party-rail__separator-line"
+          aria-hidden="true"
+        />
         <span v-if="expanded && inCombat">Combatants</span>
+        <span
+          v-if="expanded && inCombat"
+          class="party-rail__separator-line"
+          aria-hidden="true"
+        />
       </div>
 
       <InitiativeTracker

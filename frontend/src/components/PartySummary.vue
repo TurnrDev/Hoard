@@ -1,6 +1,6 @@
 <template>
   <section
-    class="party-summary mt-auto bg-body-tertiary"
+    class="party-summary sticky-bottom w-100 mt-auto bg-body-tertiary"
     :class="{ 'party-summary--expanded border rounded-3 p-2 p-lg-3': expanded }"
     aria-label="Party resources"
   >
@@ -89,12 +89,6 @@ export default defineComponent({
 </script>
 
 <style scoped>
-.party-summary {
-  position: sticky;
-  z-index: 1;
-  bottom: 0;
-}
-
 .party-summary__desktop {
   font-size: 0.65rem;
   line-height: 1.2;
@@ -106,10 +100,6 @@ export default defineComponent({
 }
 
 @media (max-width: 991.98px) {
-  .party-summary {
-    width: 100%;
-  }
-
   .party-summary--expanded dd.fs-5 {
     font-size: 1rem !important;
   }

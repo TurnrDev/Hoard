@@ -479,8 +479,7 @@ PartyRail is a live campaign roster with two explicit modes.
   names, falling back to the username when no first name is recorded.
 - 2026-09-14: rebuilt the character-profile Add Item and money-action dialogs
   with semantic headings, labelled PrimeVue 4 fields, and Bootstrap-responsive
-  layouts. Their inventory and ledger commands remain unchanged; the remaining
-  profile action dialogs and final Options API extraction are still active work.
+  layouts. Their inventory and ledger commands remain unchanged.
 - 2026-09-14: simplified 5e Companion import to a native, labelled `.cah` file
   input. Selecting a file immediately prepares the editable preview. Preview
   choices use PrimeVue 4 binary checkboxes and icon-backed proficiency
@@ -571,6 +570,31 @@ PartyRail is a live campaign roster with two explicit modes.
 - 2026-09-14: GM command confirmations, including combat damage and healing,
   now use the shell Toast host instead of inserting a full-width success Message
   into the GM desk layout.
+- 2026-09-14: moved the Toast host above the authenticated/public shell split so
+  every route can present transient feedback. Character-profile mutations and
+  Compendium create, edit, delete, and repository-import confirmations now use
+  that shared Toast host; persistent errors, warnings, progress, and explanatory
+  state remain Messages.
+- 2026-09-14: replaced the Party Rail's generated separator rules with explicit
+  border elements. The expanded mobile initiative rail now renders a centred
+  Combatants label between thin rules without the right-hand rule expanding into
+  a filled block; the collapsed mobile divider remains vertical.
+- 2026-09-14: audited the rebuilt frontend against the implementation rules. All
+  Vue single-file components now begin with `template`, use Options API without
+  `script setup` or `setup()`, and locally import PrimeVue controls by their native
+  names. Removed the remaining forwarded Vuetify-era props and events, corrected
+  determinate ProgressBar values and the level-up feat Select, and restored native
+  table elements for profile inventory, loadout, and effects. The final icon audit
+  also corrected incomplete MDI class names on item, ledger, and campaign-management
+  controls. Frontend formatting, all 26 tests, and the production build pass after
+  this cleanup.
+- 2026-09-14: audited the remaining presentation CSS for the Bootstrap-first rule.
+  The custom rules are limited to theme tokens, shell grid behaviour, Party Rail
+  geometry and health colours, and the few component layouts Bootstrap cannot
+  express. Party resources now use Bootstrap's `sticky-bottom` and sizing utilities,
+  and an unused rail selector was removed. The responsive shell still requires its
+  custom three-column-to-stacked grid because the narrow, expandable global rail is
+  application-specific chrome rather than an ordinary content grid.
 
 ## Open questions
 

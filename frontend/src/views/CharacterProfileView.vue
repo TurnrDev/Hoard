@@ -6,7 +6,7 @@
     <header
       class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4"
     >
-      <div class="d-flex align-items-center gap-3">
+      <div class="d-flex flex-wrap align-items-center gap-3">
         <CharacterAvatar
           :character="character"
           size="profile"
@@ -45,17 +45,16 @@
     </header>
     <Message
       v-if="error"
-      type="error"
+      severity="error"
       closable
       class="mb-4"
-      @click:close="error = ''"
+      @close="error = ''"
     >
       {{ error }}
     </Message>
     <Message
       v-if="character && !character.level_up_complete"
-      type="error"
-      variant="tonal"
+      severity="error"
       class="mb-4"
       title="Level-up incomplete"
     >
@@ -63,21 +62,12 @@
       has unfinished choices.
       <template>
         <Button
-          color="error"
+          :as="'router-link'"
+          severity="danger"
           :to="'/c/' + campaignId + '/characters/' + characterId + '/level-up'"
-        >
-          Complete level-up
-        </Button>
+          label="Complete level-up"
+        />
       </template>
-    </Message>
-    <Message
-      v-if="notice"
-      type="success"
-      closable
-      class="mb-4"
-      @click:close="notice = ''"
-    >
-      {{ notice }}
     </Message>
     <div class="row g-3 mb-4">
       <div class="col-12">
@@ -231,8 +221,8 @@
             <Button
               v-if="canEdit"
               size="small"
-              :prepend-icon="
-                character.has_inspiration ? 'mdi-star' : 'mdi-star-outline'
+              :icon="
+                character.has_inspiration ? 'mdi mdi-star' : 'mdi mdi-star-outline'
               "
               @click="toggleInspiration"
             >
@@ -272,53 +262,52 @@
                 <strong>{{ character.sheet.spell_save_dc }}</strong>
               </span>
             </p>
-            <table
-              density="compact"
-              class="table table-striped"
-            >
-              <caption class="visually-hidden">Spell slot availability</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Slot</th>
-                  <th
-                    scope="col"
-                    class="text-end tabular-nums"
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <caption class="visually-hidden">Spell slot availability</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Slot</th>
+                    <th
+                      scope="col"
+                      class="text-end tabular-nums"
+                    >
+                      Current
+                    </th>
+                    <th
+                      scope="col"
+                      class="text-end tabular-nums"
+                    >
+                      Maximum
+                    </th>
+                    <th scope="col">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(pool, level) in character.sheet.spell_slot_pools"
+                    :key="level"
                   >
-                    Current
-                  </th>
-                  <th
-                    scope="col"
-                    class="text-end tabular-nums"
-                  >
-                    Maximum
-                  </th>
-                  <th scope="col">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(pool, level) in character.sheet.spell_slot_pools"
-                  :key="level"
-                >
-                  <th scope="row">
-                    {{
-                      String(level).startsWith("pact-")
-                        ? `Pact level ${String(level).slice(5)}`
-                        : `Level ${level}`
-                    }}
-                  </th>
-                  <td class="text-end tabular-nums">{{ pool.current }}</td>
-                  <td class="text-end tabular-nums">{{ pool.maximum }}</td>
-                  <td>
-                    {{
-                      pool.adjustment
-                        ? `Class ${pool.calculated}, adjustment ${signed(pool.adjustment)}`
-                        : `Class ${pool.calculated}`
-                    }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    <th scope="row">
+                      {{
+                        String(level).startsWith("pact-")
+                          ? `Pact level ${String(level).slice(5)}`
+                          : `Level ${level}`
+                      }}
+                    </th>
+                    <td class="text-end tabular-nums">{{ pool.current }}</td>
+                    <td class="text-end tabular-nums">{{ pool.maximum }}</td>
+                    <td>
+                      {{
+                        pool.adjustment
+                          ? `Class ${pool.calculated}, adjustment ${signed(pool.adjustment)}`
+                          : `Class ${pool.calculated}`
+                      }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
         <section class="border rounded-3 p-3 p-md-4">
@@ -338,17 +327,13 @@
                   <Divider class="my-3" />
                   <div class="ability-save-row">
                     <span>SAVE</span>
-                    <span
+                    <strong
                       v-if="ability.save.proficient"
-                      :text="proficiencyLabel('proficient')"
-                      location="top"
+                      :class="proficiencyClass('proficient')"
+                      :title="proficiencyLabel('proficient')"
                     >
-                      <template>
-                        <strong :class="proficiencyClass('proficient')">
-                          {{ signed(ability.save.bonus) }}
-                        </strong>
-                      </template>
-                    </span>
+                      {{ signed(ability.save.bonus) }}
+                    </strong>
                     <strong v-else>{{ signed(ability.save.bonus) }}</strong>
                   </div>
                 </div>
@@ -366,16 +351,15 @@
             <Button
               v-if="canAct"
               size="small"
-              prepend-icon="mdi-plus"
+              icon="mdi mdi-plus"
               @click="addItemOpen = true"
             >
               Add item
             </Button>
           </header>
-          <div>
-            <div
+          <div class="table-responsive">
+            <table
               v-if="character.inventory.length"
-              density="compact"
               class="table table-striped"
             >
               <caption class="visually-hidden">{{ character.name }} inventory</caption>
@@ -440,7 +424,7 @@
                   </td>
                 </tr>
               </tbody>
-            </div>
+            </table>
             <span
               v-else
               class="text-body-secondary"
@@ -456,7 +440,7 @@
             <Button
               v-if="canEdit"
               size="small"
-              prepend-icon="mdi-plus"
+              icon="mdi mdi-plus"
               @click="openEffect"
             >
               Add effect
@@ -465,90 +449,94 @@
           <div>
             <div
               v-if="character.loadout.length"
-              density="compact"
-              class="table table-striped mb-4"
+              class="table-responsive"
             >
-              <caption class="visually-hidden">Character equipment</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Item</th>
-                  <th scope="col">Slot</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="item in character.loadout"
-                  :key="item.id"
-                >
-                  <th scope="row">{{ item.name }}</th>
-                  <td>{{ displayName(item.slot) }}</td>
-                  <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
-                </tr>
-              </tbody>
+              <table class="table table-striped mb-4">
+                <caption class="visually-hidden">Character equipment</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Slot</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in character.loadout"
+                    :key="item.id"
+                  >
+                    <th scope="row">{{ item.name }}</th>
+                    <td>{{ displayName(item.slot) }}</td>
+                    <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             <div
               v-if="character.effects.length"
-              density="compact"
-              class="table table-striped"
+              class="table-responsive"
             >
-              <caption class="visually-hidden">Character active effects</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Effect</th>
-                  <th scope="col">Duration</th>
-                  <th scope="col">Modifiers and reminder</th>
-                  <th
-                    v-if="canEdit"
-                    scope="col"
+              <table class="table table-striped">
+                <caption class="visually-hidden">Character active effects</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Effect</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">Modifiers and reminder</th>
+                    <th
+                      v-if="canEdit"
+                      scope="col"
+                    >
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="effect in character.effects"
+                    :key="effect.id"
                   >
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="effect in character.effects"
-                  :key="effect.id"
-                >
-                  <th scope="row">
-                    {{ effect.name }}
-                    <span v-if="effect.source">· {{ effect.source }}</span>
-                  </th>
-                  <td>{{ effect.duration || displayName(effect.expires_on_rest) }}</td>
-                  <td>
-                    {{
-                      effect.modifiers
-                        .map(
-                          (modifier) =>
-                            `${modifier.label || displayName(modifier.target)} ${signed(modifier.value)}`,
-                        )
-                        .join(" · ") ||
-                      effect.reminder ||
-                      "—"
-                    }}
-                  </td>
-                  <td v-if="canEdit">
-                    <Button
-                      size="small"
-                      variant="text"
-                      :aria-label="`${effect.enabled ? 'Deactivate' : 'Activate'} ${effect.name}`"
-                      @click="toggleEffect(effect)"
-                    >
-                      {{ effect.enabled ? "Deactivate" : "Activate" }}
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="text"
-                      color="error"
-                      :aria-label="`Remove ${effect.name}`"
-                      @click="deleteEffect(effect)"
-                    >
-                      Remove
-                    </Button>
-                  </td>
-                </tr>
-              </tbody>
+                    <th scope="row">
+                      {{ effect.name }}
+                      <span v-if="effect.source">· {{ effect.source }}</span>
+                    </th>
+                    <td>
+                      {{ effect.duration || displayName(effect.expires_on_rest) }}
+                    </td>
+                    <td>
+                      {{
+                        effect.modifiers
+                          .map(
+                            (modifier) =>
+                              `${modifier.label || displayName(modifier.target)} ${signed(modifier.value)}`,
+                          )
+                          .join(" · ") ||
+                        effect.reminder ||
+                        "—"
+                      }}
+                    </td>
+                    <td v-if="canEdit">
+                      <Button
+                        size="small"
+                        text
+                        :aria-label="`${effect.enabled ? 'Deactivate' : 'Activate'} ${effect.name}`"
+                        @click="toggleEffect(effect)"
+                      >
+                        {{ effect.enabled ? "Deactivate" : "Activate" }}
+                      </Button>
+                      <Button
+                        size="small"
+                        text
+                        severity="danger"
+                        :aria-label="`Remove ${effect.name}`"
+                        @click="deleteEffect(effect)"
+                      >
+                        Remove
+                      </Button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             <span
               v-if="!character.loadout.length && !character.effects.length"
@@ -558,10 +546,7 @@
             </span>
           </div>
         </section>
-        <div
-          class="mt-4 skills-panel"
-          variant="accordion"
-        >
+        <div class="mt-4 skills-panel">
           <details>
             <summary>Skills</summary>
             <div class="mt-3">
@@ -601,10 +586,7 @@
             </div>
           </details>
         </div>
-        <div
-          class="mt-4"
-          variant="accordion"
-        >
+        <div class="mt-4">
           <details>
             <summary>Notes ({{ character.notes.length }})</summary>
             <div>
@@ -650,7 +632,7 @@
                   <Button
                     v-if="canEdit"
                     size="small"
-                    variant="text"
+                    text
                     :disabled="spell.level > 0 && !spell.prepared"
                     :aria-label="`Record casting ${spell.name}`"
                     @click="openSpellCast(spell)"
@@ -686,12 +668,12 @@
             Recent activity
             <span class="flex-grow-1" />
             <Button
+              :as="'router-link'"
               :to="`/c/${campaignId}/ledger`"
               size="small"
-              variant="text"
-            >
-              View full ledger
-            </Button>
+              text
+              label="View full ledger"
+            />
           </header>
           <div>
             <template v-if="activity.length">
@@ -1428,7 +1410,6 @@ export default defineComponent({
       characters: [] as Character[],
       items: [] as Item[],
       error: typeof levelUpError === "string" ? levelUpError : "",
-      notice: "",
       grantItemId: undefined as number | undefined,
       grantQuantity: 1,
       itemAction: undefined as "use" | "destroy" | "transfer" | undefined,
@@ -1740,6 +1721,13 @@ export default defineComponent({
     },
   },
   methods: {
+    showSuccess(message: string): void {
+      this.$toast.add({
+        severity: "success",
+        summary: message,
+        life: 4_000,
+      });
+    },
     displayCoin,
     displayName: displayIdentifier,
     formatCoinPouch,
@@ -1790,7 +1778,7 @@ export default defineComponent({
       try {
         await setCharacterCondition(this.campaignId, this.character.id, condition);
         await this.load();
-        this.notice = `${this.displayName(condition.identifier)} updated.`;
+        this.showSuccess(`${this.displayName(condition.identifier)} updated.`);
       } catch (exception) {
         this.error =
           exception instanceof Error
@@ -1806,7 +1794,7 @@ export default defineComponent({
       try {
         await removeCharacterCondition(this.campaignId, this.character.id, conditionId);
         await this.load();
-        this.notice = "Condition removed.";
+        this.showSuccess("Condition removed.");
       } catch (exception) {
         this.error =
           exception instanceof Error
@@ -1835,7 +1823,7 @@ export default defineComponent({
           kind === "short" ? this.shortRestHp : undefined,
         );
         this.shortRestOpen = false;
-        this.notice = `${kind === "short" ? "Short" : "Long"} rest recorded.`;
+        this.showSuccess(`${kind === "short" ? "Short" : "Long"} rest recorded.`);
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to record rest.";
@@ -1864,7 +1852,7 @@ export default defineComponent({
           this.castingSpell.level === 0 ? undefined : this.castingSlot,
         );
         this.spellCastOpen = false;
-        this.notice = `${this.castingSpell.name} recorded.`;
+        this.showSuccess(`${this.castingSpell.name} recorded.`);
       } catch (exception) {
         this.error =
           exception instanceof Error
@@ -1918,7 +1906,7 @@ export default defineComponent({
           file,
         );
         this.character = { ...this.character, portrait_url: result.portrait_url };
-        this.notice = "Portrait updated.";
+        this.showSuccess("Portrait updated.");
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to update portrait.";
@@ -1934,7 +1922,7 @@ export default defineComponent({
       try {
         await removeCharacterPortrait(this.campaignId, this.character.id);
         this.character = { ...this.character, portrait_url: null };
-        this.notice = "Portrait removed.";
+        this.showSuccess("Portrait removed.");
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to remove portrait.";
@@ -2011,7 +1999,7 @@ export default defineComponent({
             equipped: true,
           },
         );
-        this.notice = `${entry.name} equipped.`;
+        this.showSuccess(`${entry.name} equipped.`);
         await this.load();
       } catch (exception) {
         this.error =
@@ -2032,7 +2020,7 @@ export default defineComponent({
           description: "Self-granted item",
         });
 
-        this.notice = "Saved to the ledger.";
+        this.showSuccess("Saved to the ledger.");
         this.closeAddItemDialog();
         await this.load();
       } catch (exception) {
@@ -2131,7 +2119,7 @@ export default defineComponent({
             `${this.itemAction === "use" ? "Used" : this.itemAction === "destroy" ? "Destroyed" : "Transferred"} ${this.selectedInventoryItem.name}`,
         });
 
-        this.notice = "Saved to the ledger.";
+        this.showSuccess("Saved to the ledger.");
         this.closeItemAction();
         await this.load();
       } catch (exception) {
@@ -2192,7 +2180,7 @@ export default defineComponent({
           });
         }
 
-        this.notice = "Saved to the ledger.";
+        this.showSuccess("Saved to the ledger.");
         this.closeMoneyDialog();
         await this.load();
       } catch (exception) {

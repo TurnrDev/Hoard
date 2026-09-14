@@ -33,7 +33,7 @@
       v-if="error"
       severity="error"
       closable
-      @click:close="error = ''"
+      @close="error = ''"
     >
       {{ error }}
     </Message>
@@ -56,7 +56,7 @@
     >
       <div class="d-grid gap-4">
         <ProgressBar
-          :model-value="(step / steps.length) * 100"
+          :value="(step / steps.length) * 100"
           class="mb-0"
         />
         <p class="mb-0 text-uppercase fw-semibold small text-body-secondary">
@@ -220,22 +220,24 @@
             </div>
           </div>
           <template v-else-if="asiChoice === 'feat'">
-            <AutoComplete
+            <Select
               v-model="featEntryId"
-              :items="feats"
-              item-value="id"
-              :item-title="featTitle"
-              label="Feat from Compendium"
+              :options="featOptions"
+              option-label="label"
+              option-value="value"
               :loading="featsLoading"
-              clearable
-              @update:search="searchFeats"
+              filter
+              show-clear
+              fluid
+              placeholder="Choose a feat from the Compendium"
             />
-            <InputText
-              v-model="featOverride"
-              label="Custom feat override"
-              hint="Use this when the feat is not in the enabled Compendium."
-              persistent-hint
-            />
+            <label class="d-grid gap-2 mt-3">
+              <span class="fw-semibold">Custom feat override</span>
+              <InputText v-model="featOverride" />
+              <span class="form-text">
+                Use this when the feat is not in the enabled Compendium.
+              </span>
+            </label>
           </template>
         </section>
 
@@ -334,7 +336,6 @@
 </template>
 
 <script lang="ts">
-import AutoComplete from "primevue/autocomplete";
 import Button from "primevue/button";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
@@ -360,7 +361,6 @@ import { displayIdentifier } from "../display";
 
 export default defineComponent({
   components: {
-    AutoComplete,
     Button,
     InputNumber,
     InputText,
@@ -449,6 +449,12 @@ export default defineComponent({
     },
     chosenClass(): BuilderEntry | undefined {
       return this.classes.find((entry) => entry.id === this.classEntryId);
+    },
+    featOptions(): Array<{ label: string; value: number }> {
+      return this.feats.map((feat) => ({
+        label: this.featTitle(feat),
+        value: feat.id,
+      }));
     },
   },
   watch: {

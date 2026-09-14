@@ -29,9 +29,9 @@
       </Button>
       <Button
         v-if="selected"
-        icon="mdi-close"
+        icon="mdi mdi-close"
         size="small"
-        variant="text"
+        text
         :aria-label="`Clear selected item: ${selected.item.name}`"
         @click="clear"
       />

@@ -1,6 +1,19 @@
+<template>
+  <label class="d-grid gap-2">
+    <span class="fw-semibold">Character</span>
+    <Select
+      v-model="selectedId"
+      :options="options"
+      option-label="label"
+      option-value="value"
+      fluid
+    />
+  </label>
+</template>
+
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
 import Select from "primevue/select";
+import { defineComponent, type PropType } from "vue";
 import type { Character } from "../api";
 
 export default defineComponent({
@@ -34,16 +47,3 @@ export default defineComponent({
   },
 });
 </script>
-
-<template>
-  <label class="d-grid gap-2">
-    <span class="fw-semibold">Character</span>
-    <Select
-      v-model="selectedId"
-      :options="options"
-      option-label="label"
-      option-value="value"
-      fluid
-    />
-  </label>
-</template>

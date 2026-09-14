@@ -67,7 +67,6 @@
         <template v-if="preview">
           <Message
             severity="info"
-            variant="tonal"
             class="mt-4"
           >
             Every imported field and sheet section can be included, skipped, or
@@ -259,14 +258,24 @@
                           :model-value="
                             jsonFieldValues[change.field] ?? editableJson(change.after)
                           "
-                          density="compact"
-                          auto-grow
+                          auto-resize
                           rows="2"
-                          :error-messages="fieldErrors[change.field]"
-                          hint="JSON override"
-                          persistent-hint
+                          :invalid="Boolean(fieldErrors[change.field])"
+                          fluid
                           @update:model-value="setJsonField(change, $event)"
                         />
+                        <span
+                          v-if="fieldErrors[change.field]"
+                          class="form-text text-danger"
+                        >
+                          {{ fieldErrors[change.field] }}
+                        </span>
+                        <span
+                          v-else-if="typeof change.after === 'object'"
+                          class="form-text"
+                        >
+                          JSON override
+                        </span>
                       </template>
                       <span
                         v-else
@@ -290,7 +299,6 @@
                 preview.collection_changes.some((change) => change.before_count > 0)
               "
               severity="warn"
-              variant="tonal"
               class="mb-3"
             >
               Existing content in these sections will be replaced. Inventory is added
@@ -344,20 +352,15 @@
             >
               <header class="d-flex flex-wrap align-items-center gap-2 pb-0">
                 <span>{{ line.name }}</span>
-                <Chip
-                  size="small"
-                  :color="matchStatus(line).color"
-                  variant="tonal"
-                >
-                  {{ matchStatus(line).text }}
-                </Chip>
-                <Chip
+                <Tag
+                  :severity="matchStatus(line).severity"
+                  :value="matchStatus(line).text"
+                />
+                <Tag
                   v-if="line.equipped"
-                  size="small"
-                  variant="outlined"
-                >
-                  Equipped
-                </Chip>
+                  severity="secondary"
+                  value="Equipped"
+                />
               </header>
               <div>
                 <p
@@ -488,12 +491,12 @@
 <script lang="ts">
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
-import Chip from "primevue/chip";
 import Dialog from "primevue/dialog";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
 import Select from "primevue/select";
+import Tag from "primevue/tag";
 import Textarea from "primevue/textarea";
 import { defineComponent } from "vue";
 import {
@@ -534,12 +537,12 @@ export default defineComponent({
   components: {
     Button,
     Checkbox,
-    Chip,
     Dialog,
     InputNumber,
     InputText,
     Message,
     Select,
+    Tag,
     Textarea,
     CalculationBreakdown,
     ItemPickerDialog,
@@ -667,16 +670,16 @@ export default defineComponent({
     },
 
     matchStatus(line: CahPreview["inventory"][number]): {
-      color: string;
+      severity: "info" | "success" | "warn";
       text: string;
     } {
       if (line.matched_item_id === null) {
-        return { color: "warning", text: "Will create a campaign item" };
+        return { severity: "warn", text: "Will create a campaign item" };
       }
       if (line.matched_item_id === line.suggested_item_id) {
-        return { color: "success", text: "Automatically matched" };
+        return { severity: "success", text: "Automatically matched" };
       }
-      return { color: "info", text: "Manually matched" };
+      return { severity: "info", text: "Manually matched" };
     },
 
     formatValue(value: unknown): string {

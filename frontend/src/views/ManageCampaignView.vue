@@ -26,7 +26,7 @@
       v-if="error"
       severity="error"
       closable
-      @click:close="error = ''"
+      @close="error = ''"
     >
       {{ error }}
     </Message>
@@ -106,7 +106,7 @@
                   </span>
                 </div>
                 <Button
-                  icon="mdi-account-remove"
+                  icon="mdi mdi-account-remove"
                   text
                   :disabled="!member.is_active"
                   :aria-label="`Deactivate ${member.username}`"
@@ -131,14 +131,14 @@
                 <div class="d-flex gap-1">
                   <Button
                     v-if="invitation.status === 'pending'"
-                    icon="mdi-email-sync-outline"
+                    icon="mdi mdi-email-sync-outline"
                     text
                     :aria-label="`Resend invitation to ${invitation.email || 'shareable link'}`"
                     @click="resend(invitation)"
                   />
                   <Button
                     v-if="invitation.status === 'pending'"
-                    icon="mdi-link-off"
+                    icon="mdi mdi-link-off"
                     text
                     :aria-label="`Revoke invitation to ${invitation.email || 'shareable link'}`"
                     @click="revoke(invitation)"
@@ -241,7 +241,7 @@
                 </div>
                 <Button
                   v-if="!character.is_archived"
-                  icon="mdi-archive"
+                  icon="mdi mdi-archive"
                   text
                   :aria-label="`Archive ${character.name}`"
                   @click="archive(character)"

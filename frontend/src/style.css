@@ -42,10 +42,6 @@ body,
   color: var(--hoard-ink);
 }
 
-body {
-  min-width: 20rem;
-}
-
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible,
@@ -54,6 +50,10 @@ textarea:focus-visible,
 select:focus-visible {
   outline: 0.2rem solid var(--hoard-gold);
   outline-offset: 0.2rem;
+}
+
+.p-toast {
+  max-width: calc(100vw - 2rem);
 }
 
 .campaign-shell {
@@ -97,6 +97,11 @@ select:focus-visible {
 
 .campaign-layout--rail-expanded {
   --hoard-rail-width: 18rem;
+}
+
+.campaign-layout--contextless {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "main";
 }
 
 .campaign-navigation-panel {
@@ -143,10 +148,9 @@ select:focus-visible {
   min-width: 0;
 }
 
-.party-rail__group-title {
-  margin: 0.75rem 0.5rem 0.25rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
+.party-rail__content {
+  scrollbar-color: var(--bs-secondary-color) transparent;
+  scrollbar-width: thin;
 }
 
 .party-rail__entries {
@@ -249,16 +253,10 @@ select:focus-visible {
   letter-spacing: 0.06em;
 }
 
-.party-rail__separator::before,
-.party-rail__separator::after {
+.party-rail__separator-line {
   flex: 1;
-  height: 1px;
-  background: var(--bs-border-color);
-  content: "";
-}
-
-.party-rail__separator:empty::after {
-  display: none;
+  min-width: 0;
+  border-top: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color);
 }
 
 @media (min-width: 992px) {
@@ -375,10 +373,12 @@ select:focus-visible {
     margin: 0;
   }
 
-  .party-rail__separator::before,
-  .party-rail__separator::after {
-    width: 1px;
+  .party-rail:not(.party-rail--expanded) .party-rail__separator-line {
+    flex: 0 0 auto;
+    width: 0;
     height: 2.5rem;
+    border-top: 0;
+    border-left: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color);
   }
 
   .party-rail__entry {
@@ -424,11 +424,6 @@ select:focus-visible {
     display: flex;
     width: 100%;
     margin: 0.25rem 0 0.5rem;
-  }
-
-  .party-rail--expanded .party-rail__separator::before {
-    width: auto;
-    height: 1px;
   }
 }
 

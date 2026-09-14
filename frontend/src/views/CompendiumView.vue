@@ -39,14 +39,6 @@
     >
       {{ error }}
     </Message>
-    <Message
-      v-if="notice"
-      severity="success"
-      closable
-      @close="dismissNotice(false)"
-    >
-      {{ notice }}
-    </Message>
     <div class="row justify-content-between align-items-end g-2 mb-4">
       <div class="col-12 col-lg-7">
         <label
@@ -228,7 +220,7 @@
             <div>{{ importProgress }}</div>
             <ProgressBar
               v-if="importProgressTotal"
-              :model-value="((importProgressCurrent ?? 0) / importProgressTotal) * 100"
+              :value="((importProgressCurrent ?? 0) / importProgressTotal) * 100"
               class="compendium-import-progress"
             />
             <ProgressBar
@@ -359,7 +351,6 @@ export default defineComponent({
       name: "",
       description: "",
       error: "",
-      notice: "",
       packs: [] as CompendiumSource[],
       registry: [] as CompendiumRepository[],
       packsOpen: false,
@@ -435,10 +426,12 @@ export default defineComponent({
       }
     },
 
-    dismissNotice(open: boolean): void {
-      if (!open) {
-        this.notice = "";
-      }
+    showSuccess(message: string): void {
+      this.$toast.add({
+        severity: "success",
+        summary: message,
+        life: 4_000,
+      });
     },
 
     async load(): Promise<void> {
@@ -520,7 +513,7 @@ export default defineComponent({
         this.error = event.detail ?? "Unable to import repository.";
         return;
       }
-      this.notice = "Repository imported and its sources enabled.";
+      this.showSuccess("Repository imported and its sources enabled.");
       void this.load();
     },
 
@@ -550,7 +543,7 @@ export default defineComponent({
         } else {
           await createItem(this.campaignId, this.name.trim(), this.description);
         }
-        this.notice = this.editing ? "Item updated." : "Item created.";
+        this.showSuccess(this.editing ? "Item updated." : "Item created.");
         this.editorOpen = false;
         await this.load();
       } catch (exception) {
@@ -562,7 +555,7 @@ export default defineComponent({
     async remove(item: Item): Promise<void> {
       try {
         await deleteItem(this.campaignId, item.id);
-        this.notice = "Item deleted.";
+        this.showSuccess("Item deleted.");
         await this.load();
       } catch (exception) {
         this.error =

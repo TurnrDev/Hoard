@@ -260,9 +260,10 @@ Do not expand already-clear expressions merely for the sake of verbosity.
   obvious with a high-contrast visible indicator.
 - Preserve readable type and layouts when users increase text size or apply WCAG text
   spacing overrides; avoid tight tracking and text conveyed only through colour.
-- Use Vuetify's `v-number-input` for numeric entry. Choose `split` controls when a
-  field has room for side controls, and `stacked` controls for compact grids or table
-  cells; set meaningful `min`, `max`, `step`, and precision constraints.
+- Use PrimeVue 4's locally imported `InputNumber` for numeric entry. Use horizontal
+  minus/plus buttons when a field has room for side controls and vertical buttons
+  for compact grids or table cells; set meaningful `min`, `max`, `step`, and
+  precision constraints.
 - Never expose API keys, enum values, or abbreviations verbatim in the UI. Format
   them through shared display helpers (for example, `gp` as `GP` and `initiative` as
   `Initiative`).

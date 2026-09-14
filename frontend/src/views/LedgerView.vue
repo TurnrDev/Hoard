@@ -18,7 +18,7 @@
       severity="error"
       closable
       class="mb-4"
-      @click:close="error = ''"
+      @close="error = ''"
     >
       {{ error }}
     </Message>
@@ -81,7 +81,7 @@
             <td class="text-end">
               <Button
                 v-if="canReverse(transaction)"
-                icon="mdi-undo"
+                icon="mdi mdi-undo"
                 size="small"
                 text
                 :aria-label="`Reverse ${transaction.ledger_label ?? displayTransactionIdentifier(transaction.ledger)} transaction`"
