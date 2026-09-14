@@ -28,6 +28,22 @@ class Encounter(models.Model):
         on_delete=models.SET_NULL,
         related_name="+",
     )
+    initiative_tie_choices = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Temporary exact-tie votes as {player_context_id: preferred_combatant_id}. "
+            "All keys are decimal strings because JSON object keys are strings."
+        ),
+    )
+    initiative_tie_breaks = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Resolved non-unanimous ties as "
+            "{comma_separated_combatant_ids: chosen_combatant_id}."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
@@ -49,7 +65,17 @@ class Encounter(models.Model):
         self.is_active = False
         self.ended_at = timezone.now()
         self.current_combatant = None
-        self.save(update_fields=("is_active", "ended_at", "current_combatant"))
+        self.initiative_tie_choices = {}
+        self.initiative_tie_breaks = {}
+        self.save(
+            update_fields=(
+                "is_active",
+                "ended_at",
+                "current_combatant",
+                "initiative_tie_choices",
+                "initiative_tie_breaks",
+            ),
+        )
 
     def __str__(self) -> str:
         return f"{self.campaign} encounter {self.pk}"
@@ -77,6 +103,8 @@ class EncounterCombatant(models.Model):
     )
     name = models.CharField(max_length=200, blank=True)
     initiative = models.SmallIntegerField(default=0)
+    initiative_roll = models.PositiveSmallIntegerField(null=True, blank=True)
+    initiative_modifier = models.SmallIntegerField(default=0)
     current_hp = models.IntegerField(null=True, blank=True)
     max_hp = models.PositiveIntegerField(null=True, blank=True)
     show_hp_bar = models.BooleanField(default=False)

@@ -30,24 +30,31 @@
         v-if="campaign.encounter"
         class="d-flex flex-wrap justify-content-end gap-2"
       >
-        <Button
-          icon="mdi mdi-skip-previous"
-          label="Previous turn"
-          severity="secondary"
-          outlined
-          :disabled="busy || orderedCombatants.length === 0"
-          @click="moveCurrentTurn(-1)"
-        />
-        <Button
-          icon="mdi mdi-skip-next"
-          :label="
-            campaign.encounter.current_combatant_id === null
-              ? 'Start turns'
-              : 'Next turn'
-          "
-          :disabled="busy || orderedCombatants.length === 0"
-          @click="moveCurrentTurn(1)"
-        />
+        <template v-if="campaign.encounter.current_combatant_id === null">
+          <Button
+            icon="mdi mdi-play"
+            label="Begin"
+            :loading="busy"
+            :disabled="orderedCombatants.length === 0"
+            @click="beginTurns"
+          />
+        </template>
+        <template v-else>
+          <Button
+            icon="mdi mdi-skip-previous"
+            label="Previous turn"
+            severity="secondary"
+            outlined
+            :disabled="busy || orderedCombatants.length === 0"
+            @click="moveCurrentTurn(-1)"
+          />
+          <Button
+            icon="mdi mdi-skip-next"
+            label="Next turn"
+            :disabled="busy || orderedCombatants.length === 0"
+            @click="moveCurrentTurn(1)"
+          />
+        </template>
         <Button
           label="End combat"
           icon="mdi mdi-flag-checkered"
@@ -657,7 +664,7 @@ export default defineComponent({
   computed: {
     orderedCombatants(): EncounterCombatant[] {
       return [...(this.campaign.encounter?.combatants ?? [])].sort(
-        (left, right) => right.initiative - left.initiative || left.id - right.id,
+        (left, right) => left.initiative_position - right.initiative_position,
       );
     },
     characterOptions(): Array<{ label: string; value: number }> {
@@ -779,6 +786,15 @@ export default defineComponent({
       } finally {
         this.busy = false;
       }
+    },
+    async beginTurns(): Promise<void> {
+      const firstCombatant = this.orderedCombatants[0];
+
+      if (!firstCombatant) {
+        return;
+      }
+
+      await this.setCurrentTurn(firstCombatant.id);
     },
     async moveCurrentTurn(offset: -1 | 1): Promise<void> {
       if (!this.campaign.encounter || this.orderedCombatants.length === 0) {

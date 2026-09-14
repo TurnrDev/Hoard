@@ -85,6 +85,16 @@ select:focus-visible {
   color: var(--hoard-ink);
 }
 
+.connection-screen {
+  inset: 0;
+  z-index: 2000;
+}
+
+.connection-screen__spinner {
+  height: 3rem;
+  width: 3rem;
+}
+
 .skip-link {
   z-index: 1100;
   left: 1rem;

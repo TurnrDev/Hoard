@@ -20,11 +20,8 @@
         :active-context="activeContext"
         :connected="combatantConnected(combatant)"
         :expanded="expanded"
-        :can-manage="canManage"
+        :can-view-hidden-health="canViewHiddenHealth"
         :current="combatant.id === currentCombatantId"
-        @apply-condition="$emit('apply-condition', combatant.id, $event)"
-        @remove-condition="$emit('remove-condition', combatant.id, $event)"
-        @update-visibility="$emit('update-visibility', $event)"
       />
     </ol>
   </section>
@@ -45,17 +42,16 @@ export default defineComponent({
     members: { type: Array as PropType<CampaignMember[]>, required: true },
     activeContext: { type: Object as PropType<ActingContext>, required: true },
     expanded: { type: Boolean, default: false },
-    canManage: { type: Boolean, default: false },
+    canViewHiddenHealth: { type: Boolean, default: false },
     currentCombatantId: {
       type: Number as PropType<number | null>,
       default: null,
     },
   },
-  emits: ["apply-condition", "remove-condition", "update-visibility"],
   computed: {
     orderedCombatants(): PartyRailCombatant[] {
       return [...this.combatants].sort(
-        (first, second) => second.initiative - first.initiative,
+        (left, right) => left.initiative_position - right.initiative_position,
       );
     },
   },

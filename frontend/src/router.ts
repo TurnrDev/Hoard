@@ -11,7 +11,7 @@ import InviteView from "./views/InviteView.vue";
 import CharacterBuilderView from "./views/CharacterBuilderView.vue";
 import CharacterLevelUpView from "./views/CharacterLevelUpView.vue";
 import ManageCampaignView from "./views/ManageCampaignView.vue";
-import { getSession } from "./api";
+import { getSession, isUnauthenticatedError } from "./api";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -55,8 +55,12 @@ router.beforeEach(async (to) => {
   try {
     await getSession();
     return true;
-  } catch {
-    return "/login";
+  } catch (error) {
+    if (isUnauthenticatedError(error)) {
+      return "/login";
+    }
+
+    return true;
   }
 });
 

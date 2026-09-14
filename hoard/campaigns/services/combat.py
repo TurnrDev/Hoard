@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import Counter
+from secrets import choice
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -20,6 +23,22 @@ def require_game_master(context: CampaignContext) -> None:
     """Reject encounter mutations from player contexts."""
     if context.kind != CampaignContext.Kind.GM:
         raise PermissionError("Only a game master may manage combat.")
+
+
+def player_character(context: CampaignContext) -> Character:
+    """Return the active character owned by a player context."""
+    if context.kind != CampaignContext.Kind.PC:
+        raise PermissionError("Only a player may perform this action.")
+
+    character = Character.objects.filter(
+        context=context,
+        is_active=True,
+        is_archived=False,
+    ).first()
+    if character is None:
+        raise ValidationError("This context has no active character.")
+
+    return character
 
 
 def active_encounter(context: CampaignContext) -> Encounter:
@@ -221,6 +240,231 @@ def set_current_combatant(
         combatant = encounter_combatant(context, combatant_id)
         encounter.current_combatant = combatant
 
+    encounter.save(update_fields=("current_combatant",))
+
+    return encounter
+
+
+def combatant_dexterity_modifier(combatant: EncounterCombatant) -> int:
+    """Return the Dexterity tie-break modifier for a player combatant."""
+    if not combatant.character_id:
+        return -100
+
+    return combatant.initiative_modifier
+
+
+def initiative_tie_group(
+    combatant: EncounterCombatant,
+    combatants: list[EncounterCombatant],
+) -> list[EncounterCombatant]:
+    """Return player entries tied on result and Dexterity modifier."""
+    if not combatant.character_id or combatant.initiative_roll is None:
+        return []
+
+    return [
+        candidate
+        for candidate in combatants
+        if candidate.character_id
+        and candidate.initiative_roll is not None
+        and candidate.initiative == combatant.initiative
+        and candidate.initiative_modifier == combatant.initiative_modifier
+        and candidate.character.context_id
+    ]
+
+
+def agreed_tie_winner(
+    group: list[EncounterCombatant],
+    choices: dict[str, object],
+) -> int | None:
+    """Return the unanimously selected entry for a player tie, if one exists."""
+    voters = {entry.character.context_id for entry in group}
+    votes = {choices.get(str(voter)) for voter in voters}
+    valid_targets = {entry.pk for entry in group}
+    if len(votes) == 1 and None not in votes:
+        winner = next(iter(votes))
+        if isinstance(winner, int) and winner in valid_targets:
+            return winner
+
+    return None
+
+
+def tie_group_key(group: list[EncounterCombatant]) -> str:
+    """Return the stable JSON key for an exact initiative tie group."""
+    return ",".join(str(entry.pk) for entry in sorted(group, key=lambda entry: entry.pk))
+
+
+def valid_tie_votes(
+    group: list[EncounterCombatant],
+    choices: dict[str, object],
+) -> list[int]:
+    """Return votes cast by eligible contexts for entries in this tie group."""
+    voters = {entry.character.context_id for entry in group}
+    valid_targets = {entry.pk for entry in group}
+
+    return [
+        vote
+        for voter in voters
+        if isinstance(vote := choices.get(str(voter)), int)
+        and vote in valid_targets
+    ]
+
+
+def resolved_tie_winner(
+    group: list[EncounterCombatant],
+    encounter: Encounter,
+) -> tuple[int | None, str | None]:
+    """Return a unanimous or persisted random winner and its resolution type."""
+    agreed_winner = agreed_tie_winner(group, encounter.initiative_tie_choices)
+    if agreed_winner is not None:
+        return agreed_winner, "agreement"
+
+    voters = {entry.character.context_id for entry in group}
+    valid_votes = valid_tie_votes(group, encounter.initiative_tie_choices)
+    if len(valid_votes) < len(voters):
+        return None, None
+
+    valid_targets = {entry.pk for entry in group}
+    random_winner = encounter.initiative_tie_breaks.get(tie_group_key(group))
+    if isinstance(random_winner, int) and random_winner in valid_targets:
+        return random_winner, "random"
+
+    return None, None
+
+
+def ordered_combatants(encounter: Encounter) -> list[EncounterCombatant]:
+    """Order combatants by roll rules and resolved exact ties."""
+    combatants = list(
+        encounter.combatants.select_related("character__context").all()
+    )
+    winners: dict[int, int | None] = {}
+    for combatant in combatants:
+        group = initiative_tie_group(combatant, combatants)
+        winners[combatant.pk] = resolved_tie_winner(group, encounter)[0]
+
+    return sorted(
+        combatants,
+        key=lambda combatant: (
+            bool(combatant.character_id and combatant.initiative_roll is None),
+            -(combatant.initiative_roll == 20),
+            -combatant.initiative,
+            -combatant_dexterity_modifier(combatant),
+            combatant.pk != winners[combatant.pk],
+            combatant.pk,
+        ),
+    )
+
+
+@transaction.atomic
+def roll_player_initiative(
+    context: CampaignContext,
+    roll: int,
+) -> EncounterCombatant:
+    """Apply a bare player roll and create one bonus entry for a natural twenty."""
+    if not 1 <= roll <= 20:
+        raise ValidationError("Initiative roll must be between 1 and 20.")
+
+    character = player_character(context)
+    encounter = active_encounter(context)
+    pending = (
+        encounter.combatants.select_for_update()
+        .filter(character=character, initiative_roll__isnull=True)
+        .order_by("pk")
+        .first()
+    )
+    if pending is None:
+        raise ValidationError("You have already completed your initiative rolls.")
+
+    modifier = character.ability_modifier("dexterity")
+    pending.initiative_roll = roll
+    pending.initiative_modifier = modifier
+    pending.initiative = roll + modifier
+    pending.save(update_fields=("initiative_roll", "initiative_modifier", "initiative"))
+
+    character_entries = encounter.combatants.filter(character=character).count()
+    if roll == 20 and character_entries < 2:
+        EncounterCombatant.objects.create(
+            encounter=encounter,
+            character=character,
+            name=character.name,
+            initiative=0,
+            show_hp_bar=True,
+            show_hp_numbers=True,
+        )
+
+    encounter.initiative_tie_choices = {}
+    encounter.initiative_tie_breaks = {}
+    encounter.save(
+        update_fields=("initiative_tie_choices", "initiative_tie_breaks"),
+    )
+
+    return pending
+
+
+@transaction.atomic
+def choose_initiative_tie(
+    context: CampaignContext,
+    combatant_id: int,
+) -> Encounter:
+    """Record a player's preferred first actor for their exact initiative tie."""
+    character = player_character(context)
+    encounter = Encounter.objects.select_for_update().get(
+        campaign_id=context.campaign_id,
+        is_active=True,
+    )
+    combatants = list(encounter.combatants.select_related("character__context"))
+    preferred = next((entry for entry in combatants if entry.pk == combatant_id), None)
+    if preferred is None:
+        raise ValidationError("That initiative choice is not available.")
+
+    group = initiative_tie_group(preferred, combatants)
+    owns_tied_entry = any(
+        entry.character_id == character.pk
+        for entry in group
+    )
+    tied_contexts = {
+        entry.character.context_id
+        for entry in group
+    }
+    if not owns_tied_entry or len(tied_contexts) < 2:
+        raise ValidationError("That combatant is not in your initiative tie.")
+
+    choices = dict(encounter.initiative_tie_choices)
+    choices[str(context.pk)] = preferred.pk
+    tie_breaks = dict(encounter.initiative_tie_breaks)
+    group_key = tie_group_key(group)
+    agreed_winner = agreed_tie_winner(group, choices)
+    all_players_voted = len(valid_tie_votes(group, choices)) == len(tied_contexts)
+    if agreed_winner is not None:
+        tie_breaks.pop(group_key, None)
+    elif all_players_voted and group_key not in tie_breaks:
+        tie_breaks[group_key] = choice([entry.pk for entry in group])
+
+    encounter.initiative_tie_choices = choices
+    encounter.initiative_tie_breaks = tie_breaks
+    encounter.save(
+        update_fields=("initiative_tie_choices", "initiative_tie_breaks"),
+    )
+
+    return encounter
+
+
+@transaction.atomic
+def end_player_turn(context: CampaignContext) -> Encounter:
+    """Advance combat when the active initiative entry belongs to this player."""
+    character = player_character(context)
+    encounter = active_encounter(context)
+    current = encounter.current_combatant
+    if current is None or current.character_id != character.pk:
+        raise PermissionError("Only the current player may end this turn.")
+
+    ordered = [
+        entry for entry in ordered_combatants(encounter)
+        if not (entry.character_id and entry.initiative_roll is None)
+    ]
+    current_index = next(
+        index for index, entry in enumerate(ordered) if entry.pk == current.pk
+    )
+    encounter.current_combatant = ordered[(current_index + 1) % len(ordered)]
     encounter.save(update_fields=("current_combatant",))
 
     return encounter
@@ -600,18 +844,26 @@ def encounter_data(context: CampaignContext) -> dict[str, object] | None:
         return None
 
     is_game_master = context.kind == CampaignContext.Kind.GM
-    combatants = encounter.combatants.select_related(
-        "character",
-        "creature_entry",
-    ).prefetch_related("conditions", "character__conditions")
+    combatants = ordered_combatants(encounter)
+    for combatant in combatants:
+        if combatant.character_id:
+            list(combatant.character.conditions.all())
+        else:
+            list(combatant.conditions.all())
 
     return {
         "id": encounter.pk,
         "started_at": encounter.started_at.isoformat(),
         "current_combatant_id": encounter.current_combatant_id,
         "combatants": [
-            combatant_data(combatant, is_game_master=is_game_master)
-            for combatant in combatants
+            combatant_data(
+                combatant,
+                context=context,
+                combatants=combatants,
+                is_game_master=is_game_master,
+                initiative_position=initiative_position,
+            )
+            for initiative_position, combatant in enumerate(combatants)
         ],
     }
 
@@ -619,7 +871,10 @@ def encounter_data(context: CampaignContext) -> dict[str, object] | None:
 def combatant_data(
     combatant: EncounterCombatant,
     *,
+    context: CampaignContext,
+    combatants: list[EncounterCombatant],
     is_game_master: bool,
+    initiative_position: int,
 ) -> dict[str, object]:
     """Serialize a combatant without leaking hidden NPC or monster HP numbers."""
     current_hp, max_hp = combatant.health
@@ -635,6 +890,34 @@ def combatant_data(
         rounded_percentage = (current_hp * 100 + max_hp // 2) // max_hp
         health_percentage = max(0, min(100, rounded_percentage))
 
+    is_owner = bool(
+        combatant.character_id
+        and combatant.character.context_id
+        and combatant.character.context.user_id == context.user_id
+    )
+    tie_group = initiative_tie_group(combatant, combatants)
+    tied_contexts = {entry.character.context_id for entry in tie_group}
+    choices = combatant.encounter.initiative_tie_choices
+    valid_votes = valid_tie_votes(tie_group, choices)
+    vote_counts = Counter(valid_votes)
+    tie_winner_id, tie_resolution = resolved_tie_winner(
+        tie_group,
+        combatant.encounter,
+    )
+    tie_options = []
+    if is_owner and len(tied_contexts) > 1:
+        tie_options = [
+            {
+                "combatant_id": entry.pk,
+                "name": entry.display_name,
+                "vote_count": vote_counts[entry.pk],
+            }
+            for entry in tie_group
+        ]
+    tie_choice = encounter_choice = choices.get(str(context.pk))
+    if not isinstance(encounter_choice, int):
+        tie_choice = None
+
     return {
         "id": combatant.pk,
         "character_id": combatant.character_id,
@@ -647,6 +930,18 @@ def combatant_data(
             else None
         ),
         "initiative": combatant.initiative,
+        "initiative_position": initiative_position,
+        "initiative_roll": combatant.initiative_roll,
+        "initiative_modifier": combatant.initiative_modifier,
+        "can_roll_initiative": is_owner and combatant.initiative_roll is None,
+        "can_end_turn": is_owner
+        and combatant.encounter.current_combatant_id == combatant.pk,
+        "tie_options": tie_options,
+        "tie_choice_id": tie_choice,
+        "tie_votes_cast": len(valid_votes) if tie_options else 0,
+        "tie_votes_required": len(tied_contexts) if tie_options else 0,
+        "tie_winner_id": tie_winner_id if tie_options else None,
+        "tie_resolution": tie_resolution if tie_options else None,
         "current_hp": current_hp if can_read_numbers else None,
         "max_hp": max_hp if can_read_numbers else None,
         "health_percentage": health_percentage,

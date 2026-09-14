@@ -1,6 +1,34 @@
 <template>
   <Toast :position="toastPosition" />
 
+  <div
+    v-if="showReconnectingScreen"
+    class="connection-screen position-fixed d-flex flex-column align-items-center justify-content-center gap-3 p-4 text-center bg-body"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+  >
+    <ProgressSpinner
+      class="connection-screen__spinner"
+      aria-label="Reconnecting to Hoard"
+      stroke-width="5"
+    />
+    <div>
+      <h1 class="h3 mb-2">Reconnecting…</h1>
+      <p class="text-body-secondary mb-0">
+        Your session and current page are being kept safe. Hoard will resume
+        automatically when the connection returns.
+      </p>
+    </div>
+  </div>
+
+  <InitiativeRollDialog
+    v-if="activeContext?.kind === 'pc' && pendingInitiativeCombatant"
+    :context-id="activeContext.id"
+    :combatant="pendingInitiativeCombatant"
+    :bonus-roll="pendingInitiativeIsBonus"
+  />
+
   <main
     v-if="isPublicRoute"
     class="min-vh-100"
@@ -119,9 +147,6 @@
           :in-combat="campaign.encounter !== null"
           :combatants="campaign.encounter?.combatants ?? []"
           @toggle="partyRailExpanded = !partyRailExpanded"
-          @apply-combatant-condition="applyCombatantCondition"
-          @remove-combatant-condition="removeCombatantCondition"
-          @update-combatant-visibility="updateCombatantVisibility"
         />
       </section>
 
@@ -129,21 +154,6 @@
         id="main-content"
         class="campaign-main container-fluid bg-body py-4 py-lg-5"
       >
-        <Message
-          v-if="shellError"
-          class="mb-4"
-          severity="error"
-          closable
-          @close="shellError = ''"
-        >
-          {{ shellError }}
-        </Message>
-        <p
-          v-if="activeContext"
-          class="campaign-main__context d-lg-none text-body-secondary small mb-4"
-        >
-          {{ contextLabel }}
-        </p>
         <Message
           v-if="incompleteLevelUps.length"
           class="mb-4"
@@ -164,23 +174,29 @@ import Button from "primevue/button";
 import Drawer from "primevue/drawer";
 import type { MenuItem } from "primevue/menuitem";
 import Message from "primevue/message";
+import ProgressSpinner from "primevue/progressspinner";
 import TieredMenu from "primevue/tieredmenu";
 import Toast from "primevue/toast";
 import { defineComponent } from "vue";
 import {
   getCampaign,
+  getSession,
+  isUnauthenticatedError,
   logout,
-  removeCombatantCondition,
-  setCombatantCondition,
-  updateEncounterCombatant,
   type Campaign,
   type CampaignMember,
   type Character,
-  type ConditionMutation,
+  type EncounterCombatant,
 } from "./api";
 import { formatCampaignDate } from "./calendar";
+import {
+  markConnectionAvailable,
+  markConnectionUnavailable,
+  serverIsReconnecting,
+} from "./connection";
 import CampaignNavigation from "./components/CampaignNavigation.vue";
 import CharacterAvatar from "./components/CharacterAvatar.vue";
+import InitiativeRollDialog from "./components/InitiativeRollDialog.vue";
 import PartyRail from "./components/PartyRail.vue";
 import { contextPath, contexts, rememberContext, type ActingContext } from "./context";
 import {
@@ -203,8 +219,10 @@ export default defineComponent({
     CampaignNavigation,
     CharacterAvatar,
     Drawer,
+    InitiativeRollDialog,
     Message,
     PartyRail,
+    ProgressSpinner,
     Button,
     TieredMenu,
     Toast,
@@ -222,11 +240,12 @@ export default defineComponent({
       campaign: undefined as Campaign | undefined,
       members: [] as CampaignMember[],
       incompleteLevelUps: [] as string[],
-      shellError: "",
       unsubscribeCampaignChanges: undefined as (() => void) | undefined,
       unsubscribeCampaignReconnect: undefined as (() => void) | undefined,
       unsubscribeCampaignPresence: undefined as (() => void) | undefined,
       presenceSweepTimer: undefined as number | undefined,
+      reconnectTimer: undefined as number | undefined,
+      reconnectCheckBusy: false,
       observedCurrentCombatantId: undefined as number | null | undefined,
       phoneViewport: false,
     };
@@ -241,6 +260,9 @@ export default defineComponent({
     isPublicRoute(): boolean {
       return this.$route.path === "/login" || this.$route.path.startsWith("/invites/");
     },
+    showReconnectingScreen(): boolean {
+      return !this.isPublicRoute && serverIsReconnecting.value;
+    },
     activeContext(): ActingContext | undefined {
       return this.availableContexts.find((context) => context.id === this.contextId);
     },
@@ -251,6 +273,31 @@ export default defineComponent({
 
       return this.campaign?.characters.find(
         (character) => character.id === this.activeContext?.character_id,
+      );
+    },
+    pendingInitiativeCombatant(): EncounterCombatant | undefined {
+      if (this.activeContext?.kind !== "pc") {
+        return undefined;
+      }
+
+      return this.campaign?.encounter?.combatants.find(
+        (combatant) =>
+          combatant.character_id === this.activeContext?.character_id &&
+          combatant.can_roll_initiative,
+      );
+    },
+    pendingInitiativeIsBonus(): boolean {
+      if (!this.pendingInitiativeCombatant) {
+        return false;
+      }
+
+      return Boolean(
+        this.campaign?.encounter?.combatants.some(
+          (combatant) =>
+            combatant.character_id === this.pendingInitiativeCombatant?.character_id &&
+            combatant.id !== this.pendingInitiativeCombatant.id &&
+            combatant.initiative_roll === 20,
+        ),
       );
     },
     contextLabel(): string {
@@ -358,16 +405,24 @@ export default defineComponent({
   mounted(): void {
     this.updateViewportMode();
     window.addEventListener("resize", this.updateViewportMode);
+    window.addEventListener("offline", this.handleBrowserOffline);
+    window.addEventListener("online", this.handleBrowserOnline);
     this.presenceSweepTimer = window.setInterval(this.expireStalePresence, 10_000);
+    this.reconnectTimer = window.setInterval(this.checkReconnection, 2_000);
     void this.loadContexts();
   },
   beforeUnmount(): void {
     window.removeEventListener("resize", this.updateViewportMode);
+    window.removeEventListener("offline", this.handleBrowserOffline);
+    window.removeEventListener("online", this.handleBrowserOnline);
     this.unsubscribeCampaignChanges?.();
     this.unsubscribeCampaignReconnect?.();
     this.unsubscribeCampaignPresence?.();
     if (this.presenceSweepTimer !== undefined) {
       window.clearInterval(this.presenceSweepTimer);
+    }
+    if (this.reconnectTimer !== undefined) {
+      window.clearInterval(this.reconnectTimer);
     }
     disconnectCampaignRealtime();
   },
@@ -400,7 +455,38 @@ export default defineComponent({
       try {
         this.availableContexts = await contexts();
       } catch {
-        this.availableContexts = [];
+        // Preserve the current context while the connection recovers.
+      }
+    },
+    handleBrowserOffline(): void {
+      markConnectionUnavailable("browser");
+    },
+    handleBrowserOnline(): void {
+      markConnectionAvailable("browser");
+      void this.checkReconnection();
+    },
+    async checkReconnection(): Promise<void> {
+      if (
+        this.isPublicRoute ||
+        !serverIsReconnecting.value ||
+        this.reconnectCheckBusy ||
+        !navigator.onLine
+      ) {
+        return;
+      }
+
+      this.reconnectCheckBusy = true;
+
+      try {
+        await getSession();
+        await this.loadContexts();
+      } catch (error) {
+        if (isUnauthenticatedError(error)) {
+          disconnectCampaignRealtime();
+          await this.$router.push("/login");
+        }
+      } finally {
+        this.reconnectCheckBusy = false;
       }
     },
     async selectContext(context: ActingContext): Promise<void> {
@@ -456,51 +542,7 @@ export default defineComponent({
           });
         }
       } catch {
-        this.campaign = undefined;
-        this.members = [];
-        this.incompleteLevelUps = [];
-      }
-    },
-    async applyCombatantCondition(
-      combatantId: number,
-      condition: ConditionMutation,
-    ): Promise<void> {
-      try {
-        await setCombatantCondition(this.contextId, combatantId, condition);
-      } catch (exception) {
-        this.shellError =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to apply the condition.";
-      }
-    },
-    async removeCombatantCondition(
-      combatantId: number,
-      conditionId: number,
-    ): Promise<void> {
-      try {
-        await removeCombatantCondition(this.contextId, combatantId, conditionId);
-      } catch (exception) {
-        this.shellError =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to remove the condition.";
-      }
-    },
-    async updateCombatantVisibility(payload: {
-      combatantId: number;
-      show_hp_bar?: boolean;
-      show_hp_numbers?: boolean;
-    }): Promise<void> {
-      const { combatantId, ...fields } = payload;
-
-      try {
-        await updateEncounterCombatant(this.contextId, combatantId, fields);
-      } catch (exception) {
-        this.shellError =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to update combatant visibility.";
+        // Keep the last rendered campaign visible behind the reconnecting screen.
       }
     },
     expireStalePresence(): void {

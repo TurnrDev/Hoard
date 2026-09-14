@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -6,10 +8,13 @@ from hoard.campaigns.models import Campaign, CampaignContext, ConditionEvent
 from hoard.campaigns.services.combat import (
     add_character_combatant,
     add_encounter_combatant,
+    choose_initiative_tie,
     encounter_data,
+    end_player_turn,
     finish_encounter,
     remove_character_condition,
     reorder_combatants,
+    roll_player_initiative,
     set_character_condition,
     set_combatant_condition,
     set_current_combatant,
@@ -110,6 +115,156 @@ class EncounterServiceTests(TestCase):
         combatant = encounter.combatants.get()
         with self.assertRaises(PermissionError):
             set_current_combatant(self.player, combatant.pk)
+
+    def test_player_rolls_bare_initiative_and_ends_only_their_turn(self) -> None:
+        self.hero.dexterity = 16
+        self.hero.save(update_fields=("dexterity",))
+        encounter = start_encounter(self.gm)
+
+        combatant = roll_player_initiative(self.player, 12)
+
+        self.assertEqual(combatant.initiative_roll, 12)
+        self.assertEqual(combatant.initiative_modifier, 3)
+        self.assertEqual(combatant.initiative, 15)
+        set_current_combatant(self.gm, combatant.pk)
+        end_player_turn(self.player)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.current_combatant_id, combatant.pk)
+
+        with self.assertRaises(ValidationError):
+            roll_player_initiative(self.player, 10)
+
+    def test_natural_twenty_grants_exactly_one_second_initiative(self) -> None:
+        encounter = start_encounter(self.gm)
+
+        first = roll_player_initiative(self.player, 20)
+        second = encounter.combatants.exclude(pk=first.pk).get()
+        self.assertIsNone(second.initiative_roll)
+
+        rolled_second = roll_player_initiative(self.player, 20)
+        self.assertEqual(rolled_second.pk, second.pk)
+        self.assertEqual(encounter.combatants.filter(character=self.hero).count(), 2)
+
+        with self.assertRaises(ValidationError):
+            roll_player_initiative(self.player, 1)
+
+    def test_exact_tie_uses_player_agreement(self) -> None:
+        other_context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=get_user_model().objects.create_user(username="other"),
+            kind=CampaignContext.Kind.PC,
+        )
+        make_character(
+            self.campaign,
+            name="Other",
+            active=True,
+            context=other_context,
+        )
+        start_encounter(self.gm)
+        hero_entry = roll_player_initiative(self.player, 10)
+        other_entry = roll_player_initiative(other_context, 10)
+
+        default_order = [row["id"] for row in encounter_data(self.gm)["combatants"]]
+        self.assertIn(default_order[0], (hero_entry.pk, other_entry.pk))
+
+        choose_initiative_tie(self.player, other_entry.pk)
+        player_rows = encounter_data(self.player)["combatants"]
+        player_tie = next(row for row in player_rows if row["id"] == hero_entry.pk)
+        vote_counts = {
+            option["combatant_id"]: option["vote_count"]
+            for option in player_tie["tie_options"]
+        }
+        self.assertEqual(player_tie["tie_votes_cast"], 1)
+        self.assertEqual(player_tie["tie_votes_required"], 2)
+        self.assertEqual(player_tie["tie_winner_id"], None)
+        self.assertEqual(player_tie["tie_resolution"], None)
+        self.assertEqual(vote_counts[other_entry.pk], 1)
+
+        choose_initiative_tie(other_context, other_entry.pk)
+        agreed_rows = encounter_data(self.gm)["combatants"]
+        agreed_order = [row["id"] for row in agreed_rows]
+        self.assertEqual(agreed_order[0], other_entry.pk)
+        self.assertEqual(
+            [row["initiative_position"] for row in agreed_rows],
+            list(range(len(agreed_rows))),
+        )
+
+        resolved_rows = encounter_data(self.player)["combatants"]
+        resolved_tie = next(
+            row for row in resolved_rows if row["id"] == hero_entry.pk
+        )
+        resolved_counts = {
+            option["combatant_id"]: option["vote_count"]
+            for option in resolved_tie["tie_options"]
+        }
+        self.assertEqual(resolved_tie["tie_votes_cast"], 2)
+        self.assertEqual(resolved_tie["tie_winner_id"], other_entry.pk)
+        self.assertEqual(resolved_tie["tie_resolution"], "agreement")
+        self.assertEqual(resolved_counts[other_entry.pk], 2)
+
+    def test_exact_tie_randomly_resolves_only_after_disagreement(self) -> None:
+        other_context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=get_user_model().objects.create_user(username="other-random"),
+            kind=CampaignContext.Kind.PC,
+        )
+        make_character(
+            self.campaign,
+            name="Other Random",
+            active=True,
+            context=other_context,
+        )
+        start_encounter(self.gm)
+        hero_entry = roll_player_initiative(self.player, 10)
+        other_entry = roll_player_initiative(other_context, 10)
+
+        choose_initiative_tie(self.player, hero_entry.pk)
+        partial_rows = encounter_data(self.player)["combatants"]
+        partial_tie = next(
+            row for row in partial_rows if row["id"] == hero_entry.pk
+        )
+        self.assertEqual(partial_tie["tie_votes_cast"], 1)
+        self.assertEqual(partial_tie["tie_winner_id"], None)
+        self.assertEqual(partial_tie["tie_resolution"], None)
+
+        with patch(
+            "hoard.campaigns.services.combat.choice",
+            return_value=other_entry.pk,
+        ):
+            choose_initiative_tie(other_context, other_entry.pk)
+
+        resolved_rows = encounter_data(self.player)["combatants"]
+        resolved_tie = next(
+            row for row in resolved_rows if row["id"] == hero_entry.pk
+        )
+        resolved_order = [row["id"] for row in encounter_data(self.gm)["combatants"]]
+        self.assertEqual(resolved_tie["tie_votes_cast"], 2)
+        self.assertEqual(resolved_tie["tie_winner_id"], other_entry.pk)
+        self.assertEqual(resolved_tie["tie_resolution"], "random")
+        self.assertEqual(resolved_order[0], other_entry.pk)
+
+
+    def test_equal_results_put_the_higher_dexterity_modifier_first(self) -> None:
+        other_context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=get_user_model().objects.create_user(username="quicker"),
+            kind=CampaignContext.Kind.PC,
+        )
+        other = make_character(
+            self.campaign,
+            name="Quicker",
+            active=True,
+            context=other_context,
+        )
+        other.dexterity = 12
+        other.save(update_fields=("dexterity",))
+        start_encounter(self.gm)
+        roll_player_initiative(self.player, 10)
+        quicker_entry = roll_player_initiative(other_context, 9)
+
+        order = [row["id"] for row in encounter_data(self.gm)["combatants"]]
+
+        self.assertEqual(order[0], quicker_entry.pk)
 
     def test_hidden_monster_health_is_filtered_for_players(self) -> None:
         start_encounter(self.gm)

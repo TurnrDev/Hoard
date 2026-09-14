@@ -73,11 +73,8 @@
         :members="members"
         :active-context="activeContext"
         :expanded="expanded"
-        :can-manage="canManageCombatants"
+        :can-view-hidden-health="canViewHiddenHealth"
         :current-combatant-id="campaign.encounter?.current_combatant_id ?? null"
-        @apply-condition="forwardApplyCondition"
-        @remove-condition="forwardRemoveCondition"
-        @update-visibility="$emit('update-combatant-visibility', $event)"
       />
       <PartyRoster
         v-else
@@ -98,7 +95,7 @@
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
 import Button from "primevue/button";
-import type { Campaign, CampaignMember, ConditionMutation } from "../api";
+import type { Campaign, CampaignMember } from "../api";
 import type { ActingContext } from "../context";
 import GameMasterPresence from "./GameMasterPresence.vue";
 import InitiativeTracker from "./InitiativeTracker.vue";
@@ -125,26 +122,13 @@ export default defineComponent({
       default: () => [],
     },
   },
-  emits: [
-    "apply-combatant-condition",
-    "remove-combatant-condition",
-    "toggle",
-    "update-combatant-visibility",
-  ],
+  emits: ["toggle"],
   computed: {
     gameMasters(): CampaignMember[] {
       return this.members.filter((member) => member.is_game_master && member.is_active);
     },
-    canManageCombatants(): boolean {
+    canViewHiddenHealth(): boolean {
       return this.activeContext.kind === "gm";
-    },
-  },
-  methods: {
-    forwardApplyCondition(combatantId: number, condition: ConditionMutation): void {
-      this.$emit("apply-combatant-condition", combatantId, condition);
-    },
-    forwardRemoveCondition(combatantId: number, conditionId: number): void {
-      this.$emit("remove-combatant-condition", combatantId, conditionId);
     },
   },
 });

@@ -140,6 +140,9 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.encounter.combatants.update",
         "campaign.encounter.combatants.remove",
         "campaign.encounter.current.set",
+        "campaign.encounter.initiative.roll",
+        "campaign.encounter.initiative.tie.choose",
+        "campaign.encounter.turn.end",
         "campaign.encounter.conditions.set",
         "campaign.encounter.conditions.remove",
         "characters.conditions.set",
@@ -212,9 +215,11 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         EncounterCombatantReorderCommand,
         EncounterCombatantUpdateCommand,
         EncounterCurrentCombatantCommand,
+        InitiativeTieChoiceCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
         MemberDeactivationCommand,
+        PlayerInitiativeRollCommand,
     )
 
     definitions = {
@@ -274,6 +279,21 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         name="campaign.encounter.current.set",
         kind=OperationKind.COMMAND,
         payload_model=EncounterCurrentCombatantCommand,
+    )
+    definitions["campaign.encounter.initiative.roll"] = OperationDefinition(
+        name="campaign.encounter.initiative.roll",
+        kind=OperationKind.COMMAND,
+        payload_model=PlayerInitiativeRollCommand,
+    )
+    definitions["campaign.encounter.initiative.tie.choose"] = OperationDefinition(
+        name="campaign.encounter.initiative.tie.choose",
+        kind=OperationKind.COMMAND,
+        payload_model=InitiativeTieChoiceCommand,
+    )
+    definitions["campaign.encounter.turn.end"] = OperationDefinition(
+        name="campaign.encounter.turn.end",
+        kind=OperationKind.COMMAND,
+        payload_model=EmptyPayload,
     )
     definitions["campaign.encounter.conditions.set"] = OperationDefinition(
         name="campaign.encounter.conditions.set",

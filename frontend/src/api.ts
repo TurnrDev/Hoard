@@ -1,4 +1,5 @@
 import axios from "axios";
+import { markConnectionAvailable, markConnectionUnavailable } from "./connection";
 import {
   campaignImportRequest,
   campaignRequest,
@@ -252,6 +253,17 @@ export type EncounterCombatant = {
   name: string;
   portrait_url: string | null;
   initiative: number;
+  initiative_position: number;
+  initiative_roll: number | null;
+  initiative_modifier: number;
+  can_roll_initiative: boolean;
+  can_end_turn: boolean;
+  tie_options: Array<{ combatant_id: number; name: string; vote_count: number }>;
+  tie_choice_id: number | null;
+  tie_votes_cast: number;
+  tie_votes_required: number;
+  tie_winner_id: number | null;
+  tie_resolution: "agreement" | "random" | null;
   current_hp: number | null;
   max_hp: number | null;
   health_percentage: number | null;
@@ -448,9 +460,17 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
         ...(unsafe ? { "X-CSRFToken": token } : {}),
       },
     });
+    markConnectionAvailable("http");
+
     return response.status === 204 ? (undefined as T) : response.data;
   } catch (error) {
     if (axios.isAxiosError(error)) {
+      if (error.response) {
+        markConnectionAvailable("http");
+      } else {
+        markConnectionUnavailable("http");
+      }
+
       throw new Error(
         apiErrorMessage(
           error.response?.data,
@@ -461,6 +481,14 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     }
     throw error;
   }
+}
+
+export function isUnauthenticatedError(error: unknown): boolean {
+  if (!(error instanceof Error) || !axios.isAxiosError(error.cause)) {
+    return false;
+  }
+
+  return error.cause.response?.status === 401;
 }
 
 function apiErrorMessage(error: unknown, fallback: string): string {
@@ -1145,6 +1173,25 @@ export function setCurrentEncounterCombatant(
   return contextRequest<void>(contextId, "campaign.encounter.current.set", {
     combatant_id: combatantId,
   });
+}
+
+export function rollPlayerInitiative(contextId: number, roll: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.initiative.roll", {
+    roll,
+  });
+}
+
+export function chooseInitiativeTie(
+  contextId: number,
+  combatantId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.initiative.tie.choose", {
+    combatant_id: combatantId,
+  });
+}
+
+export function endPlayerTurn(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.turn.end");
 }
 
 export function startEncounter(contextId: number): Promise<void> {

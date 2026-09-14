@@ -278,9 +278,43 @@ PartyRail is a live campaign roster with two explicit modes.
 - A character may have more than one position in the initiative order. Those
   entries have independent initiative values but share character-owned HP and
   conditions.
+- At the start of combat, each player enters their own bare d20 roll from 1 to
+  20 in a modal prompt that opens automatically in that player's campaign
+  context. The prompt cannot be dismissed while the roll is pending. The client
+  shows the resulting initiative after applying the character's Dexterity
+  modifier. A natural 20 places that entry ahead of ordinary results and opens a
+  second-roll prompt; a character can have at most two entries from this rule.
+- Equal resulting initiatives are ordered by the higher Dexterity modifier. If
+  those modifiers are also equal, every affected player can choose which tied
+  entry should act first. A unanimous choice wins. If every affected player has
+  voted but their choices disagree, Hoard randomly selects one tied entry and
+  persists that result for stable ordering. No provisional or random choice is
+  revealed while votes are still outstanding.
+- The player profile keeps the exact-tie decision visible after a vote. It shows
+  a live vote count for every tied entry, the number of players who have voted,
+  and the final unanimous or random result once every player has voted. The
+  voting player also receives an immediate confirmation Toast; campaign change
+  events refresh the shared tally for every player.
+- Exact-tie choices are stored on the active encounter in
+  `initiative_tie_choices`. This JSON object has decimal-string
+  `CampaignContext` primary keys and integer `EncounterCombatant` primary-key
+  values, for example `{"12": 47, "18": 47}`. JSON requires object keys to be
+  strings. A vote is accepted only when the voting context owns an entry in the
+  exact tie group and the chosen combatant belongs to that same group. The
+  object is temporary encounter state, is cleared whenever an initiative roll
+  changes or combat ends, and disappears with the encounter when it is deleted.
+- Non-unanimous results are stored separately in `initiative_tie_breaks`. Its
+  JSON keys are stable comma-separated sorted combatant IDs identifying the
+  exact tie group, and each value is the randomly selected combatant ID. A value
+  is created only after every eligible context has cast a valid vote and those
+  votes disagree. It is cleared with the vote data when rolls change or combat
+  ends.
 - The encounter stores the exact initiative entry whose turn is current. The GM
   can select a turn directly or move backward and forward through the order,
   including repeated positions for the same character.
+- When a player's own entry is current, that player can end their turn. The
+  command is rejected for every other context and advances to the next rolled
+  entry, wrapping at the end of the order.
 - Highlight the current entry in both the Party Rail and GM encounter controls
   with an icon and structural emphasis, not colour alone. When a player's own
   entry becomes current, attempt a short vibration and fall back to a brief tone
@@ -298,6 +332,12 @@ PartyRail is a live campaign roster with two explicit modes.
   players, independently for each combatant.
 - The Party Rail is the concise initiative tracker; do not create a competing
   tracker for the same information.
+- PartyRail is supplemental, read-only campaign state. It never contains forms,
+  questions, mutation buttons, or GM visibility/condition controls. Pending
+  initiative rolls use the shell dialog; exact-tie choices and the current
+  player's End turn action appear at the top of their character profile. The
+  current-turn message remains sticky while the profile scrolls. GM mutations
+  remain in the GM encounter desk.
 
 ### Entry visual language
 

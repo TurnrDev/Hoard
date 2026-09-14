@@ -3,6 +3,14 @@
     class="container-fluid px-0"
     v-if="character"
   >
+    <PlayerEncounterActions
+      v-if="ownCharacter && campaign?.encounter"
+      :context-id="campaignId"
+      :character-id="character.id"
+      :current-combatant-id="campaign.encounter.current_combatant_id"
+      :combatants="campaign.encounter.combatants"
+    />
+
     <header
       class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4"
     >
@@ -1318,6 +1326,7 @@ import CharacterAvatar from "../components/CharacterAvatar.vue";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import ConditionManager from "../components/ConditionManager.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
+import PlayerEncounterActions from "../components/PlayerEncounterActions.vue";
 import { displayCoin, displayIdentifier, formatCoinPouch } from "../display";
 import type { PickerCandidate } from "../itemPicker";
 import { formatGoldValue, formatMoneyValue } from "../money";
@@ -1397,6 +1406,7 @@ export default defineComponent({
     CalculationBreakdown,
     CharacterAvatar,
     ItemPickerDialog,
+    PlayerEncounterActions,
   },
   data() {
     const levelUpError = this.$route.query.level_up_error;

@@ -64,6 +64,8 @@ from .payloads import (
     EncounterCombatantReorderCommand,
     EncounterCombatantUpdateCommand,
     EncounterCurrentCombatantCommand,
+    InitiativeTieChoiceCommand,
+    PlayerInitiativeRollCommand,
 )
 from .protocol import (
     CommandAcknowledgementEnvelope,
@@ -88,8 +90,10 @@ from .services import (
     add_character_combatant,
     add_encounter_combatant,
     approve_campaign_level,
+    choose_initiative_tie,
     create_invitation,
     encounter_data,
+    end_player_turn,
     finish_encounter,
     post_health_transaction,
     register_and_accept,
@@ -97,6 +101,7 @@ from .services import (
     remove_combatant,
     remove_combatant_condition,
     reorder_combatants,
+    roll_player_initiative,
     set_character_condition,
     set_combatant_condition,
     set_current_combatant,
@@ -447,6 +452,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.encounter.combatants.reorder": self.combatant_reorder,
             "campaign.encounter.combatants.remove": self.combatant_remove,
             "campaign.encounter.current.set": self.encounter_current_set,
+            "campaign.encounter.initiative.roll": self.initiative_roll,
+            "campaign.encounter.initiative.tie.choose": self.initiative_tie_choose,
+            "campaign.encounter.turn.end": self.player_turn_end,
             "campaign.encounter.conditions.set": self.combatant_condition_set,
             "campaign.encounter.conditions.remove": self.combatant_condition_remove,
             "characters.conditions.set": self.character_condition_set,
@@ -705,6 +713,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.encounter.combatants.reorder",
             "campaign.encounter.combatants.remove",
             "campaign.encounter.current.set",
+            "campaign.encounter.initiative.roll",
+            "campaign.encounter.initiative.tie.choose",
+            "campaign.encounter.turn.end",
             "campaign.encounter.conditions.set",
             "campaign.encounter.conditions.remove",
             "characters.conditions.set",
@@ -911,6 +922,26 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         command = EncounterCurrentCombatantCommand.model_validate(content)
         context = self._context()
         set_current_combatant(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def initiative_roll(self, content: dict[str, object]) -> None:
+        command = PlayerInitiativeRollCommand.model_validate(content)
+        context = self._context()
+        roll_player_initiative(context, command.roll)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def initiative_tie_choose(self, content: dict[str, object]) -> None:
+        command = InitiativeTieChoiceCommand.model_validate(content)
+        context = self._context()
+        choose_initiative_tie(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def player_turn_end(self, content: dict[str, object]) -> None:
+        context = self._context()
+        end_player_turn(context)
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
     @database_sync_to_async

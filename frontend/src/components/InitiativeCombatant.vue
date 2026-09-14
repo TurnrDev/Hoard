@@ -14,40 +14,27 @@
     :show-hp-numbers="showHealthNumbers"
     :current="current"
   >
-    <div
-      v-if="canManage"
-      class="d-grid gap-2 mt-3"
+    <p
+      v-if="isOwnedCombatant && combatant.initiative_roll !== null"
+      class="small tabular-nums mb-2"
     >
-      <ConditionManager
-        :conditions="combatant.conditions"
-        :target-name="combatant.name"
-        :target-id="`combatant-${combatant.id}`"
-        can-edit
-        trigger-only
-        @apply="$emit('apply-condition', $event)"
-        @remove="$emit('remove-condition', $event)"
-      />
-      <CombatantVisibilityControls
-        v-if="!combatant.is_player_character"
-        :combatant="combatant"
-        @update-visibility="$emit('update-visibility', $event)"
-      />
-    </div>
+      Initiative
+      <strong>{{ combatant.initiative }}</strong>
+      <span class="text-body-secondary">
+        ({{ combatant.initiative_roll }} {{ signedModifier }})
+      </span>
+    </p>
   </PartyRailEntry>
 </template>
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
 import type { ActingContext } from "../context";
-import CombatantVisibilityControls from "./CombatantVisibilityControls.vue";
-import ConditionManager from "./ConditionManager.vue";
 import PartyRailEntry from "./PartyRailEntry.vue";
 import type { PartyRailCombatant } from "./partyRailTypes";
 
 export default defineComponent({
   components: {
-    CombatantVisibilityControls,
-    ConditionManager,
     PartyRailEntry,
   },
   props: {
@@ -55,26 +42,33 @@ export default defineComponent({
     activeContext: { type: Object as PropType<ActingContext>, required: true },
     connected: { type: Boolean, default: false },
     expanded: { type: Boolean, default: false },
-    canManage: { type: Boolean, default: false },
+    canViewHiddenHealth: { type: Boolean, default: false },
     current: { type: Boolean, default: false },
   },
-  emits: ["apply-condition", "remove-condition", "update-visibility"],
   computed: {
+    signedModifier(): string {
+      const modifier = this.combatant.initiative_modifier;
+
+      return modifier >= 0 ? `+ ${modifier}` : `− ${Math.abs(modifier)}`;
+    },
     displayName(): string {
-      return this.activeContext.kind === "pc" &&
+      return this.isOwnedCombatant ? "You" : this.combatant.name;
+    },
+    isOwnedCombatant(): boolean {
+      return (
+        this.activeContext.kind === "pc" &&
         this.activeContext.character_id === this.combatant.character_id
-        ? "You"
-        : this.combatant.name;
+      );
     },
     showHealthBar(): boolean {
       return Boolean(
-        (this.canManage || this.combatant.show_hp_bar) &&
+        (this.canViewHiddenHealth || this.combatant.show_hp_bar) &&
         this.combatant.health_percentage !== null,
       );
     },
     showHealthNumbers(): boolean {
       return Boolean(
-        (this.canManage || this.combatant.show_hp_numbers) &&
+        (this.canViewHiddenHealth || this.combatant.show_hp_numbers) &&
         this.combatant.current_hp !== null &&
         this.combatant.max_hp !== null,
       );

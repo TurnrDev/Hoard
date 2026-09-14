@@ -1,6 +1,7 @@
 import { ref, watch } from "vue";
 import ReconnectingWebSocket from "reconnecting-websocket";
 import { v7 as uuid7 } from "uuid";
+import { markConnectionAvailable, markConnectionUnavailable } from "./connection";
 
 let socket: ReconnectingWebSocket | undefined;
 let campaignId: number | undefined;
@@ -110,6 +111,7 @@ function open(): void {
   if (!campaignId) {
     return;
   }
+  const openedCampaignId = campaignId;
   socket = new ReconnectingWebSocket(socketUrl(`/ws/contexts/${campaignId}/`), [], {
     connectionTimeout: SOCKET_CONNECT_TIMEOUT_MS,
     maxReconnectionDelay: 1_000,
@@ -117,6 +119,7 @@ function open(): void {
     reconnectionDelayGrowFactor: 1,
   });
   socket.onopen = () => {
+    markConnectionAvailable("campaign");
     startPresenceHeartbeat();
     reconnectListeners.forEach((listener) => listener());
   };
@@ -160,6 +163,10 @@ function open(): void {
   socket.onclose = () => {
     stopPresenceHeartbeat();
     rejectPendingRequests("The campaign connection closed.");
+
+    if (campaignId === openedCampaignId) {
+      markConnectionUnavailable("campaign");
+    }
   };
 }
 
@@ -198,6 +205,7 @@ export async function ensureCampaignRealtime(
 
 export function disconnectCampaignRealtime(): void {
   campaignId = undefined;
+  markConnectionAvailable("campaign");
   stopPresenceHeartbeat();
   socket?.close();
   socket = undefined;
@@ -255,9 +263,14 @@ async function oneShotRequest<T>(
       resolve(data);
     };
     connection.onerror = () => {
+      markConnectionUnavailable("user");
       rejectOnce(new Error("Could not connect to the server."));
     };
     connection.onclose = () => {
+      if (!settled) {
+        markConnectionUnavailable("user");
+      }
+
       rejectOnce(new Error("The WebSocket connection closed before completing."));
     };
     connection.onopen = () => {
@@ -274,8 +287,10 @@ async function oneShotRequest<T>(
         return;
       }
       if (message.type === "query.error" || message.type === "command.error") {
+        markConnectionAvailable("user");
         rejectOnce(requestError(message));
       } else {
+        markConnectionAvailable("user");
         resolveOnce(message.data as T);
       }
       connection.close();

@@ -34,6 +34,18 @@ class EncounterCurrentCombatantCommand(BaseModel):
     combatant_id: int | None = Field(default=None, gt=0)
 
 
+class PlayerInitiativeRollCommand(BaseModel):
+    """Record the owning player's bare d20 initiative roll."""
+
+    roll: int = Field(ge=1, le=20)
+
+
+class InitiativeTieChoiceCommand(BaseModel):
+    """Choose which tied player should act first."""
+
+    combatant_id: int = Field(gt=0)
+
+
 class CharacterConditionIdentifierCommand(BaseModel):
     """A command removing one condition cause or every cause of one condition."""
 

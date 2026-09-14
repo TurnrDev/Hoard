@@ -26,6 +26,8 @@ from .combat import (
     EncounterCombatantReorderCommand,
     EncounterCombatantUpdateCommand,
     EncounterCurrentCombatantCommand,
+    InitiativeTieChoiceCommand,
+    PlayerInitiativeRollCommand,
 )
 from .invitations import (
     CampaignInvitationChangedEvent,
@@ -66,6 +68,8 @@ __all__ = [
     "EncounterCombatantReorderCommand",
     "EncounterCombatantUpdateCommand",
     "EncounterCurrentCombatantCommand",
+    "InitiativeTieChoiceCommand",
+    "PlayerInitiativeRollCommand",
     "InvitationCreateCommand",
     "InvitationIdentifierCommand",
     "MemberDeactivationCommand",
