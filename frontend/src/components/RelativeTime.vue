@@ -16,7 +16,7 @@ export default defineComponent({
   props: {
     value: {
       type: String,
-      required: true,
+      default: "",
     },
   },
   data() {
@@ -46,6 +46,13 @@ export default defineComponent({
   },
   methods: {
     updateLabels(): void {
+      if (!this.value) {
+        this.absoluteTime = "Date unavailable";
+        this.relativeTime = "Date unavailable";
+
+        return;
+      }
+
       const parsedValue = moment(this.value);
 
       if (!parsedValue.isValid()) {

@@ -1271,7 +1271,7 @@
                   :key="`${transaction.ledger}-${transaction.id}`"
                 >
                   <td class="text-nowrap">
-                    <RelativeTime :value="transaction.created_at" />
+                    <RelativeTime :value="transaction.occurred_at" />
                   </td>
                   <td class="text-end text-nowrap tabular-nums fw-semibold">
                     {{ activityAmount(transaction) }}

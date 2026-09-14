@@ -754,6 +754,9 @@ PartyRail is a live campaign roster with two explicit modes.
 - 2026-09-14: removed the redundant visible Note field label from the note editor.
   Its add/edit heading supplies the visual context and the textarea retains an
   explicit accessible name.
+- 2026-09-15: corrected profile activity dates to use the ledger's authoritative
+  `occurred_at` timestamp. The relative-time component now also reports a missing
+  timestamp as unavailable instead of allowing Moment to interpret it as now.
 
 ## Open questions
 

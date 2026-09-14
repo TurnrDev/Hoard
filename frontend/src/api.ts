@@ -407,7 +407,6 @@ export type LedgerTransaction = {
   ledger: string;
   ledger_label?: string;
   description: string;
-  created_at: string;
   occurred_at: string;
   campaign_date: string | null;
   entries: LedgerEntry[];
