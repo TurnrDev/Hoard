@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Sum
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from hoard.campaigns.models.experience import ExperienceAccount
@@ -264,6 +265,7 @@ class Character(models.Model):
     spell_slot_current = models.JSONField(default=dict, blank=True)
     spell_slot_adjustments = models.JSONField(default=dict, blank=True)
     has_inspiration = models.BooleanField(default=False)
+    inspiration_expires_at = models.DateTimeField(blank=True, null=True)
     proficiency_bonus_adjustment = models.SmallIntegerField(
         "Proficiency Bonus Adjustment", default=0
     )
@@ -307,6 +309,14 @@ class Character(models.Model):
     @property
     def is_player_character(self) -> bool:
         return self.context_id is not None
+
+    @property
+    def inspiration_available(self) -> bool:
+        return bool(
+            self.has_inspiration
+            and self.inspiration_expires_at
+            and self.inspiration_expires_at > timezone.now()
+        )
 
     @property
     def proficiency_bonus(self) -> int:

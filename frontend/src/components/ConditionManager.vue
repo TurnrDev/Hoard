@@ -17,7 +17,7 @@
         </p>
       </div>
       <Button
-        v-if="canEdit"
+        v-if="canEdit && showTrigger"
         label="Add condition"
         icon="mdi mdi-plus"
         size="small"
@@ -93,7 +93,7 @@
   </section>
 
   <Button
-    v-else-if="canEdit"
+    v-else-if="canEdit && showTrigger"
     :label="iconOnly ? undefined : 'Conditions'"
     icon="mdi mdi-bandage"
     size="small"
@@ -233,6 +233,7 @@ export default defineComponent({
     canEdit: { type: Boolean, default: false },
     triggerOnly: { type: Boolean, default: false },
     iconOnly: { type: Boolean, default: false },
+    showTrigger: { type: Boolean, default: true },
   },
   emits: ["apply", "remove"],
   data() {

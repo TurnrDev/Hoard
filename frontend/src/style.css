@@ -188,6 +188,10 @@ select:focus-visible {
   color: var(--hoard-gold);
 }
 
+.inspired-name {
+  color: var(--hoard-gold);
+}
+
 .proficiency-bonus--half {
   color: var(--bs-secondary-color);
 }
@@ -200,6 +204,7 @@ select:focus-visible {
 @supports (background-clip: text) {
   .campaign-header__wordmark,
   .public-wordmark,
+  .inspired-name,
   .proficiency-bonus:not(.proficiency-bonus--half),
   .level-up-near {
     color: transparent;
@@ -231,6 +236,7 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .campaign-header__wordmark,
   .public-wordmark,
+  .inspired-name,
   .proficiency-bonus:not(.proficiency-bonus--half),
   .level-up-near {
     color: var(--hoard-gold);

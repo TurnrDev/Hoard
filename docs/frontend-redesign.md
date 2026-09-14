@@ -719,6 +719,25 @@ PartyRail is a live campaign roster with two explicit modes.
   by its game master. All note mutations use the existing WebSocket sheet-record
   commands, refresh from shared campaign state, and report successful outcomes
   through Toasts.
+- 2026-09-14: consolidated inspiration, condition, and rest commands into the
+  character profile action menu. The conditions section is omitted when there
+  are no active conditions, while its editor remains available from that menu.
+  Inspired player names use the established accessible gold shimmer on profile,
+  directory, party-roster, and initiative views, with a non-visual Inspired
+  label and reduced-motion fallback.
+- 2026-09-14: inspiration changes publish an authoritative, correlated
+  `character.inspiration_changed` event to every connected campaign context.
+  Players receive a one-step `Use inspiration` action while inspired, but only
+  the GM may award inspiration. Successful use or award is confirmed with the
+  standard transient Toast and the shared event refreshes every open view.
+- 2026-09-14: short-rest and long-rest actions are also available from the HP
+  card's action menu, reusing the same dialog and commands as the character
+  action menu.
+- 2026-09-14: inspiration expires 24 real-life hours after it is awarded so it
+  cannot carry into a later game session. The authoritative expiry timestamp is
+  distributed with character state and inspiration events; each connected
+  client schedules a refresh at the next expiry so names, menus, and rails stop
+  showing inspiration without requiring another user action.
 
 ## Open questions
 

@@ -39,7 +39,18 @@
       v-if="expanded"
       class="party-rail__character-details"
     >
-      <span class="party-rail__entry-name d-block text-truncate">{{ name }}</span>
+      <span
+        class="party-rail__entry-name d-block text-truncate"
+        :class="{ 'inspired-name': inspired }"
+      >
+        {{ name }}
+      </span>
+      <span
+        v-if="inspired"
+        class="visually-hidden"
+      >
+        — Inspired
+      </span>
       <span
         v-if="current"
         class="d-block small fw-semibold"
@@ -132,6 +143,7 @@ export default defineComponent({
     showHpBar: { type: Boolean, default: true },
     showHpNumbers: { type: Boolean, default: true },
     current: { type: Boolean, default: false },
+    inspired: { type: Boolean, default: false },
   },
   computed: {
     primaryCondition(): ActiveCondition | undefined {

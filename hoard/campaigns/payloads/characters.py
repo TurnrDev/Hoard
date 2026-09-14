@@ -1,5 +1,6 @@
 """Character command and event contracts."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -68,6 +69,18 @@ class CharacterHealthChangedEvent(BaseModel):
     character_id: int
     current_hp: int
     temporary_hp: int
+    request_id: str | None = None
+
+
+class CharacterInspirationChangedEvent(BaseModel):
+    """Authoritative inspiration state after a successful change."""
+
+    type: Literal["character.inspiration_changed"] = (
+        "character.inspiration_changed"
+    )
+    character_id: int
+    available: bool
+    expires_at: datetime | None = None
     request_id: str | None = None
 
 

@@ -947,6 +947,9 @@ def combatant_data(
         "health_percentage": health_percentage,
         "show_hp_bar": show_bar,
         "show_hp_numbers": show_numbers,
+        "has_inspiration": bool(
+            combatant.character_id and combatant.character.inspiration_available
+        ),
         "conditions": condition_list_data(
             list(
                 combatant.character.conditions.all()

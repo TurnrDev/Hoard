@@ -22,7 +22,15 @@
           size="profile"
         />
         <div>
-          <h1>{{ character.name }}</h1>
+          <h1 :class="{ 'inspired-name': character.has_inspiration }">
+            {{ character.name }}
+            <span
+              v-if="character.has_inspiration"
+              class="visually-hidden"
+            >
+              — Inspired
+            </span>
+          </h1>
           <p class="mb-1">{{ character.race }} · {{ character.class }}</p>
           <p class="mb-0 text-body-secondary tabular-nums">
             Level {{ experienceProgress.level }} ·
@@ -238,8 +246,14 @@
           </div>
         </div>
       </div>
-      <div class="col-12">
+      <div
+        class="col-12"
+        :class="{ 'd-none': character.conditions.length === 0 }"
+      >
         <ConditionManager
+          ref="conditionManager"
+          :trigger-only="character.conditions.length === 0"
+          :show-trigger="false"
           :conditions="character.conditions"
           :target-name="character.name"
           :target-id="`character-${character.id}`"
@@ -250,38 +264,7 @@
       </div>
       <div class="col-12">
         <section class="mb-4">
-          <header class="d-flex align-items-center gap-2 flex-wrap">
-            Resources
-            <span class="flex-grow-1" />
-            <Button
-              v-if="canEdit"
-              size="small"
-              :icon="
-                character.has_inspiration ? 'mdi mdi-star' : 'mdi mdi-star-outline'
-              "
-              @click="toggleInspiration"
-            >
-              {{
-                character.has_inspiration ? "Spend inspiration" : "Award inspiration"
-              }}
-            </Button>
-            <Button
-              v-if="canEdit"
-              class="ms-2"
-              size="small"
-              @click="openShortRest"
-            >
-              Short rest
-            </Button>
-            <Button
-              v-if="canEdit"
-              class="ms-2"
-              size="small"
-              @click="takeRest('long')"
-            >
-              Long rest
-            </Button>
-          </header>
+          <header>Resources</header>
           <div>
             <p class="mb-3">
               Inspiration:
@@ -2094,7 +2077,39 @@ export default defineComponent({
   },
   computed: {
     characterActionItems(): MenuItem[] {
-      const items: MenuItem[] = [
+      const items: MenuItem[] = [];
+
+      if (this.character?.has_inspiration) {
+        items.push({
+          label: "Use inspiration",
+          icon: "mdi mdi-star",
+          command: () => void this.toggleInspiration(),
+        });
+      } else if (this.campaign?.is_game_master) {
+        items.push({
+          label: "Award inspiration",
+          icon: "mdi mdi-star-outline",
+          command: () => void this.toggleInspiration(),
+        });
+      }
+
+      items.push(
+        {
+          label: "Add condition",
+          icon: "mdi mdi-bandage",
+          command: () => this.openConditionManager(),
+        },
+        {
+          label: "Short rest",
+          icon: "mdi mdi-weather-sunset",
+          command: () => this.openShortRest(),
+        },
+        {
+          label: "Long rest",
+          icon: "mdi mdi-weather-night",
+          command: () => void this.takeRest("long"),
+        },
+        { separator: true },
         {
           label: "Edit character",
           icon: "mdi mdi-pencil",
@@ -2109,7 +2124,7 @@ export default defineComponent({
           icon: "mdi mdi-image-edit",
           command: () => this.choosePortrait(),
         },
-      ];
+      );
 
       if (this.character?.portrait_url) {
         items.push({
@@ -2161,6 +2176,17 @@ export default defineComponent({
           label: "Advanced HP adjustment",
           icon: "mdi mdi-tune-variant",
           command: () => this.openHealthFor("damage"),
+        },
+        { separator: true },
+        {
+          label: "Short rest",
+          icon: "mdi mdi-weather-sunset",
+          command: () => this.openShortRest(),
+        },
+        {
+          label: "Long rest",
+          icon: "mdi mdi-weather-night",
+          command: () => void this.takeRest("long"),
         },
       ];
     },
@@ -2776,11 +2802,16 @@ export default defineComponent({
         return;
       }
 
+      const inspirationWasAvailable = this.character.has_inspiration;
+
       try {
         this.character = await setCharacterInspiration(
           this.campaignId,
           this.character.id,
           !this.character.has_inspiration,
+        );
+        this.showSuccess(
+          inspirationWasAvailable ? "Inspiration used." : "Inspiration awarded.",
         );
       } catch (exception) {
         this.error =
@@ -2788,6 +2819,12 @@ export default defineComponent({
             ? exception.message
             : "Unable to update inspiration.";
       }
+    },
+    openConditionManager(): void {
+      const conditionManager = this.$refs.conditionManager as
+        { openNewCondition: () => void } | undefined;
+
+      conditionManager?.openNewCondition();
     },
     async equipItem(entry: { item_id: number; name: string }): Promise<void> {
       if (!this.character) {

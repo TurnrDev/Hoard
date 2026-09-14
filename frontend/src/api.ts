@@ -269,6 +269,7 @@ export type EncounterCombatant = {
   health_percentage: number | null;
   show_hp_bar: boolean;
   show_hp_numbers: boolean;
+  has_inspiration: boolean;
   conditions: ActiveCondition[];
 };
 
@@ -329,6 +330,7 @@ export type Character = {
   languages: string[];
   equipment_proficiencies: Record<string, string[]>;
   has_inspiration: boolean;
+  inspiration_expires_at: string | null;
   conditions: ActiveCondition[];
   is_build_complete: boolean;
   level_up_complete: boolean;

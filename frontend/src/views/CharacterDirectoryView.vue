@@ -54,7 +54,18 @@
               size="preview"
             />
             <div>
-              <h2 class="h3 mb-1">{{ character.name }}</h2>
+              <h2
+                class="h3 mb-1"
+                :class="{ 'inspired-name': character.has_inspiration }"
+              >
+                {{ character.name }}
+                <span
+                  v-if="character.has_inspiration"
+                  class="visually-hidden"
+                >
+                  — Inspired
+                </span>
+              </h2>
               <p class="text-body-secondary mb-0">
                 {{ character.race }} · {{ character.class }}
               </p>

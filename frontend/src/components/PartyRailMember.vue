@@ -4,6 +4,7 @@
     :name="label"
     :portrait-url="character.portrait_url"
     :conditions="character.conditions"
+    :inspired="character.has_inspiration"
     :connected="connected"
     show-presence
     :expanded="expanded"

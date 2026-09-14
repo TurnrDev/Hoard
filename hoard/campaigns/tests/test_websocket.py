@@ -183,6 +183,83 @@ class ContextSocketTests(TransactionTestCase):
 
         return first_messages, second_message, command_request_id
 
+    async def inspiration_change_events(self):
+        player = await database_sync_to_async(get_user_model().objects.create_user)(
+            username="inspired-player"
+        )
+        player_context = await database_sync_to_async(CampaignContext.objects.create)(
+            campaign=self.campaign,
+            user=player,
+            kind=CampaignContext.Kind.PC,
+        )
+        character = await database_sync_to_async(Character.objects.create)(
+            campaign=self.campaign,
+            context=player_context,
+            name="Inspired hero",
+            strength=10,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+            is_active=True,
+        )
+        game_master_socket = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/contexts/{self.context.pk}/"
+        )
+        player_socket = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/contexts/{player_context.pk}/"
+        )
+        game_master_socket.scope["user"] = self.user
+        player_socket.scope["user"] = player
+        self.assertTrue((await game_master_socket.connect())[0])
+        await game_master_socket.receive_json_from(timeout=1)
+        self.assertTrue((await player_socket.connect())[0])
+        await game_master_socket.receive_json_from(timeout=1)
+        await player_socket.receive_json_from(timeout=1)
+
+        command_request_id = request_id()
+        await game_master_socket.send_json_to(
+            {
+                "type": "characters.inspiration.set",
+                "request_id": command_request_id,
+                "character_id": character.pk,
+                "available": True,
+            }
+        )
+        game_master_messages = [
+            await game_master_socket.receive_json_from(timeout=2),
+            await game_master_socket.receive_json_from(timeout=2),
+        ]
+        player_message = await player_socket.receive_json_from(timeout=2)
+
+        use_request_id = request_id()
+        await player_socket.send_json_to(
+            {
+                "type": "characters.inspiration.set",
+                "request_id": use_request_id,
+                "character_id": character.pk,
+                "available": False,
+            }
+        )
+        player_use_messages = [
+            await player_socket.receive_json_from(timeout=2),
+            await player_socket.receive_json_from(timeout=2),
+        ]
+        game_master_use_message = await game_master_socket.receive_json_from(timeout=2)
+        await game_master_socket.disconnect()
+        await player_socket.disconnect()
+
+        return (
+            game_master_messages,
+            player_message,
+            command_request_id,
+            player_use_messages,
+            game_master_use_message,
+            use_request_id,
+            character.pk,
+        )
+
     async def presence_change_events(self):
         player = await database_sync_to_async(get_user_model().objects.create_user)(
             username="presence-player"
@@ -253,6 +330,78 @@ class ContextSocketTests(TransactionTestCase):
         self.assertEqual(origin_event, second_message)
         self.assertEqual(origin_event["request_id"], command_request_id)
         self.assertEqual(origin_event["calendar"]["day"], 138)
+
+    def test_inspiration_command_fans_out_the_authoritative_state(self) -> None:
+        (
+            messages,
+            player_message,
+            command_request_id,
+            player_use_messages,
+            game_master_use_message,
+            use_request_id,
+            character_id,
+        ) = async_to_sync(self.inspiration_change_events)()
+        acknowledgement = next(
+            message for message in messages if message["type"] == "command.ack"
+        )
+        origin_event = next(
+            message
+            for message in messages
+            if message["type"] == "character.inspiration_changed"
+        )
+
+        self.assertEqual(acknowledgement["request_id"], command_request_id)
+        self.assertEqual(origin_event, player_message)
+        self.assertEqual(origin_event["type"], "character.inspiration_changed")
+        self.assertEqual(origin_event["character_id"], character_id)
+        self.assertTrue(origin_event["available"])
+        self.assertIsInstance(origin_event["expires_at"], str)
+        self.assertEqual(origin_event["request_id"], command_request_id)
+
+        player_use_event = next(
+            message
+            for message in player_use_messages
+            if message["type"] == "character.inspiration_changed"
+        )
+        player_use_acknowledgement = next(
+            message
+            for message in player_use_messages
+            if message["type"] == "command.ack"
+        )
+        self.assertEqual(player_use_acknowledgement["request_id"], use_request_id)
+        self.assertEqual(player_use_event, game_master_use_message)
+        self.assertEqual(player_use_event["character_id"], character_id)
+        self.assertFalse(player_use_event["available"])
+        self.assertIsNone(player_use_event["expires_at"])
+        self.assertEqual(player_use_event["request_id"], use_request_id)
+
+    def test_expired_inspiration_is_not_returned_as_available(self) -> None:
+        character = Character.objects.create(
+            campaign=self.campaign,
+            name="Previously inspired",
+            strength=10,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+            has_inspiration=True,
+            inspiration_expires_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        response = async_to_sync(self.socket_request)(
+            self.user,
+            self.context.pk,
+            {"type": "campaign.get", "request_id": request_id()},
+        )
+        returned_character = next(
+            row
+            for row in response["data"]["characters"]
+            if row["id"] == character.pk
+        )
+
+        self.assertFalse(returned_character["has_inspiration"])
+        self.assertIsNone(returned_character["inspiration_expires_at"])
 
     def test_campaign_response_serializes_archived_character_datetimes(self) -> None:
         Character.objects.create(

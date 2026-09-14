@@ -4,6 +4,7 @@
     :name="displayName"
     :portrait-url="combatant.portrait_url"
     :conditions="combatant.conditions"
+    :inspired="combatant.has_inspiration"
     :connected="connected"
     :show-presence="combatant.is_player_character"
     :expanded="expanded"

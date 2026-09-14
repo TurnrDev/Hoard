@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -52,6 +53,8 @@ from .services.cah import ABILITIES, SKILL_NAMES, parse_cah
 from .services.calendar import CampaignCalendarService
 from .services.combat import condition_list_data
 from .services.ledger import post_inventory_transaction, post_money_transaction
+
+INSPIRATION_DURATION = timedelta(hours=24)
 
 
 class Credentials(Schema):
@@ -792,7 +795,12 @@ def _character_data(
         "about": character.about,
         "languages": character.languages,
         "equipment_proficiencies": character.equipment_proficiencies,
-        "has_inspiration": character.has_inspiration,
+        "has_inspiration": character.inspiration_available,
+        "inspiration_expires_at": (
+            character.inspiration_expires_at.isoformat()
+            if character.inspiration_available
+            else None
+        ),
         "conditions": condition_list_data(list(character.conditions.all())),
         "is_build_complete": character.is_build_complete,
         "level_up_complete": not character.level_progress.filter(
@@ -1442,10 +1450,13 @@ def take_rest(
 def set_inspiration(
     character: Character, available: bool, *, created_by: CampaignContext
 ) -> dict[str, object]:
-    if character.has_inspiration == available:
+    if character.inspiration_available == available:
         raise HttpError(422, "Inspiration is already in that state.")
     character.has_inspiration = available
-    character.save(update_fields=("has_inspiration",))
+    character.inspiration_expires_at = (
+        timezone.now() + INSPIRATION_DURATION if available else None
+    )
+    character.save(update_fields=("has_inspiration", "inspiration_expires_at"))
     CharacterHistory.objects.create(
         campaign=character.campaign,
         character=character,

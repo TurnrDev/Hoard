@@ -54,6 +54,7 @@ from .payloads import (
     CharacterConditionCommand,
     CharacterConditionIdentifierCommand,
     CharacterHealthChangedEvent,
+    CharacterInspirationChangedEvent,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
     CombatantConditionCommand,
@@ -2198,9 +2199,18 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         available = content.get("available")
         if not isinstance(available, bool):
             raise ValueError("available must be a boolean.")
+        if context.kind != CampaignContext.Kind.GM and available:
+            raise PermissionError("Only the game master may award inspiration.")
         result = api.set_inspiration(character, available, created_by=context)
-        notify_campaign_changed(context.campaign_id)
-        return result
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterInspirationChangedEvent(
+                character_id=character.pk,
+                available=character.inspiration_available,
+                expires_at=character.inspiration_expires_at,
+                request_id=str(content["request_id"]),
+            ),
+        )
         return result
 
     @database_sync_to_async

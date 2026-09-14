@@ -245,6 +245,7 @@ export default defineComponent({
       unsubscribeCampaignPresence: undefined as (() => void) | undefined,
       presenceSweepTimer: undefined as number | undefined,
       reconnectTimer: undefined as number | undefined,
+      inspirationExpiryTimer: undefined as number | undefined,
       reconnectCheckBusy: false,
       observedCurrentCombatantId: undefined as number | null | undefined,
       phoneViewport: false,
@@ -424,6 +425,9 @@ export default defineComponent({
     if (this.reconnectTimer !== undefined) {
       window.clearInterval(this.reconnectTimer);
     }
+    if (this.inspirationExpiryTimer !== undefined) {
+      window.clearTimeout(this.inspirationExpiryTimer);
+    }
     disconnectCampaignRealtime();
   },
   methods: {
@@ -520,6 +524,7 @@ export default defineComponent({
           );
 
         this.campaign = campaign;
+        this.scheduleInspirationExpiry(context, campaign);
         this.observedCurrentCombatantId = currentCombatantId;
         this.members = campaign.members;
         this.incompleteLevelUps = campaign.incomplete_level_ups.map(
@@ -555,6 +560,32 @@ export default defineComponent({
           Date.parse(member.last_seen_at) >= cutoff,
       }));
     },
+    scheduleInspirationExpiry(context: ActingContext, campaign: Campaign): void {
+      if (this.inspirationExpiryTimer !== undefined) {
+        window.clearTimeout(this.inspirationExpiryTimer);
+        this.inspirationExpiryTimer = undefined;
+      }
+
+      const expiryTimes = campaign.characters
+        .filter(
+          (character) =>
+            character.has_inspiration && character.inspiration_expires_at !== null,
+        )
+        .map((character) => Date.parse(character.inspiration_expires_at as string))
+        .filter((expiry) => Number.isFinite(expiry));
+
+      if (expiryTimes.length === 0) {
+        return;
+      }
+
+      const nextExpiry = Math.min(...expiryTimes);
+      const delay = Math.max(0, nextExpiry - Date.now() + 100);
+
+      this.inspirationExpiryTimer = window.setTimeout(() => {
+        void this.refreshCampaignChrome(context);
+        campaignRefreshRevision.value += 1;
+      }, delay);
+    },
     handleContextChange(context: ActingContext | undefined): void {
       this.unsubscribeCampaignChanges?.();
       this.unsubscribeCampaignReconnect?.();
@@ -563,6 +594,10 @@ export default defineComponent({
       this.members = [];
       this.incompleteLevelUps = [];
       this.observedCurrentCombatantId = undefined;
+      if (this.inspirationExpiryTimer !== undefined) {
+        window.clearTimeout(this.inspirationExpiryTimer);
+        this.inspirationExpiryTimer = undefined;
+      }
 
       if (!context) {
         disconnectCampaignRealtime();
