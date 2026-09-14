@@ -36,8 +36,8 @@ export default defineComponent({
     conditionDescription(condition: PartyRailCondition): string {
       const details = [condition.label];
 
-      if (condition.exhaustionLevel !== undefined) {
-        details.push(`level ${condition.exhaustionLevel}`);
+      if (condition.exhaustion_level !== null) {
+        details.push(`level ${condition.exhaustion_level}`);
       }
 
       if (condition.instances && condition.instances.length > 1) {

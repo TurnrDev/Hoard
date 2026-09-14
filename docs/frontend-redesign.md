@@ -501,6 +501,13 @@ PartyRail is a live campaign roster with two explicit modes.
   character may occupy multiple initiative positions. Character conditions are
   persistent character state and can be managed outside combat; conditions for
   encounter-only creatures remain encounter-local.
+- 2026-09-14: wired active encounters and conditions into the new shell. The
+  Party Rail switches to initiative order from the initial campaign payload,
+  shows deduplicated condition icons, and gives GMs per-combatant condition and
+  HP-visibility controls. Character profiles use the same condition editor for
+  out-of-combat application, cause-by-cause editing, and removal. All mutations
+  use WebSocket commands and refresh through campaign events; the ledger remains
+  the immutable history rather than the source of active state.
 
 ## Open questions
 

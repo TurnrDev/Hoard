@@ -211,6 +211,69 @@ export type CharacterCompanion = {
   monster_template_id: number | null;
 };
 
+export type ConditionIdentifier =
+  | "blinded"
+  | "charmed"
+  | "deafened"
+  | "exhaustion"
+  | "frightened"
+  | "grappled"
+  | "incapacitated"
+  | "invisible"
+  | "paralyzed"
+  | "petrified"
+  | "poisoned"
+  | "prone"
+  | "restrained"
+  | "stunned"
+  | "unconscious"
+  | "pacify";
+
+export type ConditionInstance = {
+  id: number;
+  source: string;
+  duration: string;
+};
+
+export type ActiveCondition = {
+  id: ConditionIdentifier;
+  label: string;
+  exhaustion_level: number | null;
+  source: string;
+  duration: string;
+  instances: ConditionInstance[];
+};
+
+export type EncounterCombatant = {
+  id: number;
+  character_id: number | null;
+  creature_entry_id: number | null;
+  is_player_character: boolean;
+  name: string;
+  portrait_url: string | null;
+  initiative: number;
+  current_hp: number | null;
+  max_hp: number | null;
+  health_percentage: number | null;
+  show_hp_bar: boolean;
+  show_hp_numbers: boolean;
+  conditions: ActiveCondition[];
+};
+
+export type Encounter = {
+  id: number;
+  started_at: string;
+  combatants: EncounterCombatant[];
+};
+
+export type ConditionMutation = {
+  condition_id?: number;
+  identifier: ConditionIdentifier;
+  source: string;
+  duration: string;
+  exhaustion_level?: number;
+};
+
 export type Character = {
   id: number;
   context_id: number | null;
@@ -235,6 +298,7 @@ export type Character = {
   languages: string[];
   equipment_proficiencies: Record<string, string[]>;
   has_inspiration: boolean;
+  conditions: ActiveCondition[];
   is_build_complete: boolean;
   level_up_complete: boolean;
   strength: number;
@@ -269,6 +333,7 @@ export type Campaign = CampaignSummary & {
   incomplete_level_ups: IncompleteLevelUp[];
   calendar: CampaignCalendar;
   party_money: Record<string, number | string>;
+  encounter: Encounter | null;
   members: CampaignMember[];
   characters: Character[];
 };
@@ -999,6 +1064,71 @@ export function setCharacterInspiration(
   return contextRequest<Character>(contextId, "characters.inspiration.set", {
     character_id: characterId,
     available,
+  });
+}
+
+export function setCharacterCondition(
+  contextId: number,
+  characterId: number,
+  condition: ConditionMutation,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.conditions.set", {
+    character_id: characterId,
+    ...condition,
+  });
+}
+
+export function removeCharacterCondition(
+  contextId: number,
+  characterId: number,
+  conditionId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.conditions.remove", {
+    character_id: characterId,
+    condition_id: conditionId,
+  });
+}
+
+export function updateEncounterCombatant(
+  contextId: number,
+  combatantId: number,
+  fields: Partial<
+    Pick<
+      EncounterCombatant,
+      | "name"
+      | "initiative"
+      | "current_hp"
+      | "max_hp"
+      | "show_hp_bar"
+      | "show_hp_numbers"
+    >
+  >,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.update", {
+    combatant_id: combatantId,
+    ...fields,
+  });
+}
+
+export function setCombatantCondition(
+  contextId: number,
+  combatantId: number,
+  condition: ConditionMutation,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.conditions.set", {
+    combatant_id: combatantId,
+    ...condition,
+  });
+}
+
+export function removeCombatantCondition(
+  contextId: number,
+  combatantId: number,
+  conditionId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.conditions.remove", {
+    combatant_id: combatantId,
+    condition_id: conditionId,
   });
 }
 

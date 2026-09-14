@@ -214,6 +214,16 @@
         </div>
       </div>
       <div class="col-12">
+        <ConditionManager
+          :conditions="character.conditions"
+          :target-name="character.name"
+          :target-id="`character-${character.id}`"
+          :can-edit="canEdit"
+          @apply="applyCondition"
+          @remove="removeCondition"
+        />
+      </div>
+      <div class="col-12">
         <section class="mb-4">
           <header class="d-flex align-items-center gap-2 flex-wrap">
             Resources
@@ -1307,12 +1317,15 @@ import {
   getMyCharacters,
   getTransactions,
   postHealth,
+  removeCharacterCondition,
   removeCharacterPortrait,
   restCharacter,
+  setCharacterCondition,
   setCharacterInspiration,
   uploadCharacterPortrait,
   type Campaign,
   type Character,
+  type ConditionMutation,
   type Item,
   type LedgerTransaction,
 } from "../api";
@@ -1321,6 +1334,7 @@ import ActionMenu from "../components/ActionMenu.vue";
 import CalculationBreakdown from "../components/CalculationBreakdown.vue";
 import CharacterAvatar from "../components/CharacterAvatar.vue";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
+import ConditionManager from "../components/ConditionManager.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import { displayCoin, displayIdentifier, formatCoinPouch } from "../display";
 import type { PickerCandidate } from "../itemPicker";
@@ -1397,6 +1411,7 @@ export default defineComponent({
     Select,
     Textarea,
     CoinAmountPicker,
+    ConditionManager,
     CalculationBreakdown,
     CharacterAvatar,
     ItemPickerDialog,
@@ -1766,6 +1781,38 @@ export default defineComponent({
     },
     proficiencyClass(proficiency: string): string {
       return `proficiency-bonus proficiency-bonus--${proficiency}`;
+    },
+    async applyCondition(condition: ConditionMutation): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        await setCharacterCondition(this.campaignId, this.character.id, condition);
+        await this.load();
+        this.notice = `${this.displayName(condition.identifier)} updated.`;
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to apply the condition.";
+      }
+    },
+    async removeCondition(conditionId: number): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        await removeCharacterCondition(this.campaignId, this.character.id, conditionId);
+        await this.load();
+        this.notice = "Condition removed.";
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to remove the condition.";
+      }
     },
     openShortRest(): void {
       if (!this.character) {

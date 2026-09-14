@@ -108,7 +108,12 @@
           :members="members"
           :active-context="activeContext"
           :expanded="partyRailExpanded"
+          :in-combat="campaign.encounter !== null"
+          :combatants="campaign.encounter?.combatants ?? []"
           @toggle="partyRailExpanded = !partyRailExpanded"
+          @apply-combatant-condition="applyCombatantCondition"
+          @remove-combatant-condition="removeCombatantCondition"
+          @update-combatant-visibility="updateCombatantVisibility"
         />
       </section>
 
@@ -116,6 +121,15 @@
         id="main-content"
         class="campaign-main container-fluid py-4 py-lg-5"
       >
+        <Message
+          v-if="shellError"
+          class="mb-4"
+          severity="error"
+          closable
+          @close="shellError = ''"
+        >
+          {{ shellError }}
+        </Message>
         <p
           v-if="activeContext"
           class="campaign-main__context d-lg-none text-body-secondary small mb-4"
@@ -147,9 +161,13 @@ import { defineComponent } from "vue";
 import {
   getCampaign,
   logout,
+  removeCombatantCondition,
+  setCombatantCondition,
+  updateEncounterCombatant,
   type Campaign,
   type CampaignMember,
   type Character,
+  type ConditionMutation,
 } from "./api";
 import { formatCampaignDate } from "./calendar";
 import CampaignNavigation from "./components/CampaignNavigation.vue";
@@ -193,6 +211,7 @@ export default defineComponent({
       campaign: undefined as Campaign | undefined,
       members: [] as CampaignMember[],
       incompleteLevelUps: [] as string[],
+      shellError: "",
       unsubscribeCampaignChanges: undefined as (() => void) | undefined,
       unsubscribeCampaignReconnect: undefined as (() => void) | undefined,
       unsubscribeCampaignPresence: undefined as (() => void) | undefined,
@@ -390,6 +409,48 @@ export default defineComponent({
         this.campaign = undefined;
         this.members = [];
         this.incompleteLevelUps = [];
+      }
+    },
+    async applyCombatantCondition(
+      combatantId: number,
+      condition: ConditionMutation,
+    ): Promise<void> {
+      try {
+        await setCombatantCondition(this.contextId, combatantId, condition);
+      } catch (exception) {
+        this.shellError =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to apply the condition.";
+      }
+    },
+    async removeCombatantCondition(
+      combatantId: number,
+      conditionId: number,
+    ): Promise<void> {
+      try {
+        await removeCombatantCondition(this.contextId, combatantId, conditionId);
+      } catch (exception) {
+        this.shellError =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to remove the condition.";
+      }
+    },
+    async updateCombatantVisibility(payload: {
+      combatantId: number;
+      show_hp_bar?: boolean;
+      show_hp_numbers?: boolean;
+    }): Promise<void> {
+      const { combatantId, ...fields } = payload;
+
+      try {
+        await updateEncounterCombatant(this.contextId, combatantId, fields);
+      } catch (exception) {
+        this.shellError =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to update combatant visibility.";
       }
     },
     expireStalePresence(): void {

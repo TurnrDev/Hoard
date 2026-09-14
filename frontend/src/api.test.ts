@@ -6,6 +6,10 @@ import {
   createMoneyTransfer,
   initialiseCsrf,
   login,
+  removeCharacterCondition,
+  setCharacterCondition,
+  setCombatantCondition,
+  updateEncounterCombatant,
 } from "./api";
 
 const { httpRequest } = vi.hoisted(() => ({ httpRequest: vi.fn() }));
@@ -85,5 +89,55 @@ describe("API client", () => {
       given: { gp: 1 },
       received: { sp: 10 },
     });
+  });
+
+  it("sends condition and combatant changes over the context socket", async () => {
+    await setCharacterCondition(8, 2, {
+      identifier: "exhaustion",
+      exhaustion_level: 2,
+      source: "Hunger",
+      duration: "Until properly fed",
+    });
+    await removeCharacterCondition(8, 2, 17);
+    await setCombatantCondition(8, 31, {
+      identifier: "prone",
+      source: "Trip attack",
+      duration: "Until the combatant stands",
+    });
+    await updateEncounterCombatant(8, 31, {
+      show_hp_bar: true,
+      show_hp_numbers: false,
+    });
+
+    expect(campaignRequest).toHaveBeenNthCalledWith(1, "characters.conditions.set", {
+      character_id: 2,
+      identifier: "exhaustion",
+      exhaustion_level: 2,
+      source: "Hunger",
+      duration: "Until properly fed",
+    });
+    expect(campaignRequest).toHaveBeenNthCalledWith(2, "characters.conditions.remove", {
+      character_id: 2,
+      condition_id: 17,
+    });
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      3,
+      "campaign.encounter.conditions.set",
+      {
+        combatant_id: 31,
+        identifier: "prone",
+        source: "Trip attack",
+        duration: "Until the combatant stands",
+      },
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      4,
+      "campaign.encounter.combatants.update",
+      {
+        combatant_id: 31,
+        show_hp_bar: true,
+        show_hp_numbers: false,
+      },
+    );
   });
 });

@@ -18,7 +18,9 @@
         :key="combatant.id"
         :combatant="combatant"
         :expanded="expanded"
-        :can-manage-visibility="canManageVisibility"
+        :can-manage="canManage"
+        @apply-condition="$emit('apply-condition', combatant.id, $event)"
+        @remove-condition="$emit('remove-condition', combatant.id, $event)"
         @update-visibility="$emit('update-visibility', $event)"
       />
     </ol>
@@ -35,9 +37,9 @@ export default defineComponent({
   props: {
     combatants: { type: Array as PropType<PartyRailCombatant[]>, required: true },
     expanded: { type: Boolean, default: false },
-    canManageVisibility: { type: Boolean, default: false },
+    canManage: { type: Boolean, default: false },
   },
-  emits: ["update-visibility"],
+  emits: ["apply-condition", "remove-condition", "update-visibility"],
   computed: {
     orderedCombatants(): PartyRailCombatant[] {
       return [...this.combatants].sort(

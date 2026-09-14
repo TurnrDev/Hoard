@@ -4,7 +4,7 @@
     <div class="d-flex flex-column gap-2">
       <label class="d-flex align-items-center gap-2 small">
         <Checkbox
-          :model-value="combatant.showHpBar"
+          :model-value="combatant.show_hp_bar"
           binary
           @update:model-value="updateHpBar"
         />
@@ -12,7 +12,7 @@
       </label>
       <label class="d-flex align-items-center gap-2 small">
         <Checkbox
-          :model-value="combatant.showHpNumbers"
+          :model-value="combatant.show_hp_numbers"
           binary
           @update:model-value="updateHpNumbers"
         />
@@ -36,14 +36,14 @@ export default defineComponent({
   methods: {
     updateHpBar(showHpBar: boolean): void {
       this.$emit("update-visibility", {
-        ...this.combatant,
-        showHpBar,
+        combatantId: this.combatant.id,
+        show_hp_bar: showHpBar,
       });
     },
     updateHpNumbers(showHpNumbers: boolean): void {
       this.$emit("update-visibility", {
-        ...this.combatant,
-        showHpNumbers,
+        combatantId: this.combatant.id,
+        show_hp_numbers: showHpNumbers,
       });
     },
   },

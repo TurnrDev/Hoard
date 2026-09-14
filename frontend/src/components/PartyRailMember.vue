@@ -1,7 +1,10 @@
 <template>
   <li
     class="party-rail__entry party-rail__entry--character align-items-center"
-    :class="`party-rail__entry--${healthState}`"
+    :class="[
+      `party-rail__entry--${healthState}`,
+      { 'party-rail__entry--has-conditions': character.conditions.length },
+    ]"
   >
     <OverlayBadge
       :value="connected ? '✓' : '○'"
@@ -20,6 +23,13 @@
     >
       <span class="party-rail__entry-name d-block text-truncate">{{ label }}</span>
       <span class="visually-hidden">— {{ connected ? "Connected" : "Offline" }}</span>
+      <ConditionIndicators
+        v-if="character.conditions.length"
+        class="my-1"
+        :combatant-name="label"
+        :conditions="character.conditions"
+        expanded
+      />
       <span class="d-block text-truncate small text-body-secondary tabular-nums">
         {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }} HP
       </span>
@@ -36,6 +46,12 @@
       :show-value="false"
       :aria-label="`${label} health: ${character.sheet.current_hp} of ${character.sheet.max_hp}`"
     />
+    <ConditionIndicators
+      v-if="!expanded && character.conditions.length"
+      class="justify-content-center"
+      :combatant-name="label"
+      :conditions="character.conditions"
+    />
   </li>
 </template>
 
@@ -46,9 +62,15 @@ import ProgressBar from "primevue/progressbar";
 import type { Character } from "../api";
 import type { ActingContext } from "../context";
 import CharacterAvatar from "./CharacterAvatar.vue";
+import ConditionIndicators from "./ConditionIndicators.vue";
 
 export default defineComponent({
-  components: { CharacterAvatar, OverlayBadge, ProgressBar },
+  components: {
+    CharacterAvatar,
+    ConditionIndicators,
+    OverlayBadge,
+    ProgressBar,
+  },
   props: {
     character: { type: Object as PropType<Character>, required: true },
     activeContext: { type: Object as PropType<ActingContext>, required: true },
