@@ -5,11 +5,14 @@
   >
     <h3
       id="initiative-heading"
-      class="party-rail__group-title"
+      class="party-rail__group-title text-uppercase fw-bold text-body-secondary"
     >
       Initiative
     </h3>
-    <ol class="party-rail__entries list-unstyled mb-0">
+    <ol
+      class="party-rail__entries d-flex list-unstyled mb-0"
+      :class="expanded ? 'flex-column' : 'flex-row flex-lg-column'"
+    >
       <InitiativeCombatant
         v-for="combatant in orderedCombatants"
         :key="combatant.id"

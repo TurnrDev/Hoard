@@ -1,8 +1,10 @@
 <template>
-  <li class="party-rail__entry party-rail__entry--combatant">
+  <li class="party-rail__entry party-rail__entry--combatant align-items-center">
     <span class="party-rail__initiative tabular-nums">{{ combatant.initiative }}</span>
     <div class="party-rail__combatant-content">
-      <span class="party-rail__entry-name">{{ combatant.name }}</span>
+      <span class="party-rail__entry-name d-block text-truncate">
+        {{ combatant.name }}
+      </span>
       <span
         v-if="expanded && combatant.conditions.length"
         class="party-rail__conditions small"
@@ -12,7 +14,7 @@
       <template v-if="hasVisibleHealth">
         <span
           v-if="expanded && combatant.showHpNumbers"
-          class="party-rail__health-label"
+          class="d-block text-truncate small text-body-secondary tabular-nums"
         >
           {{ combatant.currentHp }} / {{ combatant.maxHp }} HP
         </span>

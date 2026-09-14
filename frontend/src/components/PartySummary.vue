@@ -1,7 +1,7 @@
 <template>
   <section
-    class="party-summary"
-    :class="{ 'party-summary--expanded border rounded-3 p-3': expanded }"
+    class="party-summary mt-auto bg-body-tertiary"
+    :class="{ 'party-summary--expanded border rounded-3 p-2 p-lg-3': expanded }"
     aria-label="Party resources"
   >
     <template v-if="expanded">
@@ -31,7 +31,7 @@
     </template>
     <template v-else>
       <div
-        class="party-summary__desktop d-none d-lg-flex border-top pt-2 pb-1"
+        class="party-summary__desktop d-none d-lg-flex flex-column align-items-center gap-1 border-top pt-2 pb-1 text-center"
         :title="collapsedSummary"
       >
         <span
@@ -46,7 +46,7 @@
         <strong class="tabular-nums">{{ compactWealth }} ¤</strong>
       </div>
       <p
-        class="party-summary__mobile d-lg-none border-top mb-0 pt-2 text-center small tabular-nums"
+        class="party-summary__mobile d-lg-none overflow-auto text-nowrap border-top mb-0 pt-2 text-center small tabular-nums"
       >
         <strong>Party</strong>
         · {{ campaign.shared_experience.toLocaleString() }} XP ·
@@ -93,17 +93,11 @@ export default defineComponent({
   position: sticky;
   z-index: 1;
   bottom: 0;
-  margin-top: auto;
-  background: var(--bs-tertiary-bg);
 }
 
 .party-summary__desktop {
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
   font-size: 0.65rem;
   line-height: 1.2;
-  text-align: center;
 }
 
 .party-summary__desktop .mdi {
@@ -111,27 +105,9 @@ export default defineComponent({
   font-size: 1rem;
 }
 
-.party-summary__mobile {
-  overflow-x: auto;
-  white-space: nowrap;
-}
-
 @media (max-width: 991.98px) {
   .party-summary {
     width: 100%;
-  }
-
-  .party-summary--expanded {
-    padding: 0.75rem !important;
-  }
-
-  .party-summary--expanded h3,
-  .party-summary--expanded dl > div {
-    margin-bottom: 0.75rem !important;
-  }
-
-  .party-summary--expanded dl > div:last-child {
-    margin-bottom: 0 !important;
   }
 
   .party-summary--expanded dd.fs-5 {

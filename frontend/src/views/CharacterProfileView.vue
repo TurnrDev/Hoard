@@ -571,24 +571,25 @@
         >
           <details>
             <summary>Skills</summary>
-            <div>
-              <div dense>
+            <div class="mt-3">
+              <div class="row g-3">
                 <div
                   v-for="(column, columnIndex) in skillColumns"
                   :key="columnIndex"
-                  cols="12"
-                  sm="6"
+                  class="col-12 col-sm-6"
                 >
                   <div
                     v-for="ability in column"
                     :key="ability.key"
-                    class="skill-group"
+                    class="mb-3"
                   >
-                    <div class="skill-group-title">{{ ability.label }}</div>
+                    <div class="fw-semibold border-bottom pb-1 mb-1">
+                      {{ ability.label }}
+                    </div>
                     <div
                       v-for="skill in ability.skills"
                       :key="skill.name"
-                      class="skill-row"
+                      class="d-flex justify-content-between gap-3 py-1"
                     >
                       <strong
                         :class="

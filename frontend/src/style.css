@@ -56,12 +56,7 @@ select:focus-visible {
   outline-offset: 0.2rem;
 }
 
-.public-shell {
-  min-height: 100vh;
-}
-
 .campaign-shell {
-  min-height: 100vh;
   background-color: var(--hoard-page-bg);
   color: var(--hoard-ink);
 }
@@ -70,10 +65,6 @@ select:focus-visible {
   z-index: 1100;
   left: 1rem;
   top: 1rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color);
-  color: var(--bs-body-color);
 }
 
 .campaign-header {
@@ -85,23 +76,10 @@ select:focus-visible {
   padding: 0.75rem 1rem;
 }
 
-.campaign-header__brand,
-.campaign-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.campaign-header__actions {
-  justify-content: flex-end;
-}
-
 .campaign-header__wordmark {
   color: var(--bs-body-color);
   font-size: 1.25rem;
-  font-weight: 700;
   letter-spacing: 0.08em;
-  text-decoration: none;
 }
 
 .campaign-header__campaign {
@@ -123,7 +101,6 @@ select:focus-visible {
 
 .campaign-navigation-panel {
   grid-area: navigation;
-  padding: 1rem;
 }
 
 .campaign-main {
@@ -132,10 +109,6 @@ select:focus-visible {
   min-width: 0;
   max-width: 100rem;
   margin: 0 auto;
-}
-
-.campaign-main__context {
-  margin-bottom: 1.5rem;
 }
 
 .campaign-rail-panel {
@@ -147,13 +120,9 @@ select:focus-visible {
 }
 
 .campaign-navigation a {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   padding: 0.65rem 0.75rem;
   border-radius: var(--bs-border-radius);
   color: var(--bs-body-color);
-  text-decoration: none;
 }
 
 .campaign-navigation a:hover,
@@ -163,26 +132,11 @@ select:focus-visible {
 }
 
 .party-rail {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
   padding: 0.75rem 0.5rem;
 }
 
-.party-rail__content {
-  display: flex;
-  flex-direction: column;
-}
-
 .party-rail__header {
-  display: flex;
-  align-items: center;
   min-height: 2.5rem;
-}
-
-.party-rail__title {
-  margin-left: 0.25rem;
-  font-weight: 700;
 }
 
 .party-rail__group {
@@ -191,23 +145,17 @@ select:focus-visible {
 
 .party-rail__group-title {
   margin: 0.75rem 0.5rem 0.25rem;
-  color: var(--bs-secondary-color);
   font-size: 0.75rem;
-  font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .party-rail__entries {
-  display: flex;
-  flex-direction: column;
   gap: 0.75rem;
 }
 
 .party-rail__entry {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
   gap: 0.5rem;
   min-width: 0;
 }
@@ -239,18 +187,8 @@ select:focus-visible {
   min-height: 2.75rem;
 }
 
-.party-rail__entry-name,
-.party-rail__health-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.party-rail__health-label {
-  color: var(--bs-secondary-color);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
+.party-rail__character-details {
+  min-width: 0;
 }
 
 .party-rail__character-details .p-progressbar {
@@ -268,21 +206,12 @@ select:focus-visible {
 }
 
 .party-rail__compact-role {
-  display: flex;
   grid-column: 1 / -1;
-  align-items: center;
-  justify-content: center;
   width: 2.75rem;
   height: 0.75rem;
   margin-top: 0;
-  background: var(--bs-secondary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius-pill);
-  color: var(--bs-secondary-color);
   font-size: 0.55rem;
-  font-weight: 700;
   line-height: 1;
-  text-align: center;
 }
 
 .party-rail__entry--critical .p-progressbar-value {
@@ -315,15 +244,9 @@ select:focus-visible {
 }
 
 .party-rail__separator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   margin: 1rem 0;
-  color: var(--bs-secondary-color);
   font-size: 0.75rem;
-  font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .party-rail__separator::before,
@@ -413,8 +336,6 @@ select:focus-visible {
   }
 
   .party-rail__content {
-    display: flex;
-    flex-direction: row;
     align-items: center;
     justify-content: flex-start;
     gap: 0.375rem;
@@ -430,7 +351,6 @@ select:focus-visible {
   .party-rail__group,
   .party-rail__entries {
     display: flex;
-    flex-direction: row;
     align-items: center;
     gap: 0.75rem;
   }
@@ -472,7 +392,6 @@ select:focus-visible {
   }
 
   .party-rail--expanded .party-rail__content {
-    flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     overflow-x: visible;
@@ -492,7 +411,6 @@ select:focus-visible {
 
   .party-rail--expanded .party-rail__entries {
     align-items: stretch;
-    flex-direction: column;
     width: 100%;
   }
 

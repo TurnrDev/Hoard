@@ -1,10 +1,10 @@
 <template>
-  <div :class="['item-picker-field', { 'item-picker-field--spaced': !compact }]">
-    <label class="item-picker-field__label">{{ label }}</label>
-    <div class="item-picker-field__controls">
+  <div :class="['item-picker-field', { 'mb-3': !compact }]">
+    <label class="d-block fw-semibold mb-1">{{ label }}</label>
+    <div class="d-flex align-items-center gap-2">
       <Button
         outlined
-        class="item-picker-field__trigger"
+        class="item-picker-field__trigger flex-grow-1 justify-content-start"
         :disabled="disabled || loading"
         :loading="loading"
         @click="show"
@@ -15,16 +15,14 @@
         />
         <span
           v-if="selected"
-          class="item-picker-field__selection"
+          class="text-truncate"
         >
           {{ selected.item.name }}
-          <span class="item-picker-field__summary">
-            — {{ itemSummary(selected.item) }}
-          </span>
+          <span class="text-body-secondary">— {{ itemSummary(selected.item) }}</span>
         </span>
         <span
           v-else
-          class="item-picker-field__placeholder"
+          class="text-body-secondary"
         >
           Choose an item
         </span>
@@ -49,16 +47,16 @@
       class="item-picker-dialog"
       :aria-labelledby="'item-picker-title'"
     >
-      <header class="item-picker-dialog__header">
+      <header>
         <h2 id="item-picker-title">{{ title }}</h2>
       </header>
       <ProgressBar
         v-if="loading"
         indeterminate
       />
-      <div class="item-picker-dialog__body">
+      <div class="d-grid gap-3">
         <label
-          class="item-picker-dialog__search-label"
+          class="d-block fw-semibold mb-1"
           for="item-picker-search"
         >
           Search name, description, source, category, or type
@@ -177,7 +175,7 @@
             />
           </label>
         </fieldset>
-        <div class="item-picker-dialog__result-summary">
+        <div class="d-flex align-items-center justify-content-between gap-2">
           <span>{{ filtered.length }} matching items</span>
           <Button
             size="small"
@@ -195,7 +193,7 @@
         </Message>
         <ul
           v-else
-          class="item-picker-dialog__results"
+          class="item-picker-dialog__results list-unstyled m-0 p-0"
         >
           <li
             v-for="candidate in results"
@@ -203,7 +201,7 @@
           >
             <article
               :class="[
-                'item-picker-dialog__result',
+                'item-picker-dialog__result border rounded-3 d-grid gap-3 h-100 p-3',
                 {
                   'item-picker-dialog__result--selected':
                     candidate.item.id === modelValue,
@@ -216,8 +214,8 @@
               @keydown.enter="choose(candidate)"
               @keydown.space.prevent="choose(candidate)"
             >
-              <header class="item-picker-dialog__result-header">
-                <h3>{{ candidate.item.name }}</h3>
+              <header class="d-flex align-items-center justify-content-between gap-2">
+                <h3 class="mb-0">{{ candidate.item.name }}</h3>
                 <Chip
                   v-if="candidate.quantity !== undefined"
                   size="small"
@@ -225,16 +223,18 @@
                   {{ candidate.quantity }} held
                 </Chip>
               </header>
-              <p>
+              <p class="mb-0">
                 {{ itemSummary(candidate.item) || "No catalogue facts recorded" }}
               </p>
-              <div class="item-picker-dialog__result-footer">
-                <p>{{ candidate.item.description || "No description." }}</p>
+              <div class="d-flex align-items-center justify-content-between gap-2">
+                <p class="mb-0">
+                  {{ candidate.item.description || "No description." }}
+                </p>
                 <Chip
                   v-for="fact in facts(candidate.item)"
                   :key="fact"
                   size="x-small"
-                  class="item-picker-dialog__fact"
+                  class="me-1"
                 >
                   {{ fact }}
                 </Chip>
@@ -477,43 +477,8 @@ export default defineComponent({
 </script>
 
 <style scoped>
-.item-picker-field--spaced {
-  margin-block-end: 1rem;
-}
-
-.item-picker-field__label,
-.item-picker-dialog__search-label {
-  display: block;
-  font-weight: 600;
-  margin-block-end: 0.35rem;
-}
-
-.item-picker-field__controls {
-  align-items: center;
-  display: flex;
-  gap: 0.35rem;
-}
-
 .item-picker-field__trigger {
-  flex: 1;
-  justify-content: flex-start;
   min-width: 0;
-}
-
-.item-picker-field__selection {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.item-picker-field__summary,
-.item-picker-field__placeholder {
-  color: var(--hoard-text-muted);
-}
-
-.item-picker-dialog__body {
-  display: grid;
-  gap: 1rem;
 }
 
 .item-picker-dialog__filters {
@@ -528,44 +493,17 @@ export default defineComponent({
   grid-column: 1 / -1;
 }
 
-.item-picker-dialog__result-summary,
-.item-picker-dialog__result-header,
-.item-picker-dialog__result-footer {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-}
-
 .item-picker-dialog__results {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 
 .item-picker-dialog__result {
-  border: 1px solid var(--hoard-border);
-  border-radius: 0.5rem;
   cursor: pointer;
-  display: grid;
-  gap: 0.75rem;
-  height: 100%;
-  padding: 1rem;
 }
 
 .item-picker-dialog__result--selected {
   border-color: var(--hoard-gold);
-}
-
-.item-picker-dialog__result h3,
-.item-picker-dialog__result p {
-  margin: 0;
-}
-
-.item-picker-dialog__fact {
-  margin-inline-end: 0.3rem;
 }
 </style>

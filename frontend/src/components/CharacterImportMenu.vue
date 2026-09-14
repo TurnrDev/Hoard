@@ -10,7 +10,6 @@
       />
       Import from 5e Companion
     </Button>
-    <p class="character-import-menu__hint">RPG Companion import is coming soon.</p>
   </div>
   <Dialog
     v-model:visible="open"
@@ -18,7 +17,7 @@
     :style="{ width: 'min(69rem, calc(100vw - 2rem))' }"
   >
     <section
-      class="character-import-dialog"
+      class="d-grid gap-3"
       aria-labelledby="character-import-heading"
     >
       <h2 id="character-import-heading">Import from 5e Companion</h2>
@@ -59,119 +58,117 @@
           </Message>
           <section
             v-if="preview.field_changes.length"
-            class="mt-6"
+            class="mt-5"
           >
-            <h3 class="text-h6 mb-3">Character changes</h3>
-            <div
-              density="compact"
-              class="a11y-table import-fields-table"
-            >
-              <caption class="visually-hidden">
-                Character fields available to import
-              </caption>
-              <thead>
-                <tr>
-                  <th
-                    scope="col"
-                    class="checkbox-column"
-                  >
-                    Import
-                  </th>
-                  <th scope="col">Field</th>
-                  <th scope="col">Before</th>
-                  <th scope="col">Import value</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="change in preview.field_changes"
-                  :key="change.field"
-                >
-                  <td class="checkbox-column">
-                    <Checkbox
-                      v-model="change.enabled"
-                      color="primary"
-                      :aria-label="`Import ${title(change.field)}`"
-                    />
-                  </td>
-                  <th scope="row">{{ title(change.field) }}</th>
-                  <td class="text-medium-emphasis">
-                    {{
-                      change.field === "skill_proficiencies"
-                        ? proficiencySummary(change.before)
-                        : formatValue(change.before)
-                    }}
-                  </td>
-                  <td class="py-2">
-                    <template v-if="change.enabled">
-                      <InputText
-                        v-if="typeof change.after === 'string'"
-                        v-model="change.after"
-                        density="compact"
-                        hide-details
-                      />
-                      <InputNumber
-                        v-else-if="typeof change.after === 'number'"
-                        :model-value="change.after"
-                        control-variant="stacked"
-                        density="compact"
-                        hide-details
-                        @update:model-value="setNumberField(change, $event)"
-                      />
-                      <div
-                        v-else-if="change.field === 'skill_proficiencies'"
-                        dense
-                      >
-                        <div
-                          v-for="skill in skills"
-                          :key="skill"
-                          cols="12"
-                          sm="6"
-                        >
-                          <Select
-                            :model-value="
-                              proficiencyValues(change.after)[skill] ?? 'none'
-                            "
-                            :items="proficiencyChoices"
-                            :label="title(skill)"
-                            density="compact"
-                            hide-details
-                            @update:model-value="
-                              setSkillProficiency(change, skill, $event)
-                            "
-                          />
-                        </div>
-                      </div>
-                      <Textarea
-                        v-else
-                        :model-value="
-                          jsonFieldValues[change.field] ?? editableJson(change.after)
-                        "
-                        density="compact"
-                        auto-grow
-                        rows="2"
-                        :error-messages="fieldErrors[change.field]"
-                        hint="JSON override"
-                        persistent-hint
-                        @update:model-value="setJsonField(change, $event)"
-                      />
-                    </template>
-                    <span
-                      v-else
-                      class="text-medium-emphasis"
+            <h3 class="h5 mb-3">Character changes</h3>
+            <div class="table-responsive">
+              <table class="table table-striped align-middle import-fields-table mb-0">
+                <caption class="visually-hidden">
+                  Character fields available to import
+                </caption>
+                <thead>
+                  <tr>
+                    <th
+                      scope="col"
+                      class="checkbox-column"
                     >
-                      Skipped
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
+                      Import
+                    </th>
+                    <th scope="col">Field</th>
+                    <th scope="col">Before</th>
+                    <th scope="col">Import value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="change in preview.field_changes"
+                    :key="change.field"
+                  >
+                    <td class="checkbox-column">
+                      <Checkbox
+                        v-model="change.enabled"
+                        color="primary"
+                        :aria-label="`Import ${title(change.field)}`"
+                      />
+                    </td>
+                    <th scope="row">{{ title(change.field) }}</th>
+                    <td class="text-body-secondary">
+                      {{
+                        change.field === "skill_proficiencies"
+                          ? proficiencySummary(change.before)
+                          : formatValue(change.before)
+                      }}
+                    </td>
+                    <td class="py-2">
+                      <template v-if="change.enabled">
+                        <InputText
+                          v-if="typeof change.after === 'string'"
+                          v-model="change.after"
+                          density="compact"
+                          hide-details
+                        />
+                        <InputNumber
+                          v-else-if="typeof change.after === 'number'"
+                          :model-value="change.after"
+                          control-variant="stacked"
+                          density="compact"
+                          hide-details
+                          @update:model-value="setNumberField(change, $event)"
+                        />
+                        <div
+                          v-else-if="change.field === 'skill_proficiencies'"
+                          class="row g-3"
+                        >
+                          <div
+                            v-for="skill in skills"
+                            :key="skill"
+                            class="col-12 col-sm-6"
+                          >
+                            <Select
+                              :model-value="
+                                proficiencyValues(change.after)[skill] ?? 'none'
+                              "
+                              :items="proficiencyChoices"
+                              :label="title(skill)"
+                              density="compact"
+                              hide-details
+                              @update:model-value="
+                                setSkillProficiency(change, skill, $event)
+                              "
+                            />
+                          </div>
+                        </div>
+                        <Textarea
+                          v-else
+                          :model-value="
+                            jsonFieldValues[change.field] ?? editableJson(change.after)
+                          "
+                          density="compact"
+                          auto-grow
+                          rows="2"
+                          :error-messages="fieldErrors[change.field]"
+                          hint="JSON override"
+                          persistent-hint
+                          @update:model-value="setJsonField(change, $event)"
+                        />
+                      </template>
+                      <span
+                        v-else
+                        class="text-body-secondary"
+                      >
+                        Skipped
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
           <section
             v-if="preview.collection_changes.length"
-            class="mt-6"
+            class="mt-5"
           >
-            <h3 class="text-h6 mb-3">Sheet content</h3>
+            <h3 class="h5 mb-3">Sheet content</h3>
             <Message
               v-if="
                 preview.collection_changes.some((change) => change.before_count > 0)
@@ -183,18 +180,14 @@
               Existing content in these sections will be replaced. Inventory is added
               through the ledger and is not cleared.
             </Message>
-            <div dense>
+            <div class="row g-3">
               <div
                 v-for="change in preview.collection_changes"
                 :key="change.collection"
-                cols="12"
-                sm="6"
+                class="col-12 col-sm-6"
               >
-                <section
-                  variant="tonal"
-                  class="h-100"
-                >
-                  <header class="text-subtitle-1">
+                <section class="h-100 border rounded-3 bg-body-tertiary p-3">
+                  <header class="h6">
                     {{ title(change.collection) }}
                   </header>
                   <p>
@@ -202,7 +195,7 @@
                     {{ change.after_count }} imported
                   </p>
                   <div>
-                    <div class="d-flex align-center mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-3">
                       <Checkbox
                         v-model="change.enabled"
                         color="primary"
@@ -221,21 +214,19 @@
               </div>
             </div>
           </section>
-          <section class="mt-6">
-            <div class="d-flex align-center mb-3">
-              <h3 class="text-h6">Equipment</h3>
-              <span />
-              <span class="text-caption text-medium-emphasis">
+          <section class="mt-5">
+            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+              <h3 class="h5 mb-0">Equipment</h3>
+              <span class="small text-body-secondary">
                 {{ preview.inventory.length }} imported lines
               </span>
             </div>
             <section
               v-for="line in preview.inventory"
               :key="line.line_id"
-              variant="outlined"
-              class="mb-3"
+              class="border rounded-3 p-3 mb-3"
             >
-              <header class="d-flex flex-wrap align-center ga-2 pb-0">
+              <header class="d-flex flex-wrap align-items-center gap-2 pb-0">
                 <span>{{ line.name }}</span>
                 <Chip
                   size="small"
@@ -255,15 +246,12 @@
               <div>
                 <p
                   v-if="line.description"
-                  class="text-body-2 text-medium-emphasis mb-3"
+                  class="small text-body-secondary mb-3"
                 >
                   {{ line.description }}
                 </p>
-                <div dense>
-                  <div
-                    cols="12"
-                    sm="3"
-                  >
+                <div class="row g-3">
+                  <div class="col-12 col-sm-3">
                     <InputNumber
                       v-model.number="line.quantity"
                       control-variant="stacked"
@@ -272,10 +260,7 @@
                       label="Quantity"
                     />
                   </div>
-                  <div
-                    cols="12"
-                    sm="3"
-                  >
+                  <div class="col-12 col-sm-3">
                     <Select
                       v-model="line.action"
                       density="compact"
@@ -286,10 +271,7 @@
                       ]"
                     />
                   </div>
-                  <div
-                    cols="12"
-                    sm="6"
-                  >
+                  <div class="col-12 col-sm-6">
                     <ItemPickerDialog
                       :model-value="line.matched_item_id ?? undefined"
                       :candidates="candidates"
@@ -310,23 +292,22 @@
           </section>
           <section
             v-if="importChanges.length"
-            class="mt-6"
+            class="mt-5"
           >
-            <h3 class="text-h6 mb-3">Calculated changes</h3>
+            <h3 class="h5 mb-3">Calculated changes</h3>
             <section
               v-for="group in importChanges"
               :key="group.key"
-              variant="outlined"
-              class="mb-3"
+              class="border rounded-3 p-3 mb-3"
             >
-              <header class="text-subtitle-1">{{ group.label }}</header>
+              <header class="h6">{{ group.label }}</header>
               <div>
                 <div
                   v-for="row in group.rows"
                   :key="row.key"
-                  class="calculation-comparison"
+                  class="calculation-comparison d-grid align-items-start gap-3 py-3"
                 >
-                  <div class="font-weight-medium calculation-label">
+                  <div class="fw-medium calculation-label pt-0 pt-md-4">
                     {{ row.label }}
                   </div>
                   <CalculationBreakdown
@@ -335,7 +316,7 @@
                     expanded
                   />
                   <span
-                    class="calculation-arrow"
+                    class="calculation-arrow align-self-center"
                     color="primary"
                   >
                     mdi-arrow-right
@@ -351,8 +332,7 @@
           </section>
         </template>
       </div>
-      <footer>
-        <span />
+      <footer class="d-flex justify-content-end gap-2">
         <Button @click="cancel">Cancel</Button>
         <Button
           color="primary"
@@ -759,45 +739,19 @@ export default defineComponent({
 }
 
 .calculation-comparison {
-  align-items: start;
-  display: grid;
-  gap: 16px;
   grid-template-columns: minmax(110px, 0.6fr) minmax(180px, 1fr) auto minmax(
       180px,
       1fr
     );
-  padding: 12px 0;
 }
 
 .calculation-comparison + .calculation-comparison {
   border-top: 1px solid var(--hoard-border);
 }
 
-.character-import-menu__hint {
-  color: var(--hoard-text-muted);
-  margin: 0.5rem 0 0;
-}
-
-.character-import-dialog {
-  display: grid;
-  gap: 1rem;
-}
-
-.calculation-label {
-  padding-top: 20px;
-}
-
-.calculation-arrow {
-  align-self: center;
-}
-
 @media (max-width: 700px) {
   .calculation-comparison {
     grid-template-columns: 1fr;
-  }
-
-  .calculation-label {
-    padding-top: 0;
   }
 
   .calculation-arrow {

@@ -2,7 +2,10 @@
   <nav aria-label="Campaign navigation">
     <ul class="campaign-navigation list-unstyled mb-0">
       <li>
-        <RouterLink :to="contextPath(activeContext)">
+        <RouterLink
+          class="d-flex align-items-center gap-3 text-decoration-none"
+          :to="contextPath(activeContext)"
+        >
           <span
             class="mdi mdi-play-circle-outline"
             aria-hidden="true"
@@ -11,7 +14,10 @@
         </RouterLink>
       </li>
       <li>
-        <RouterLink :to="`/c/${contextId}/characters`">
+        <RouterLink
+          class="d-flex align-items-center gap-3 text-decoration-none"
+          :to="`/c/${contextId}/characters`"
+        >
           <span
             class="mdi mdi-account-group-outline"
             aria-hidden="true"
@@ -20,7 +26,10 @@
         </RouterLink>
       </li>
       <li>
-        <RouterLink :to="`/c/${contextId}/compendium`">
+        <RouterLink
+          class="d-flex align-items-center gap-3 text-decoration-none"
+          :to="`/c/${contextId}/compendium`"
+        >
           <span
             class="mdi mdi-book-open-variant-outline"
             aria-hidden="true"
@@ -29,7 +38,10 @@
         </RouterLink>
       </li>
       <li>
-        <RouterLink :to="`/c/${contextId}/ledger`">
+        <RouterLink
+          class="d-flex align-items-center gap-3 text-decoration-none"
+          :to="`/c/${contextId}/ledger`"
+        >
           <span
             class="mdi mdi-notebook-outline"
             aria-hidden="true"
@@ -38,7 +50,10 @@
         </RouterLink>
       </li>
       <li v-if="activeContext.kind === 'gm'">
-        <RouterLink :to="`/c/${contextId}/gm`">
+        <RouterLink
+          class="d-flex align-items-center gap-3 text-decoration-none"
+          :to="`/c/${contextId}/gm`"
+        >
           <span
             class="mdi mdi-shield-crown-outline"
             aria-hidden="true"
@@ -47,7 +62,10 @@
         </RouterLink>
       </li>
       <li v-if="activeContext.kind === 'gm'">
-        <RouterLink :to="`/c/${contextId}/manage`">
+        <RouterLink
+          class="d-flex align-items-center gap-3 text-decoration-none"
+          :to="`/c/${contextId}/manage`"
+        >
           <span
             class="mdi mdi-cog-outline"
             aria-hidden="true"

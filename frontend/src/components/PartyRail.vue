@@ -1,11 +1,14 @@
 <template>
   <aside
-    class="party-rail h-100"
+    class="party-rail d-flex flex-column h-100"
     :class="{ 'party-rail--expanded': expanded }"
     aria-label="Party Rail"
   >
-    <div class="party-rail__content">
-      <header class="party-rail__header">
+    <div
+      class="party-rail__content d-flex"
+      :class="expanded ? 'flex-column' : 'flex-row flex-lg-column'"
+    >
+      <header class="party-rail__header d-flex align-items-center">
         <h2 class="visually-hidden">Party Rail</h2>
         <Button
           class="d-none d-lg-inline-flex"
@@ -27,14 +30,17 @@
         />
         <span
           v-if="expanded"
-          class="party-rail__title"
+          class="ms-1 fw-bold"
         >
           {{ inCombat ? "Initiative" : "Party" }}
         </span>
       </header>
 
       <section class="party-rail__group">
-        <ul class="party-rail__entries list-unstyled mb-0">
+        <ul
+          class="party-rail__entries d-flex list-unstyled mb-0"
+          :class="expanded ? 'flex-column' : 'flex-row flex-lg-column'"
+        >
           <GameMasterPresence
             v-for="member in gameMasters"
             :key="member.id"
@@ -44,7 +50,9 @@
         </ul>
       </section>
 
-      <div class="party-rail__separator">
+      <div
+        class="party-rail__separator d-flex align-items-center gap-2 fw-bold text-uppercase"
+      >
         <span v-if="expanded && inCombat">Combatants</span>
       </div>
 

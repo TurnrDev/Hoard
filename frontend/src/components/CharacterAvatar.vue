@@ -1,6 +1,6 @@
 <template>
   <Avatar
-    class="character-avatar"
+    class="character-avatar flex-shrink-0 overflow-hidden"
     :class="`character-avatar--${size}`"
     :label="character.portrait_url ? undefined : initials(character.name)"
     :image="character.portrait_url || undefined"
@@ -38,11 +38,6 @@ export default defineComponent({
 </script>
 
 <style scoped>
-.character-avatar {
-  flex: 0 0 auto;
-  overflow: hidden;
-}
-
 .character-avatar--menu,
 .character-avatar--rail {
   width: 2.75rem;

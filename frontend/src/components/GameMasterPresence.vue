@@ -1,5 +1,5 @@
 <template>
-  <li class="party-rail__entry party-rail__entry--game-master">
+  <li class="party-rail__entry party-rail__entry--game-master align-items-center">
     <OverlayBadge
       :value="member.connected ? '✓' : '○'"
       :severity="member.connected ? 'success' : 'secondary'"
@@ -15,17 +15,17 @@
       v-if="expanded"
       class="party-rail__character-details"
     >
-      <span class="party-rail__entry-name">
+      <span class="party-rail__entry-name d-block text-truncate">
         {{ displayName }}
         <span class="visually-hidden">
           — {{ member.connected ? "Connected" : "Offline" }}
         </span>
       </span>
-      <span class="party-rail__health-label">Game Master</span>
+      <span class="d-block text-truncate small text-body-secondary">Game Master</span>
     </div>
     <span
       v-else
-      class="party-rail__compact-role"
+      class="party-rail__compact-role d-flex align-items-center justify-content-center border rounded-pill bg-body-secondary text-body-secondary text-center fw-bold"
     >
       GM
     </span>

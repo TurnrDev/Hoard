@@ -1,6 +1,9 @@
 <template>
   <section class="party-rail__group">
-    <ul class="party-rail__entries list-unstyled mb-0">
+    <ul
+      class="party-rail__entries d-flex list-unstyled mb-0"
+      :class="expanded ? 'flex-column' : 'flex-row flex-lg-column'"
+    >
       <PartyRailMember
         v-for="character in playerCharacters"
         :key="character.id"

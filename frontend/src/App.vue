@@ -1,24 +1,24 @@
 <template>
   <main
     v-if="isPublicRoute"
-    class="public-shell"
+    class="min-vh-100"
   >
     <router-view @contexts-changed="loadContexts" />
   </main>
 
   <div
     v-else
-    class="campaign-shell"
+    class="campaign-shell min-vh-100"
   >
     <a
-      class="visually-hidden-focusable skip-link"
+      class="visually-hidden-focusable skip-link border bg-body text-body px-3 py-2"
       href="#main-content"
     >
       Skip to main content
     </a>
 
     <header class="campaign-header border-bottom">
-      <div class="campaign-header__brand">
+      <div class="d-flex align-items-center gap-2">
         <Button
           class="d-lg-none"
           icon="mdi mdi-menu"
@@ -28,7 +28,7 @@
           @click="navigationOpen = true"
         />
         <RouterLink
-          class="campaign-header__wordmark"
+          class="campaign-header__wordmark fw-bold text-decoration-none"
           :to="activeContext ? contextPath(activeContext) : '/'"
         >
           HOARD
@@ -41,11 +41,11 @@
         :title="campaign.calendar.era_name"
       >
         <span>{{ campaign.name }}</span>
-        <span aria-hidden="true"> · </span>
+        <span aria-hidden="true">{{ " · " }}</span>
         <span>{{ formatCampaignDate(campaign.calendar) }}</span>
       </p>
 
-      <div class="campaign-header__actions">
+      <div class="d-flex align-items-center justify-content-end gap-2">
         <Button
           class="p-1"
           text
@@ -91,7 +91,7 @@
       class="campaign-layout"
       :class="{ 'campaign-layout--rail-expanded': partyRailExpanded }"
     >
-      <aside class="campaign-navigation-panel d-none d-lg-block border-end">
+      <aside class="campaign-navigation-panel d-none d-lg-block border-end p-3">
         <CampaignNavigation
           v-if="activeContext"
           :context-id="contextId"
@@ -118,7 +118,7 @@
       >
         <p
           v-if="activeContext"
-          class="campaign-main__context d-lg-none text-body-secondary small"
+          class="campaign-main__context d-lg-none text-body-secondary small mb-4"
         >
           {{ contextLabel }}
         </p>

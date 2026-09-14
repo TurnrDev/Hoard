@@ -1,6 +1,6 @@
 <template>
   <li
-    class="party-rail__entry party-rail__entry--character"
+    class="party-rail__entry party-rail__entry--character align-items-center"
     :class="`party-rail__entry--${healthState}`"
   >
     <OverlayBadge
@@ -18,9 +18,9 @@
       v-if="expanded"
       class="party-rail__character-details"
     >
-      <span class="party-rail__entry-name">{{ label }}</span>
+      <span class="party-rail__entry-name d-block text-truncate">{{ label }}</span>
       <span class="visually-hidden">— {{ connected ? "Connected" : "Offline" }}</span>
-      <span class="party-rail__health-label">
+      <span class="d-block text-truncate small text-body-secondary tabular-nums">
         {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }} HP
       </span>
       <ProgressBar
