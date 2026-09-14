@@ -33,7 +33,9 @@ class CharacterHealthService:
             created_by=created_by,
         )
 
-    def create_baseline(self, character: Character, *, created_by=None) -> HealthTransaction:
+    def create_baseline(
+        self, character: Character, *, created_by=None
+    ) -> HealthTransaction:
         """Create the initial health ledger record for a character."""
         return create_health_baseline(character, created_by=created_by)
 

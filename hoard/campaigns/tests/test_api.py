@@ -113,7 +113,9 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         )
         self.assertEqual(updated["type"], "command.ack")
         self.campaign.refresh_from_db()
-        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (82, 1))
+        self.assertEqual(
+            (self.campaign.calendar_year, self.campaign.calendar_day), (82, 1)
+        )
 
     def test_calendar_rejects_decrement_before_first_day(self) -> None:
         self.campaign.calendar_year, self.campaign.calendar_day = 1, 1

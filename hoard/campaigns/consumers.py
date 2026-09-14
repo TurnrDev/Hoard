@@ -412,7 +412,11 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             await self.send_json(
                 {
                     "type": error_type(operation_kind(message_type)),
-                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    **(
+                        {"request_id": request_id}
+                        if isinstance(request_id, str)
+                        else {}
+                    ),
                     "code": "invalid_request_id",
                     "detail": "request_id must be a UUIDv7.",
                 }
@@ -558,7 +562,11 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             )
             return
         await self.send_json(
-            {"type": "command.ack", "request_id": request_id, "data": {"job_id": job_id}}
+            {
+                "type": "command.ack",
+                "request_id": request_id,
+                "data": {"job_id": job_id},
+            }
         )
         await self.send_json(
             {
@@ -798,9 +806,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _calendar_get(self, content: dict[str, object]) -> dict[str, object]:
-        return CampaignCalendarData.from_campaign(
-            self._context().campaign
-        ).model_dump(mode="json")
+        return CampaignCalendarData.from_campaign(self._context().campaign).model_dump(
+            mode="json"
+        )
 
     @database_sync_to_async
     def _calendar_adjust(self, content: dict[str, object]) -> dict[str, object]:
@@ -2089,11 +2097,15 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from . import api
 
         context = self._context()
-        character = api._editable_sheet_character(context, self._integer(content, "character_id"))
+        character = api._editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
         slot = content.get("slot")
         if slot is not None and not isinstance(slot, str):
             raise ValueError("slot must be a string.")
-        result = api.cast_spell(character, self._integer(content, "spell_id"), slot, created_by=context)
+        result = api.cast_spell(
+            character, self._integer(content, "spell_id"), slot, created_by=context
+        )
         notify_campaign_changed(context.campaign_id)
         return result
 
@@ -2102,7 +2114,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from . import api
 
         context = self._context()
-        character = api._editable_sheet_character(context, self._integer(content, "character_id"))
+        character = api._editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
         kind = self._string(content, "kind", required=True)
         if kind not in {"short", "long"}:
             raise ValueError("kind must be short or long.")
@@ -2118,7 +2132,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from . import api
 
         context = self._context()
-        character = api._editable_sheet_character(context, self._integer(content, "character_id"))
+        character = api._editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
         available = content.get("available")
         if not isinstance(available, bool):
             raise ValueError("available must be a boolean.")
@@ -2166,9 +2182,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 campaign=context.campaign
             ).select_related("character", "created_by__user")
             if context.kind != CampaignContext.Kind.GM:
-                conditions = conditions.filter(
-                    character__context__user=context.user
-                )
+                conditions = conditions.filter(character__context__user=context.user)
             rows.extend(self.condition_data(posted) for posted in conditions)
         if ledger in ("all", "audit"):
             audit_models = [CampaignLevelEvent]
@@ -2921,7 +2935,11 @@ class UserConsumer(HoardJsonWebsocketConsumer):
             await self.send_json(
                 {
                     "type": error_type(kind or operation_kind("")),
-                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    **(
+                        {"request_id": request_id}
+                        if isinstance(request_id, str)
+                        else {}
+                    ),
                     "code": "invalid_request_id",
                     "detail": "request_id must be a UUIDv7.",
                 }
@@ -2939,7 +2957,11 @@ class UserConsumer(HoardJsonWebsocketConsumer):
             return
         data = await self._contexts()
         await self.send_json(
-            {"type": result_type(operation_kind(message_type)), "request_id": request_id, "data": data}
+            {
+                "type": result_type(operation_kind(message_type)),
+                "request_id": request_id,
+                "data": data,
+            }
         )
 
     @database_sync_to_async
@@ -2972,7 +2994,11 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
             await self.send_json(
                 {
                     "type": error_type(kind or operation_kind("")),
-                    **({"request_id": request_id} if isinstance(request_id, str) else {}),
+                    **(
+                        {"request_id": request_id}
+                        if isinstance(request_id, str)
+                        else {}
+                    ),
                     "code": "invalid_request_id",
                     "detail": "request_id must be a UUIDv7.",
                 }

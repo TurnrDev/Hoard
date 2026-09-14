@@ -5,47 +5,81 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('campaigns', '0008_alter_campaignlevelevent_options_and_more'),
+        ("campaigns", "0008_alter_campaignlevelevent_options_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='character',
-            name='has_inspiration',
+            model_name="character",
+            name="has_inspiration",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='character',
-            name='spell_slot_adjustments',
+            model_name="character",
+            name="spell_slot_adjustments",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='character',
-            name='spell_slot_current',
+            model_name="character",
+            name="spell_slot_current",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='characterloadout',
-            name='slot',
-            field=models.CharField(choices=[('armor', 'Armor'), ('shield', 'Shield'), ('weapon', 'Weapon'), ('other', 'Other')], default='other', max_length=20),
+            model_name="characterloadout",
+            name="slot",
+            field=models.CharField(
+                choices=[
+                    ("armor", "Armor"),
+                    ("shield", "Shield"),
+                    ("weapon", "Weapon"),
+                    ("other", "Other"),
+                ],
+                default="other",
+                max_length=20,
+            ),
         ),
         migrations.CreateModel(
-            name='CharacterEffect',
+            name="CharacterEffect",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('source', models.CharField(blank=True, max_length=200)),
-                ('name', models.CharField(max_length=200)),
-                ('enabled', models.BooleanField(default=True)),
-                ('duration', models.CharField(blank=True, max_length=200)),
-                ('reminder', models.TextField(blank=True)),
-                ('expires_on_rest', models.CharField(choices=[('manual', 'Manual'), ('short', 'Short rest'), ('long', 'Long rest')], default='manual', max_length=20)),
-                ('modifiers', models.JSONField(blank=True, default=list)),
-                ('character', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='effects', to='campaigns.character')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("source", models.CharField(blank=True, max_length=200)),
+                ("name", models.CharField(max_length=200)),
+                ("enabled", models.BooleanField(default=True)),
+                ("duration", models.CharField(blank=True, max_length=200)),
+                ("reminder", models.TextField(blank=True)),
+                (
+                    "expires_on_rest",
+                    models.CharField(
+                        choices=[
+                            ("manual", "Manual"),
+                            ("short", "Short rest"),
+                            ("long", "Long rest"),
+                        ],
+                        default="manual",
+                        max_length=20,
+                    ),
+                ),
+                ("modifiers", models.JSONField(blank=True, default=list)),
+                (
+                    "character",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="effects",
+                        to="campaigns.character",
+                    ),
+                ),
             ],
             options={
-                'ordering': ('name', 'pk'),
+                "ordering": ("name", "pk"),
             },
         ),
     ]

@@ -78,10 +78,14 @@ def character_portrait_upload(request, context_id: int, character_id: int):
     if uploaded is None:
         return JsonResponse({"detail": "Choose a portrait image."}, status=422)
     if uploaded.size > MAX_PORTRAIT_UPLOAD_BYTES:
-        return JsonResponse({"detail": "Portraits must be no larger than 5 MB."}, status=413)
+        return JsonResponse(
+            {"detail": "Portraits must be no larger than 5 MB."}, status=413
+        )
     image = uploaded.read(MAX_PORTRAIT_UPLOAD_BYTES + 1)
     if len(image) > MAX_PORTRAIT_UPLOAD_BYTES:
-        return JsonResponse({"detail": "Portraits must be no larger than 5 MB."}, status=413)
+        return JsonResponse(
+            {"detail": "Portraits must be no larger than 5 MB."}, status=413
+        )
     image_types = {
         "jpg": image.startswith(b"\xff\xd8\xff"),
         "png": image.startswith(b"\x89PNG\r\n\x1a\n"),

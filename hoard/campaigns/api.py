@@ -217,24 +217,74 @@ SKILL_ABILITIES = {
 
 SLOT_NAMES = ("1", "2", "3", "4", "5", "6", "7", "8", "9")
 SLOT_WORDS = {
-    "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
-    "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9",
+    "first": "1",
+    "second": "2",
+    "third": "3",
+    "fourth": "4",
+    "fifth": "5",
+    "sixth": "6",
+    "seventh": "7",
+    "eighth": "8",
+    "ninth": "9",
 }
 FULL_CASTER_SLOTS = (
-    (), (2,), (3,), (4, 2), (4, 3), (4, 3, 2), (4, 3, 3), (4, 3, 3, 1),
-    (4, 3, 3, 2), (4, 3, 3, 3, 1), (4, 3, 3, 3, 2), (4, 3, 3, 3, 2, 1),
-    (4, 3, 3, 3, 2, 1), (4, 3, 3, 3, 2, 1, 1), (4, 3, 3, 3, 2, 1, 1),
-    (4, 3, 3, 3, 2, 1, 1, 1), (4, 3, 3, 3, 2, 1, 1, 1),
-    (4, 3, 3, 3, 2, 1, 1, 1, 1), (4, 3, 3, 3, 3, 1, 1, 1, 1),
-    (4, 3, 3, 3, 3, 2, 1, 1, 1), (4, 3, 3, 3, 3, 2, 2, 1, 1),
+    (),
+    (2,),
+    (3,),
+    (4, 2),
+    (4, 3),
+    (4, 3, 2),
+    (4, 3, 3),
+    (4, 3, 3, 1),
+    (4, 3, 3, 2),
+    (4, 3, 3, 3, 1),
+    (4, 3, 3, 3, 2),
+    (4, 3, 3, 3, 2, 1),
+    (4, 3, 3, 3, 2, 1),
+    (4, 3, 3, 3, 2, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 2, 1, 1, 1, 1),
+    (4, 3, 3, 3, 3, 1, 1, 1, 1),
+    (4, 3, 3, 3, 3, 2, 1, 1, 1),
+    (4, 3, 3, 3, 3, 2, 2, 1, 1),
 )
-PACT_SLOTS = {1: (1, 1), 2: (2, 1), 3: (2, 2), 4: (2, 2), 5: (2, 3), 6: (2, 3), 7: (2, 4), 8: (2, 4), 9: (2, 5), 10: (2, 5), 11: (3, 5), 12: (3, 5), 13: (3, 5), 14: (3, 5), 15: (3, 5), 16: (3, 5), 17: (4, 5), 18: (4, 5), 19: (4, 5), 20: (4, 5)}
-EFFECT_TARGETS = frozenset({
-    "ac", "speed", "spell_attack", "spell_dc", "weapon_attack", "weapon_damage",
-    *(f"ability:{ability}" for ability in ABILITIES),
-    *(f"save:{ability}" for ability in ABILITIES),
-    *(f"skill:{skill}" for skill in SKILL_ABILITIES),
-})
+PACT_SLOTS = {
+    1: (1, 1),
+    2: (2, 1),
+    3: (2, 2),
+    4: (2, 2),
+    5: (2, 3),
+    6: (2, 3),
+    7: (2, 4),
+    8: (2, 4),
+    9: (2, 5),
+    10: (2, 5),
+    11: (3, 5),
+    12: (3, 5),
+    13: (3, 5),
+    14: (3, 5),
+    15: (3, 5),
+    16: (3, 5),
+    17: (4, 5),
+    18: (4, 5),
+    19: (4, 5),
+    20: (4, 5),
+}
+EFFECT_TARGETS = frozenset(
+    {
+        "ac",
+        "speed",
+        "spell_attack",
+        "spell_dc",
+        "weapon_attack",
+        "weapon_damage",
+        *(f"ability:{ability}" for ability in ABILITIES),
+        *(f"save:{ability}" for ability in ABILITIES),
+        *(f"skill:{skill}" for skill in SKILL_ABILITIES),
+    }
+)
 
 
 def slot_key(key: object) -> str | None:
@@ -249,7 +299,9 @@ def slot_map(value: object) -> dict[str, int]:
     return {
         key: max(0, int(raw))
         for raw_key, raw in (value.items() if isinstance(value, dict) else [])
-        if (key := slot_key(raw_key)) is not None and isinstance(raw, int) and not isinstance(raw, bool)
+        if (key := slot_key(raw_key)) is not None
+        and isinstance(raw, int)
+        and not isinstance(raw, bool)
     }
 
 
@@ -264,11 +316,17 @@ def class_slot_maxima(character: Character) -> dict[str, int]:
     effective = sum(name in full for name in classes)
     effective += sum(name in half for name in classes) // 2
     effective += sum(name in third for name in classes) // 3
-    maxima = {
-        str(level): amount
-        for level, amount in enumerate(FULL_CASTER_SLOTS[min(effective, 20)], start=1)
-        if amount
-    } if effective else {}
+    maxima = (
+        {
+            str(level): amount
+            for level, amount in enumerate(
+                FULL_CASTER_SLOTS[min(effective, 20)], start=1
+            )
+            if amount
+        }
+        if effective
+        else {}
+    )
     warlock_level = sum(name == "warlock" for name in classes)
     if warlock_level:
         count, level = PACT_SLOTS[warlock_level]
@@ -284,13 +342,19 @@ def slot_pools(character: Character) -> dict[str, dict[str, int]]:
     # character is progressed through Hoard.
     if not calculated:
         calculated = dict(current)
-    keys = sorted(set(calculated) | set(current) | set(adjustments), key=lambda key: (key.startswith("pact-"), int(key.split("-")[-1])))
+    keys = sorted(
+        set(calculated) | set(current) | set(adjustments),
+        key=lambda key: (key.startswith("pact-"), int(key.split("-")[-1])),
+    )
     return {
         key: {
             "calculated": calculated.get(key, 0),
             "adjustment": adjustments.get(key, 0),
             "maximum": max(0, calculated.get(key, 0) + adjustments.get(key, 0)),
-            "current": min(current.get(key, calculated.get(key, 0) + adjustments.get(key, 0)), max(0, calculated.get(key, 0) + adjustments.get(key, 0))),
+            "current": min(
+                current.get(key, calculated.get(key, 0) + adjustments.get(key, 0)),
+                max(0, calculated.get(key, 0) + adjustments.get(key, 0)),
+            ),
         }
         for key in keys
     }
@@ -301,9 +365,12 @@ def effect_total(character: Character, target: str) -> int:
         int(modifier.get("value", 0))
         for effect in character.effects.filter(enabled=True)
         for modifier in effect.modifiers
-        if isinstance(modifier, dict) and modifier.get("target") == target
+        if isinstance(modifier, dict)
+        and modifier.get("target") == target
         and isinstance(modifier.get("value"), int)
     )
+
+
 PASSWORD_WORDS = (
     "amber",
     "badger",
@@ -436,9 +503,15 @@ def equipment_slot(entry: CompendiumEntry) -> str:
     if entry.kind == CompendiumEntry.Kind.WEAPON:
         return CharacterLoadout.Slot.WEAPON
     category = str(entry_stat(entry, "armor_type", "armorType", "type") or "").lower()
-    if entry.kind == CompendiumEntry.Kind.ARMOR and ("shield" in category or "shield" in entry.name.lower()):
+    if entry.kind == CompendiumEntry.Kind.ARMOR and (
+        "shield" in category or "shield" in entry.name.lower()
+    ):
         return CharacterLoadout.Slot.SHIELD
-    return CharacterLoadout.Slot.ARMOR if entry.kind == CompendiumEntry.Kind.ARMOR else CharacterLoadout.Slot.OTHER
+    return (
+        CharacterLoadout.Slot.ARMOR
+        if entry.kind == CompendiumEntry.Kind.ARMOR
+        else CharacterLoadout.Slot.OTHER
+    )
 
 
 def armor_values(entry: CompendiumEntry) -> tuple[int, int | None]:
@@ -453,14 +526,28 @@ def armor_values(entry: CompendiumEntry) -> tuple[int, int | None]:
 def _sheet_data(character: Character) -> dict[str, object]:
     hp_modifier = character.ability_modifier(character.hp_ability)
     equipped = list(character.loadout.select_related("item").filter(equipped=True))
-    armor = next((row for row in equipped if row.slot == CharacterLoadout.Slot.ARMOR), None)
-    shield = next((row for row in equipped if row.slot == CharacterLoadout.Slot.SHIELD), None)
-    armor_base, dex_cap = armor_values(armor.item) if armor else (character.base_ac, None)
+    armor = next(
+        (row for row in equipped if row.slot == CharacterLoadout.Slot.ARMOR), None
+    )
+    shield = next(
+        (row for row in equipped if row.slot == CharacterLoadout.Slot.SHIELD), None
+    )
+    armor_base, dex_cap = (
+        armor_values(armor.item) if armor else (character.base_ac, None)
+    )
     dexterity = character.ability_modifier("dexterity")
-    dexterity_contribution = min(dexterity, dex_cap) if dex_cap is not None else dexterity
+    dexterity_contribution = (
+        min(dexterity, dex_cap) if dex_cap is not None else dexterity
+    )
     shield_bonus, _ = armor_values(shield.item) if shield else (0, None)
     effect_ac = effect_total(character, "ac")
-    armor_class = armor_base + (dexterity_contribution if armor else 0) + shield_bonus + character.ac_adjustment + effect_ac
+    armor_class = (
+        armor_base
+        + (dexterity_contribution if armor else 0)
+        + shield_bonus
+        + character.ac_adjustment
+        + effect_ac
+    )
     armor_formula = str(armor_base)
     dexterity_label = "Dexterity"
     if armor:
@@ -1130,7 +1217,10 @@ def loadout_create(request, context_id: int, character_id: int, payload: SheetRe
     if item not in character.inventory:
         raise HttpError(422, "Equipment must be in this character's inventory.")
     slot = equipment_slot(item)
-    if payload.equipped and slot in {CharacterLoadout.Slot.ARMOR, CharacterLoadout.Slot.SHIELD}:
+    if payload.equipped and slot in {
+        CharacterLoadout.Slot.ARMOR,
+        CharacterLoadout.Slot.SHIELD,
+    }:
         character.loadout.filter(slot=slot, equipped=True).update(equipped=False)
     loadout, _ = CharacterLoadout.objects.update_or_create(
         character=character,
@@ -1152,8 +1242,13 @@ def loadout_update(
             raise HttpError(422, "Loadout entries must be equipment.")
         loadout.item = item
         loadout.slot = equipment_slot(item)
-    if payload.equipped and loadout.slot in {CharacterLoadout.Slot.ARMOR, CharacterLoadout.Slot.SHIELD}:
-        loadout.character.loadout.filter(slot=loadout.slot, equipped=True).exclude(pk=loadout.pk).update(equipped=False)
+    if payload.equipped and loadout.slot in {
+        CharacterLoadout.Slot.ARMOR,
+        CharacterLoadout.Slot.SHIELD,
+    }:
+        loadout.character.loadout.filter(slot=loadout.slot, equipped=True).exclude(
+            pk=loadout.pk
+        ).update(equipped=False)
     for field in ("equipped", "label"):
         if field in payload.model_fields_set:
             setattr(loadout, field, getattr(payload, field))
@@ -1165,27 +1260,57 @@ def validate_modifiers(modifiers: list[dict[str, object]]) -> list[dict[str, obj
     cleaned = []
     for modifier in modifiers:
         target, value = modifier.get("target"), modifier.get("value")
-        if target not in EFFECT_TARGETS or not isinstance(value, int) or isinstance(value, bool):
-            raise HttpError(422, "Effects require a supported target and an integer modifier.")
-        cleaned.append({"target": target, "value": value, "label": str(modifier.get("label", ""))[:200]})
+        if (
+            target not in EFFECT_TARGETS
+            or not isinstance(value, int)
+            or isinstance(value, bool)
+        ):
+            raise HttpError(
+                422, "Effects require a supported target and an integer modifier."
+            )
+        cleaned.append(
+            {
+                "target": target,
+                "value": value,
+                "label": str(modifier.get("label", ""))[:200],
+            }
+        )
     return cleaned
 
 
 def effect_create(request, context_id: int, character_id: int, payload: SheetRecord):
-    character = _editable_sheet_character(_context_access(request, context_id), character_id)
+    character = _editable_sheet_character(
+        _context_access(request, context_id), character_id
+    )
     if not payload.name.strip():
         raise HttpError(422, "Effects need a name.")
     effect = CharacterEffect.objects.create(
-        character=character, source=payload.source, name=payload.name, enabled=payload.enabled,
-        duration=payload.duration, reminder=payload.reminder, expires_on_rest=payload.expires_on_rest,
+        character=character,
+        source=payload.source,
+        name=payload.name,
+        enabled=payload.enabled,
+        duration=payload.duration,
+        reminder=payload.reminder,
+        expires_on_rest=payload.expires_on_rest,
         modifiers=validate_modifiers(payload.modifiers),
     )
     return 201, {"id": effect.pk}
 
 
-def effect_update(request, context_id: int, character_id: int, record_id: int, payload: SheetRecord):
-    effect = _sheet_record(_context_access(request, context_id), character_id, CharacterEffect, record_id)
-    for field in ("source", "name", "enabled", "duration", "reminder", "expires_on_rest"):
+def effect_update(
+    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
+):
+    effect = _sheet_record(
+        _context_access(request, context_id), character_id, CharacterEffect, record_id
+    )
+    for field in (
+        "source",
+        "name",
+        "enabled",
+        "duration",
+        "reminder",
+        "expires_on_rest",
+    ):
         if field in payload.model_fields_set:
             setattr(effect, field, getattr(payload, field))
     if "modifiers" in payload.model_fields_set:
@@ -1195,11 +1320,19 @@ def effect_update(request, context_id: int, character_id: int, record_id: int, p
 
 
 def effect_delete(request, context_id: int, character_id: int, record_id: int):
-    _sheet_record(_context_access(request, context_id), character_id, CharacterEffect, record_id).delete()
+    _sheet_record(
+        _context_access(request, context_id), character_id, CharacterEffect, record_id
+    ).delete()
     return 204, None
 
 
-def cast_spell(character: Character, spell_id: int, slot: str | None, *, created_by: CampaignContext) -> dict[str, object]:
+def cast_spell(
+    character: Character,
+    spell_id: int,
+    slot: str | None,
+    *,
+    created_by: CampaignContext,
+) -> dict[str, object]:
     spell = get_object_or_404(CharacterSpell, pk=spell_id, character=character)
     if spell.level and not spell.prepared:
         raise HttpError(422, "Prepare this spell before casting it.")
@@ -1209,7 +1342,9 @@ def cast_spell(character: Character, spell_id: int, slot: str | None, *, created
     else:
         key = slot_key(slot) if slot is not None else None
         if key is None or key.startswith("pact-") or int(key) < spell.level:
-            raise HttpError(422, "Choose an available slot at the spell's level or higher.")
+            raise HttpError(
+                422, "Choose an available slot at the spell's level or higher."
+            )
         pools = slot_pools(character)
         pool = pools.get(key)
         if not pool or pool["current"] < 1:
@@ -1219,14 +1354,23 @@ def cast_spell(character: Character, spell_id: int, slot: str | None, *, created
         character.spell_slot_current = current
         character.save(update_fields=("spell_slot_current",))
     CharacterHistory.objects.create(
-        campaign=character.campaign, character=character, created_by=created_by,
-        reason=CharacterHistory.Reason.EDIT, description=f"Cast {spell.name}",
+        campaign=character.campaign,
+        character=character,
+        created_by=created_by,
+        reason=CharacterHistory.Reason.EDIT,
+        description=f"Cast {spell.name}",
         changes={"spell": {"id": spell.pk, "name": spell.name, "slot": slot}},
     )
     return _character_data(character)
 
 
-def take_rest(character: Character, kind: Literal["short", "long"], current_hp: int | None, *, created_by: CampaignContext) -> dict[str, object]:
+def take_rest(
+    character: Character,
+    kind: Literal["short", "long"],
+    current_hp: int | None,
+    *,
+    created_by: CampaignContext,
+) -> dict[str, object]:
     if kind == "short":
         if current_hp is None or not 0 <= current_hp <= character.max_hp:
             raise HttpError(422, "Enter current HP after spending Hit Dice.")
@@ -1240,7 +1384,9 @@ def take_rest(character: Character, kind: Literal["short", "long"], current_hp: 
     else:
         character.current_hp = character.max_hp
         character.temporary_hp = 0
-        character.spell_slot_current = {key: pool["maximum"] for key, pool in slot_pools(character).items()}
+        character.spell_slot_current = {
+            key: pool["maximum"] for key, pool in slot_pools(character).items()
+        }
         expiry = CharacterEffect.RestExpiry.LONG
     character.save(update_fields=("current_hp", "temporary_hp", "spell_slot_current"))
     expired = list(character.effects.filter(enabled=True, expires_on_rest=expiry))
@@ -1248,20 +1394,32 @@ def take_rest(character: Character, kind: Literal["short", "long"], current_hp: 
         effect.enabled = False
         effect.save(update_fields=("enabled",))
     CharacterHistory.objects.create(
-        campaign=character.campaign, character=character, created_by=created_by,
-        reason=CharacterHistory.Reason.EDIT, description=f"{kind.title()} rest",
-        changes={"rest": {"kind": kind, "expired_effect_ids": [effect.pk for effect in expired]}},
+        campaign=character.campaign,
+        character=character,
+        created_by=created_by,
+        reason=CharacterHistory.Reason.EDIT,
+        description=f"{kind.title()} rest",
+        changes={
+            "rest": {
+                "kind": kind,
+                "expired_effect_ids": [effect.pk for effect in expired],
+            }
+        },
     )
     return _character_data(character)
 
 
-def set_inspiration(character: Character, available: bool, *, created_by: CampaignContext) -> dict[str, object]:
+def set_inspiration(
+    character: Character, available: bool, *, created_by: CampaignContext
+) -> dict[str, object]:
     if character.has_inspiration == available:
         raise HttpError(422, "Inspiration is already in that state.")
     character.has_inspiration = available
     character.save(update_fields=("has_inspiration",))
     CharacterHistory.objects.create(
-        campaign=character.campaign, character=character, created_by=created_by,
+        campaign=character.campaign,
+        character=character,
+        created_by=created_by,
         reason=CharacterHistory.Reason.EDIT,
         description="Awarded inspiration" if available else "Spent inspiration",
         changes={"inspiration": {"available": available}},

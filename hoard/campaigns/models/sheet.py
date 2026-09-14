@@ -58,6 +58,7 @@ class CharacterLoadout(models.Model):
         SHIELD = "shield", "Shield"
         WEAPON = "weapon", "Weapon"
         OTHER = "other", "Other"
+
     character = models.ForeignKey(
         "campaigns.Character", on_delete=models.CASCADE, related_name="loadout"
     )

@@ -30,9 +30,8 @@ class ContextSocketMixin:
                 "command.ack",
                 "command.error",
             }
-            if (
-                is_correlated_response
-                and response.get("request_id") == message.get("request_id")
+            if is_correlated_response and response.get("request_id") == message.get(
+                "request_id"
             ):
                 break
         await communicator.disconnect()

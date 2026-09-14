@@ -108,7 +108,11 @@ class EncounterCombatant(models.Model):
                     }
                 )
 
-        if not self.character_id and not self.creature_entry_id and not self.name.strip():
+        if (
+            not self.character_id
+            and not self.creature_entry_id
+            and not self.name.strip()
+        ):
             raise ValidationError(
                 {"name": "An encounter-only combatant requires a name."}
             )
@@ -264,7 +268,9 @@ class ConditionEvent(CampaignDatedEvent):
     )
     condition_instance_id = models.PositiveBigIntegerField()
     target_name = models.CharField(max_length=200)
-    identifier = models.CharField(max_length=20, choices=ConditionDetails.Identifier.choices)
+    identifier = models.CharField(
+        max_length=20, choices=ConditionDetails.Identifier.choices
+    )
     action = models.CharField(max_length=20, choices=Action.choices)
     before = models.JSONField(null=True, blank=True)
     after = models.JSONField(null=True, blank=True)

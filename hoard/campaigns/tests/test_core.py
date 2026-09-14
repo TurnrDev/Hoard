@@ -145,7 +145,9 @@ class CoreModelTests(TestCase):
             CharacterClassLevel.objects.create(
                 character=character, level=level, class_name="Wizard"
             )
-        spell = CharacterSpell.objects.create(character=character, name="Shield", level=1)
+        spell = CharacterSpell.objects.create(
+            character=character, name="Shield", level=1
+        )
         character.spell_slot_current = {"1": 2, "2": 2}
         character.save(update_fields=("spell_slot_current",))
 

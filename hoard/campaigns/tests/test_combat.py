@@ -75,7 +75,9 @@ class EncounterServiceTests(TestCase):
         )
 
         gm_monster = next(
-            row for row in encounter_data(self.gm)["combatants"] if row["id"] == monster.pk
+            row
+            for row in encounter_data(self.gm)["combatants"]
+            if row["id"] == monster.pk
         )
         player_monster = next(
             row
@@ -144,7 +146,9 @@ class EncounterServiceTests(TestCase):
         )
         self.assertFalse(self.hero.conditions.exists())
 
-    def test_condition_causes_are_independent_but_display_as_one_condition(self) -> None:
+    def test_condition_causes_are_independent_but_display_as_one_condition(
+        self,
+    ) -> None:
         first = set_character_condition(
             self.player,
             self.hero.pk,

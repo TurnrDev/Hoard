@@ -126,9 +126,7 @@ def add_encounter_combatant(
                 pk=creature_entry_id,
                 kind=CompendiumEntry.Kind.MONSTER,
             )
-            .filter(
-                source__repository__campaign_id__in=(None, context.campaign_id)
-            )
+            .filter(source__repository__campaign_id__in=(None, context.campaign_id))
             .first()
         )
         if creature_entry is None:
@@ -188,10 +186,15 @@ def update_combatant(
         raise ValidationError(
             "Linked character identity and health must be changed on the character sheet."
         )
-    if combatant.character_id and combatant.character.is_player_character and {
-        "show_hp_bar",
-        "show_hp_numbers",
-    } & updates.keys():
+    if (
+        combatant.character_id
+        and combatant.character.is_player_character
+        and {
+            "show_hp_bar",
+            "show_hp_numbers",
+        }
+        & updates.keys()
+    ):
         raise ValidationError("Player character health is always visible in combat.")
 
     for field, value in updates.items():

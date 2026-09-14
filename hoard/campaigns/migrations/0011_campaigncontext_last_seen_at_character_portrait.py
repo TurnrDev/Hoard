@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('campaigns', '0010_migrate_spell_slots_to_current'),
+        ("campaigns", "0010_migrate_spell_slots_to_current"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='campaigncontext',
-            name='last_seen_at',
+            model_name="campaigncontext",
+            name="last_seen_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='character',
-            name='portrait',
-            field=models.FileField(blank=True, upload_to='character-portraits/'),
+            model_name="character",
+            name="portrait",
+            field=models.FileField(blank=True, upload_to="character-portraits/"),
         ),
     ]

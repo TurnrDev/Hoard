@@ -75,9 +75,7 @@ class ContextSocketTests(TransactionTestCase):
 
     def test_user_socket_lists_exact_acting_contexts(self) -> None:
         message = {"type": "user.contexts.list", "request_id": request_id()}
-        response = async_to_sync(self.user_request)(
-            message
-        )
+        response = async_to_sync(self.user_request)(message)
 
         self.assertEqual(response["type"], "query.result")
         self.assertEqual(response["request_id"], message["request_id"])
@@ -239,9 +237,7 @@ class ContextSocketTests(TransactionTestCase):
             self.calendar_change_events
         )()
         acknowledgement = next(
-            message
-            for message in first_messages
-            if message["type"] == "command.ack"
+            message for message in first_messages if message["type"] == "command.ack"
         )
         origin_event = next(
             message
@@ -304,9 +300,7 @@ class ContextSocketTests(TransactionTestCase):
             {member["username"] for member in response["data"]["members"]},
             {"socket-user", "party-player"},
         )
-        members = {
-            member["username"]: member for member in response["data"]["members"]
-        }
+        members = {member["username"]: member for member in response["data"]["members"]}
         self.assertEqual(members["socket-user"]["first_name"], "Alice")
         self.assertEqual(members["socket-user"]["last_name"], "Smith")
         self.assertEqual(members["party-player"]["first_name"], "")
