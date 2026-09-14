@@ -447,7 +447,7 @@
           />
         </template>
         <template v-else-if="step === 5">
-          <label class="col-12 col-md-4 d-grid gap-2 align-content-start">
+          <label class="col-12 col-md-6 d-grid gap-2 align-content-start">
             <span class="fw-semibold">Base HP</span>
             <InputNumber
               v-model.number="form.base_hp"
@@ -460,17 +460,7 @@
               Hit-die pool before ability modifiers
             </small>
           </label>
-          <label class="col-12 col-md-4 d-grid gap-2 align-content-start">
-            <span class="fw-semibold">HP ability</span>
-            <Select
-              v-model="form.hp_ability"
-              :options="[...abilities]"
-              :loading="draftLoading"
-              :disabled="draftLoading"
-              fluid
-            />
-          </label>
-          <label class="col-12 col-md-4 d-grid gap-2 align-content-start">
+          <label class="col-12 col-md-6 d-grid gap-2 align-content-start">
             <span class="fw-semibold">HP-only adjustment</span>
             <InputNumber
               v-model.number="form.hp_adjustment"
@@ -681,7 +671,6 @@ export default defineComponent({
         wisdom: 10,
         charisma: 10,
         base_hp: 1,
-        hp_ability: "constitution" as (typeof abilities)[number],
         hp_adjustment: 0,
       },
     };
@@ -700,7 +689,8 @@ export default defineComponent({
       return `hoard:builder:${this.characterId}:${this.isEditing ? "edit" : "build"}:step`;
     },
     hpModifier(): number {
-      const ability = this.form.hp_ability as (typeof this.abilities)[number];
+      const ability = (this.character?.sheet.hp_ability ??
+        "constitution") as (typeof this.abilities)[number];
       const score =
         this.form[ability] +
         (this.form.ability_bonuses[ability] ?? 0) +
@@ -829,7 +819,6 @@ export default defineComponent({
             ]),
           ),
           base_hp: value.sheet.base_hp,
-          hp_ability: "constitution",
           strength: value.sheet.abilities.strength.raw,
           dexterity: value.sheet.abilities.dexterity.raw,
           constitution: value.sheet.abilities.constitution.raw,

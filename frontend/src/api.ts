@@ -121,6 +121,7 @@ export type CharacterSkill = {
 export type CharacterSheet = {
   level: number;
   base_hp: number;
+  hp_ability: string;
   max_hp: number;
   hp_calculation: Calculation;
   current_hp: number;

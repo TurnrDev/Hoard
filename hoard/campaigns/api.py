@@ -567,6 +567,7 @@ def _sheet_data(character: Character) -> dict[str, object]:
     return {
         "level": character.level,
         "base_hp": character.base_hp,
+        "hp_ability": character.hp_ability,
         "max_hp": character.max_hp,
         "hp_calculation": {
             "value": character.max_hp,

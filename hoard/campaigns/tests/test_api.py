@@ -137,6 +137,19 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.base_hp, 20)
 
+    def test_character_command_cannot_edit_hp_ability(self) -> None:
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.update",
+            character_id=self.character.pk,
+            fields={"hp_ability": "strength"},
+        )
+
+        self.assertEqual(response["type"], "command.error")
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.hp_ability, "constitution")
+
     def test_cah_preview_does_not_post_ledger_data(self) -> None:
         fixture = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"
         begun = self.socket_request(

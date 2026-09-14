@@ -1497,7 +1497,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "equipment_proficiencies",
             "skill_proficiencies",
             "base_hp",
-            "hp_ability",
             "hp_adjustment",
         }
         unknown = set(fields) - builder_fields
@@ -1517,15 +1516,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             and all(isinstance(value, str) for value in fields["languages"])
         ):
             raise ValidationError("Languages must be a list of names.")
-        if fields.get("hp_ability", "constitution") not in {
-            "strength",
-            "dexterity",
-            "constitution",
-            "intelligence",
-            "wisdom",
-            "charisma",
-        }:
-            raise ValidationError("HP ability is invalid.")
         for field_name, kind in (
             ("race_entry_id", "race"),
             ("background_entry_id", "background"),

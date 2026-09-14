@@ -52,7 +52,14 @@ class CharacterLifecycleService:
     ) -> Character:
         """Update supported character fields and record the resulting history."""
         before = character_snapshot(character)
-        blocked = {"current_hp", "temporary_hp", "campaign", "context", "level"}
+        blocked = {
+            "current_hp",
+            "temporary_hp",
+            "hp_ability",
+            "campaign",
+            "context",
+            "level",
+        }
         allowed = set(before) | {
             "background_entry_id",
             "race_entry_id",
