@@ -22,11 +22,17 @@ dependencies = [
 [dependency-groups]
 dev = [
     "django-stubs>=6.1.0",
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
     "ruff>=0.15.0",
 ]
 
 [tool.django-stubs]
 django_settings_module = "hoard.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "hoard.settings"
+python_files = ["test_*.py"]
 
 [tool.ruff]
 extend-exclude = ["vendor"]

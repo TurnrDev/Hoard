@@ -12,6 +12,7 @@ from hoard.campaigns.models import (
     Character,
     MoneyTransaction,
 )
+from hoard.campaigns.services import set_character_condition
 from hoard.compendium.models import (
     CompendiumEntry,
     CompendiumRepository,
@@ -103,14 +104,16 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         forbidden = self.socket_request(
             self.player_user, self.pc.pk, "campaign.calendar.adjust", amount=1
         )
-        self.assertEqual(forbidden["type"], "response.error")
+        self.assertEqual(forbidden["type"], "command.error")
 
         self.campaign.calendar_year, self.campaign.calendar_day = 81, 365
         self.campaign.save(update_fields=("calendar_year", "calendar_day"))
         updated = self.socket_request(
             self.gm_user, self.gm.pk, "campaign.calendar.adjust", amount=1
         )
-        self.assertEqual((updated["data"]["year"], updated["data"]["day"]), (82, 1))
+        self.assertEqual(updated["type"], "command.ack")
+        self.campaign.refresh_from_db()
+        self.assertEqual((self.campaign.calendar_year, self.campaign.calendar_day), (82, 1))
 
     def test_calendar_rejects_decrement_before_first_day(self) -> None:
         self.campaign.calendar_year, self.campaign.calendar_day = 1, 1
@@ -118,7 +121,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         response = self.socket_request(
             self.gm_user, self.gm.pk, "campaign.calendar.adjust", amount=-1
         )
-        self.assertEqual(response["type"], "response.error")
+        self.assertEqual(response["type"], "command.error")
 
     def test_player_cannot_edit_another_character(self) -> None:
         response = self.socket_request(
@@ -128,7 +131,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             character_id=self.character.pk,
             fields={"base_hp": 20},
         )
-        self.assertEqual(response["type"], "response")
+        self.assertEqual(response["type"], "command.ack")
         self.character.refresh_from_db()
         self.assertEqual(self.character.base_hp, 20)
 
@@ -159,7 +162,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             token=preview["data"]["token"],
             character_id=self.character.pk,
         )
-        self.assertEqual(committed["type"], "response")
+        self.assertEqual(committed["type"], "command.ack")
         self.character.refresh_from_db()
         self.assertTrue(self.character.name)
         self.assertGreater(self.character.max_hp, 0)
@@ -228,7 +231,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             item_id=self.item.pk,
             quantity=1,
         )
-        self.assertEqual(response["type"], "response")
+        self.assertEqual(response["type"], "command.ack")
         self.assertIn("occurred_at", response["data"])
         self.assertEqual(response["data"]["campaign_date"], "PD 81, 137th")
 
@@ -295,7 +298,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             self.player_user, self.pc.pk, "characters.builder.definition"
         )
 
-        self.assertEqual(definition["type"], "response")
+        self.assertEqual(definition["type"], "query.result")
         self.assertLess(len(json.dumps(definition).encode()), 100_000)
         class_row = next(
             row
@@ -406,7 +409,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             amounts={"gp": 12, "sp": 4, "cp": 7},
             description="Quest reward",
         )
-        self.assertEqual(response["type"], "response")
+        self.assertEqual(response["type"], "command.ack")
         self.assertEqual(MoneyTransaction.objects.count(), 1)
         self.assertEqual(response["data"]["actor"], "gm")
         self.assertEqual(self.character.money.gold, 12)
@@ -423,7 +426,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
                 to_character_id=self.character.pk,
                 amounts=amounts,
             )
-            self.assertEqual(response["type"], "response.error")
+            self.assertEqual(response["type"], "command.error")
         response = self.socket_request(
             self.gm_user,
             self.gm.pk,
@@ -432,7 +435,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             to_character_id=None,
             amounts={"gp": 1, "sp": 1},
         )
-        self.assertEqual(response["type"], "response.error")
+        self.assertEqual(response["type"], "command.error")
 
     def test_character_transaction_filter_includes_actor(self) -> None:
         self.socket_request(
@@ -452,6 +455,56 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(response["data"]["count"], 1)
         self.assertEqual(response["data"]["results"][0]["actor"], "gm")
 
+    def test_condition_ledger_is_limited_to_the_players_character(self) -> None:
+        other_user = get_user_model().objects.create_user(username="other")
+        other_context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=other_user,
+            kind=CampaignContext.Kind.PC,
+        )
+        other_character = Character.objects.create(
+            campaign=self.campaign,
+            context=other_context,
+            name="Other hero",
+            race="Human",
+            character_class="Fighter",
+            strength=10,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+        )
+        for character in (self.character, other_character):
+            set_character_condition(
+                self.gm,
+                character.pk,
+                identifier="prone",
+                source="Shove",
+                duration="Until standing",
+                exhaustion_level=None,
+            )
+
+        player_response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "transactions.list",
+            ledger="condition",
+        )
+        gm_response = self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "transactions.list",
+            ledger="condition",
+        )
+
+        self.assertEqual(player_response["data"]["count"], 1)
+        self.assertEqual(
+            player_response["data"]["results"][0]["character_name"],
+            "Hero",
+        )
+        self.assertEqual(gm_response["data"]["count"], 2)
+
     def test_player_cannot_award_shared_experience(self) -> None:
         response = self.socket_request(
             self.player_user,
@@ -460,4 +513,4 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             amount=100,
             description="No permission",
         )
-        self.assertEqual(response["type"], "response.error")
+        self.assertEqual(response["type"], "command.error")

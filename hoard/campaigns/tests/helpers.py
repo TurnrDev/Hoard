@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid7
+
 from asgiref.sync import async_to_sync
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
@@ -21,7 +23,17 @@ class ContextSocketMixin:
         await communicator.send_json_to(message)
         while True:
             response = await communicator.receive_json_from(timeout=2)
-            if response.get("request_id") == message.get("request_id"):
+            response_type = response.get("type")
+            is_correlated_response = response_type in {
+                "query.result",
+                "query.error",
+                "command.ack",
+                "command.error",
+            }
+            if (
+                is_correlated_response
+                and response.get("request_id") == message.get("request_id")
+            ):
                 break
         await communicator.disconnect()
         return response
@@ -30,7 +42,7 @@ class ContextSocketMixin:
         return async_to_sync(self._socket_request)(
             user,
             context_id,
-            {"type": message_type, "request_id": "test-request", **payload},
+            {"type": message_type, "request_id": str(uuid7()), **payload},
         )
 
 

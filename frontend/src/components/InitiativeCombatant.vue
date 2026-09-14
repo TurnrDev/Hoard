@@ -5,12 +5,12 @@
       <span class="party-rail__entry-name d-block text-truncate">
         {{ combatant.name }}
       </span>
-      <span
-        v-if="expanded && combatant.conditions.length"
-        class="party-rail__conditions small"
-      >
-        {{ conditionSummary }}
-      </span>
+      <ConditionIndicators
+        v-if="combatant.conditions.length"
+        :combatant-name="combatant.name"
+        :conditions="combatant.conditions"
+        :expanded="expanded"
+      />
       <template v-if="hasVisibleHealth">
         <span
           v-if="expanded && combatant.showHpNumbers"
@@ -38,10 +38,11 @@
 import { defineComponent, type PropType } from "vue";
 import ProgressBar from "primevue/progressbar";
 import CombatantVisibilityControls from "./CombatantVisibilityControls.vue";
+import ConditionIndicators from "./ConditionIndicators.vue";
 import type { PartyRailCombatant } from "./partyRailTypes";
 
 export default defineComponent({
-  components: { CombatantVisibilityControls, ProgressBar },
+  components: { CombatantVisibilityControls, ConditionIndicators, ProgressBar },
   props: {
     combatant: { type: Object as PropType<PartyRailCombatant>, required: true },
     expanded: { type: Boolean, default: false },
@@ -74,15 +75,6 @@ export default defineComponent({
       return this.combatant.showHpNumbers
         ? `${this.combatant.name} health: ${this.combatant.currentHp} of ${this.combatant.maxHp}`
         : `${this.combatant.name} health bar`;
-    },
-    conditionSummary(): string {
-      return this.combatant.conditions
-        .map((condition) =>
-          condition.exhaustionLevel
-            ? `${condition.label} ${condition.exhaustionLevel}`
-            : condition.label,
-        )
-        .join(", ");
     },
   },
 });

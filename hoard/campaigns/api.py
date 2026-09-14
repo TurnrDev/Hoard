@@ -50,6 +50,7 @@ from .realtime import notify_campaign_changed
 from .services import exchange_coins, reverse_transaction
 from .services.cah import ABILITIES, SKILL_NAMES, parse_cah
 from .services.calendar import CampaignCalendarService
+from .services.combat import condition_list_data
 from .services.ledger import post_inventory_transaction, post_money_transaction
 
 
@@ -367,11 +368,13 @@ def _is_owner(context: CampaignContext, character: Character) -> bool:
 
 def _visible_characters(context: CampaignContext):
     query = Q(is_active=True, is_archived=False, context__isnull=False)
-    return (
+    characters = (
         context.campaign.characters.all()
         if context.kind == CampaignContext.Kind.GM
         else context.campaign.characters.filter(query | Q(context__user=context.user))
     )
+
+    return characters.prefetch_related("conditions")
 
 
 def _context_data(context: CampaignContext) -> dict[str, object]:
@@ -695,6 +698,7 @@ def _character_data(character: Character) -> dict[str, object]:
         "languages": character.languages,
         "equipment_proficiencies": character.equipment_proficiencies,
         "has_inspiration": character.has_inspiration,
+        "conditions": condition_list_data(list(character.conditions.all())),
         "is_build_complete": character.is_build_complete,
         "level_up_complete": not character.level_progress.filter(
             level=character.level, is_complete=False

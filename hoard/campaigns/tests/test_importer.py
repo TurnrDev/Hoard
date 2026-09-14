@@ -114,7 +114,7 @@ class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
                 }
             ],
         )
-        self.assertEqual(committed["type"], "response")
+        self.assertEqual(committed["type"], "command.ack")
         self.character.refresh_from_db()
         self.assertEqual(self.character.name, "Hero")
         self.assertEqual(self.character.background, "Criminal")
@@ -155,7 +155,7 @@ class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
             collections={"notes": False},
         )
 
-        self.assertEqual(committed["type"], "response")
+        self.assertEqual(committed["type"], "command.ack")
         self.character.refresh_from_db()
         self.assertEqual(self.character.name, "Adjusted import")
         self.assertEqual(self.character.background, "")

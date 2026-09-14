@@ -206,6 +206,11 @@ export default defineComponent({
       if (transaction.ledger === "character") {
         return `${Object.keys(transaction.changes ?? {}).length} field changes`;
       }
+      if (transaction.ledger === "condition") {
+        return transaction.condition
+          ? displayIdentifier(transaction.condition)
+          : "Condition";
+      }
       if (transaction.ledger.startsWith("audit.")) {
         return `${Object.keys(transaction.changes ?? {}).length} recorded changes`;
       }
@@ -226,6 +231,7 @@ export default defineComponent({
           inventory: "mdi-package-variant",
           health: "mdi-heart-pulse",
           character: "mdi-account-edit-outline",
+          condition: "mdi-account-alert-outline",
         }[transaction.ledger] ?? "mdi-book-open-variant"
       );
     },

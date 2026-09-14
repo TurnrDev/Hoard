@@ -5,6 +5,13 @@ from hoard.compendium.models import (
 )
 
 from .audit import CampaignDatedEvent, format_campaign_date, ordinal
+from .combat import (
+    CharacterCondition,
+    CombatantCondition,
+    ConditionEvent,
+    Encounter,
+    EncounterCombatant,
+)
 from .core import (
     XP_LEVEL_THRESHOLDS,
     Campaign,
@@ -39,6 +46,9 @@ __all__ = [
     "CampaignInvitation",
     "CampaignLevelEvent",
     "CampaignContext",
+    "CombatantCondition",
+    "ConditionEvent",
+    "CharacterCondition",
     "Character",
     "CharacterChoice",
     "CharacterClassLevel",
@@ -54,6 +64,8 @@ __all__ = [
     "ExperienceAccount",
     "ExperienceEntry",
     "ExperienceTransaction",
+    "Encounter",
+    "EncounterCombatant",
     "HealthTransaction",
     "InventoryAccount",
     "InventoryEntry",

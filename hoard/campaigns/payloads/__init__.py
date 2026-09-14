@@ -15,6 +15,16 @@ from .characters import (
     CharacterLifecycleEvent,
     CharacterUpdateCommand,
 )
+from .combat import (
+    CharacterConditionCommand,
+    CharacterConditionIdentifierCommand,
+    CombatantConditionCommand,
+    CombatantConditionIdentifierCommand,
+    EncounterCharacterAddCommand,
+    EncounterCombatantAddCommand,
+    EncounterCombatantIdentifierCommand,
+    EncounterCombatantUpdateCommand,
+)
 from .invitations import (
     CampaignInvitationChangedEvent,
     CampaignInvitationData,
@@ -37,6 +47,10 @@ __all__ = [
     "CampaignMembershipChangedEvent",
     "CampaignPresenceChangedEvent",
     "CampaignStateChangedEvent",
+    "CharacterConditionCommand",
+    "CharacterConditionIdentifierCommand",
+    "CombatantConditionCommand",
+    "CombatantConditionIdentifierCommand",
     "CharacterHealthChangedEvent",
     "CharacterHealthCommand",
     "CharacterCreateCommand",
@@ -44,6 +58,10 @@ __all__ = [
     "CharacterLifecycleData",
     "CharacterLifecycleEvent",
     "CharacterUpdateCommand",
+    "EncounterCharacterAddCommand",
+    "EncounterCombatantAddCommand",
+    "EncounterCombatantIdentifierCommand",
+    "EncounterCombatantUpdateCommand",
     "InvitationCreateCommand",
     "InvitationIdentifierCommand",
     "MemberDeactivationCommand",

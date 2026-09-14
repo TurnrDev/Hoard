@@ -244,7 +244,13 @@ PartyRail is a live campaign roster with two explicit modes.
 - The GM remains pinned separately as a presence-only entry.
 - A visible separator labelled **Game Master** distinguishes the GM from the
   roster.
-- PCs, NPCs, and monsters appear in initiative order.
+- Combatants appear in initiative order. Do not store a PC/NPC/monster display
+  enum: a linked `Character` identifies a campaign character, an optional
+  Compendium creature link records creature provenance, and an entry with
+  neither relationship is encounter-only.
+- A character may have more than one position in the initiative order. Those
+  entries have independent initiative values but share character-owned HP and
+  conditions.
 - Each combatant entry can show a token/avatar, name, initiative position, and
   applicable health information.
 - Each combatant entry shows active status-condition icons. Icons must have an
@@ -281,8 +287,9 @@ PartyRail is a live campaign roster with two explicit modes.
 - A person is Connected when they have at least one authenticated, live campaign
   WebSocket connection. Multiple browser tabs or devices do not duplicate an
   entry or cause flicker.
-- Presence is ephemeral operational state, not campaign history. Store it in the
-  realtime/cache layer rather than the campaign database.
+- Presence is operational shell state, not campaign history. Store the latest
+  heartbeat on `CampaignContext.last_seen_at`; do not create a separate presence
+  history or send portraits through the socket.
 
 ### Conditions
 
@@ -290,8 +297,35 @@ PartyRail is a live campaign roster with two explicit modes.
   Exhaustion, Frightened, Grappled, Incapacitated, Invisible, Paralyzed,
   Petrified, Poisoned, Prone, Restrained, Stunned, and Unconscious.
 - Support Obojima's Pacify condition as a first-class condition, not an
-  unstructured note or a one-off display exception.
-- Conditions belong to any applicable combatant: PC, NPC, or monster.
+  unstructured note or a one-off display exception. On page 165, Obojima defines
+  a pacified creature as unable to attack, cast a spell that affects an enemy,
+  or deal damage to another creature. Pacify is binary rather than levelled.
+- Conditions on campaign characters belong to the character and remain active
+  outside and across encounters, including non-combat conditions such as
+  exhaustion from hunger. Encounter-only creatures keep conditions on their
+  encounter entry.
+- Active condition state and condition history are separate concerns. The active
+  record drives the character sheet and Party Rail; every application, material
+  change, and removal posts an immutable, campaign-dated condition ledger event
+  containing the actor, affected target, condition, source, duration, and
+  before/after values.
+- Applying a condition through an initiative entry linked to a Character changes
+  that Character's persistent condition state and posts the same ledger event as
+  an out-of-combat application. Combat is context for the action, not a separate
+  copy of the condition.
+- Conditions on encounter-only combatants also produce ledger events. The event
+  retains a target-name snapshot and optional encounter reference so its history
+  remains intelligible if the active combatant is later removed.
+- Standard conditions do not stack mechanically, but each effect imposing the
+  same condition remains an independent active cause with its own source and
+  duration, as required by both the 2014 and 2024 rules. The UI presents one
+  deduplicated condition indicator while allowing its individual causes to be
+  inspected and ended independently. The condition remains active until its
+  final cause ends.
+- Exhaustion is the exception: store one levelled condition per target and post
+  each increase, decrease, or removal to the condition ledger.
+- Players can see condition ledger events affecting their own character. The GM
+  can see condition events for every character and encounter-only combatant.
 - An icon is a compact visual aid, not the sole representation. The rail must
   provide condition names to screen readers and an accessible way to inspect the
   active conditions.
@@ -299,11 +333,10 @@ PartyRail is a live campaign roster with two explicit modes.
 
 ## Data and realtime requirements
 
-- Current party and character data supports characters and party money.
-- Connectivity/presence is not currently represented in the frontend API.
-- Add presence through the Play screen's initial WebSocket query and a
-  campaign.presence.changed realtime event. Do not infer presence from character
-  existence.
+- The initial campaign query includes character, party-resource, and member
+  presence data needed by the shell.
+- Connectivity updates through `campaign.presence_changed` realtime events. Do
+  not infer presence from character existence.
 - Add an application-level presence heartbeat and expiry window. Normal socket
   disconnects remove presence immediately; a missed heartbeat removes it only
   after the expiry window, preventing stale connections from appearing online
@@ -348,9 +381,8 @@ PartyRail is a live campaign roster with two explicit modes.
   the rail expands without overlaying content. On smaller screens it becomes a
   compact horizontal rail above the main content and can expand into the page.
 - 2026-09-14: added persistent Light/Dark/System selection and Normal/
-  Colourblind Friendly palette selection. The initial rail uses an explicit
-  temporary “presence unavailable” cue because shared presence is not yet in
-  the server protocol.
+  Colourblind Friendly palette selection. Shared presence is supplied by the
+  campaign query, heartbeat command, and `campaign.presence_changed` events.
 - 2026-09-14: made the player’s own character profile the canonical play
   destination. Player contexts resolve directly to
   `/c/:id/characters/:characterId`; the separate `/c/:id/play` route and
@@ -387,11 +419,10 @@ PartyRail is a live campaign roster with two explicit modes.
   visible progression, native radio fieldsets, responsive ASI controls, and an
   accessible before/after change table. The existing preview and complete
   commands remain unchanged.
-- 2026-09-14: began the full character profile replacement by rebuilding its
-  primary reading surface around Bootstrap’s responsive structure, typography,
-  cards, and numeric alignment. Its many action dialogs and the final Options
-  API state extraction remain active migration work rather than being declared
-  complete.
+- 2026-09-14: rebuilt the full character profile around Bootstrap's responsive
+  structure, typography, cards, and numeric alignment. Character actions use
+  labelled PrimeVue dialogs with Bootstrap-responsive form layouts and explicit
+  footers while preserving the existing commands and permission checks.
 - 2026-09-14: corrected all direct PrimeVue dialog bindings to the PrimeVue 4
   `visible` model and event contract. This removes a compatibility-layer-era
   interaction mismatch while preserving each dialog’s page-owned state.
@@ -453,8 +484,25 @@ PartyRail is a live campaign roster with two explicit modes.
 - 2026-09-14: skill proficiency editing in the builder and 5e Companion import
   preview now shares one icon-backed PrimeVue SelectButton component. Each
   control retains a visible skill label and accessible proficiency names.
+- 2026-09-14: completed the character profile's true Options API conversion.
+  Its page state now lives directly in `data`, derived values in `computed`,
+  actions in `methods`, and initial loading in `mounted`; the composition-style
+  ref factory was removed without changing its routes or commands.
+- 2026-09-14: added a shared, keyboard-focusable condition indicator for the
+  initiative rail. It maps all fifteen standard conditions and Obojima's Pacify
+  to distinct MDI symbols, keeps condition names as accessible text, and exposes
+  exhaustion level, duration, and source details when present.
+- 2026-09-14: replaced the profile's large XP progress card with a compact level,
+  current XP, and XP-remaining subheader beneath the character name. The
+  near-level-up gold emphasis is controlled by the clearly named
+  `NEAR_LEVEL_UP_XP_THRESHOLD` constant.
+- 2026-09-14: defined encounter identity through optional Character and
+  Compendium creature relationships rather than a PC/NPC/monster enum. A
+  character may occupy multiple initiative positions. Character conditions are
+  persistent character state and can be managed outside combat; conditions for
+  encounter-only creatures remain encounter-local.
 
 ## Open questions
 
-- Record the exact mechanical effect and any data fields for Obojima's Pacify
-  condition before implementing combat rules.
+- Decide whether later rules automation should calculate the differing 2014 and
+  2024 Exhaustion effects or only track the authoritative current level.

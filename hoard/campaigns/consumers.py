@@ -37,6 +37,7 @@ from .models import (
     CharacterClassLevel,
     CharacterHistory,
     CharacterLevelProgress,
+    ConditionEvent,
     HealthTransaction,
     InvitationEvent,
     MembershipEvent,
@@ -50,9 +51,17 @@ from .payloads import (
     CampaignMemberData,
     CampaignMembershipChangedEvent,
     CampaignPresenceChangedEvent,
+    CharacterConditionCommand,
+    CharacterConditionIdentifierCommand,
     CharacterHealthChangedEvent,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
+    CombatantConditionCommand,
+    CombatantConditionIdentifierCommand,
+    EncounterCharacterAddCommand,
+    EncounterCombatantAddCommand,
+    EncounterCombatantIdentifierCommand,
+    EncounterCombatantUpdateCommand,
 )
 from .protocol import (
     CommandAcknowledgementEnvelope,
@@ -74,10 +83,21 @@ from .services import (
     CharacterHealthService,
     CharacterLifecycleService,
     accept_invitation,
+    add_character_combatant,
+    add_encounter_combatant,
     approve_campaign_level,
     create_invitation,
+    encounter_data,
+    finish_encounter,
     post_health_transaction,
     register_and_accept,
+    remove_character_condition,
+    remove_combatant,
+    remove_combatant_condition,
+    set_character_condition,
+    set_combatant_condition,
+    start_encounter,
+    update_combatant,
 )
 from .services.calendar import CampaignCalendarService
 from .services.history import character_snapshot, record_character_history
@@ -411,6 +431,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.level.status": self._level_status,
             "campaign.level.approve": self._level_approve,
             "campaign.presence.heartbeat": self._presence_heartbeat,
+            "campaign.encounter.start": self.encounter_start,
+            "campaign.encounter.end": self.encounter_end,
+            "campaign.encounter.combatants.add_character": self.combatant_add_character,
+            "campaign.encounter.combatants.add": self.combatant_add,
+            "campaign.encounter.combatants.update": self.combatant_update,
+            "campaign.encounter.combatants.remove": self.combatant_remove,
+            "campaign.encounter.conditions.set": self.combatant_condition_set,
+            "campaign.encounter.conditions.remove": self.combatant_condition_remove,
+            "characters.conditions.set": self.character_condition_set,
+            "characters.conditions.remove": self.character_condition_remove,
             "characters.list": self._character_list,
             "characters.get": self._character_get,
             "characters.create": self._character_create,
@@ -653,6 +683,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.invites.revoke",
             "campaign.level.approve",
             "campaign.presence.heartbeat",
+            "campaign.encounter.start",
+            "campaign.encounter.end",
+            "campaign.encounter.combatants.add_character",
+            "campaign.encounter.combatants.add",
+            "campaign.encounter.combatants.update",
+            "campaign.encounter.combatants.remove",
+            "campaign.encounter.conditions.set",
+            "campaign.encounter.conditions.remove",
+            "characters.conditions.set",
+            "characters.conditions.remove",
             "characters.health.post",
             "characters.create",
             "characters.update",
@@ -730,6 +770,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 mode="json"
             ),
             "party_money": _party_money(campaign),
+            "encounter": encounter_data(context),
             "members": [
                 {
                     "id": candidate.pk,
@@ -794,6 +835,90 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 last_seen_at=last_seen_at.isoformat(),
             ),
         )
+
+    @database_sync_to_async
+    def encounter_start(self, content: dict[str, object]) -> None:
+        context = self._context()
+        start_encounter(context)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def encounter_end(self, content: dict[str, object]) -> None:
+        context = self._context()
+        finish_encounter(context)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def combatant_add_character(self, content: dict[str, object]) -> None:
+        command = EncounterCharacterAddCommand.model_validate(content)
+        context = self._context()
+        add_character_combatant(
+            context,
+            command.character_id,
+            command.initiative,
+        )
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def combatant_add(self, content: dict[str, object]) -> None:
+        command = EncounterCombatantAddCommand.model_validate(content)
+        context = self._context()
+        add_encounter_combatant(context, **command.model_dump())
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def combatant_update(self, content: dict[str, object]) -> None:
+        command = EncounterCombatantUpdateCommand.model_validate(content)
+        fields = command.model_dump(exclude={"combatant_id"}, exclude_none=True)
+        context = self._context()
+        update_combatant(context, command.combatant_id, fields)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def combatant_remove(self, content: dict[str, object]) -> None:
+        command = EncounterCombatantIdentifierCommand.model_validate(content)
+        context = self._context()
+        remove_combatant(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def combatant_condition_set(self, content: dict[str, object]) -> None:
+        command = CombatantConditionCommand.model_validate(content)
+        values = command.model_dump(exclude={"combatant_id"})
+        context = self._context()
+        set_combatant_condition(context, command.combatant_id, **values)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def combatant_condition_remove(self, content: dict[str, object]) -> None:
+        command = CombatantConditionIdentifierCommand.model_validate(content)
+        context = self._context()
+        remove_combatant_condition(
+            context,
+            command.combatant_id,
+            condition_id=command.condition_id,
+            identifier=command.identifier,
+        )
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def character_condition_set(self, content: dict[str, object]) -> None:
+        command = CharacterConditionCommand.model_validate(content)
+        context = self._context()
+        set_character_condition(context, **command.model_dump())
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def character_condition_remove(self, content: dict[str, object]) -> None:
+        command = CharacterConditionIdentifierCommand.model_validate(content)
+        context = self._context()
+        remove_character_condition(
+            context,
+            command.character_id,
+            condition_id=command.condition_id,
+            identifier=command.identifier,
+        )
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
     @database_sync_to_async
     def _member_list(self, content: dict[str, object]) -> list[dict[str, object]]:
@@ -2036,6 +2161,15 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             if context.kind != CampaignContext.Kind.GM:
                 history = history.filter(character__context__user=context.user)
             rows.extend(self._character_history_data(posted) for posted in history)
+        if ledger in ("all", "condition"):
+            conditions = ConditionEvent.objects.filter(
+                campaign=context.campaign
+            ).select_related("character", "created_by__user")
+            if context.kind != CampaignContext.Kind.GM:
+                conditions = conditions.filter(
+                    character__context__user=context.user
+                )
+            rows.extend(self.condition_data(posted) for posted in conditions)
         if ledger in ("all", "audit"):
             audit_models = [CampaignLevelEvent]
             if context.kind == CampaignContext.Kind.GM:
@@ -2645,6 +2779,33 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "reason": event.reason,
             "description": event.description,
             "changes": event.changes,
+            "entries": [],
+            **cls._event_metadata(event),
+        }
+
+    @classmethod
+    def condition_data(cls, event: ConditionEvent) -> dict[str, object]:
+        condition_label = event.get_identifier_display()
+        return {
+            "id": event.pk,
+            "ledger": "condition",
+            "ledger_label": str(event._meta.verbose_name),
+            "character_id": event.character_id,
+            "character_name": event.target_name,
+            "reason": event.action,
+            "description": (
+                f"{condition_label} {event.get_action_display().lower()} "
+                f"on {event.target_name}"
+            ),
+            "changes": {
+                condition_label: {
+                    "before": event.before,
+                    "after": event.after,
+                }
+            },
+            "condition": event.identifier,
+            "condition_instance_id": event.condition_instance_id,
+            "encounter_id": event.encounter_id,
             "entries": [],
             **cls._event_metadata(event),
         }

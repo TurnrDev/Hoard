@@ -2,6 +2,13 @@ export type PartyRailCondition = {
   id: string;
   label: string;
   exhaustionLevel?: number;
+  source?: string;
+  duration?: string;
+  instances?: Array<{
+    id: number;
+    source: string;
+    duration: string;
+  }>;
 };
 
 export type PartyRailCombatant = {

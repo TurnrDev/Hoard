@@ -12,11 +12,19 @@
           size="profile"
         />
         <div>
-          <div class="text-uppercase fw-semibold small text-body-secondary">
-            Character profile
-          </div>
           <h1>{{ character.name }}</h1>
-          <p>{{ character.race }} · {{ character.class }}</p>
+          <p class="mb-1">{{ character.race }} · {{ character.class }}</p>
+          <p class="mb-0 text-body-secondary tabular-nums">
+            Level {{ experienceProgress.level }} ·
+            {{ formatXp(experienceProgress.current) }} ·
+            <template v-if="experienceProgress.remaining !== null">
+              <span :class="{ 'level-up-near': experienceProgress.isNearLevelUp }">
+                {{ formatXp(experienceProgress.remaining) }}
+              </span>
+              to level up
+            </template>
+            <span v-else>Maximum level</span>
+          </p>
         </div>
       </div>
       <div class="d-flex gap-2">
@@ -72,32 +80,7 @@
       {{ notice }}
     </Message>
     <div class="row g-3 mb-4">
-      <div class="col-12 col-md-5">
-        <section class="border rounded-3 p-3 p-md-4 h-100">
-          <div>
-            <div class="text-uppercase fw-semibold small text-body-secondary">
-              Level {{ experienceProgress.level }}
-            </div>
-            <ProgressBar
-              class="mt-2"
-              color="primary"
-              :model-value="experienceProgress.progress"
-              height="8"
-              rounded
-              :aria-label="`Level ${experienceProgress.level} experience progress`"
-            />
-            <div class="xp-progress-labels">
-              <span>{{ formatXp(experienceProgress.minimum) }}</span>
-              <strong>{{ formatXp(experienceProgress.current) }}</strong>
-              <span v-if="experienceProgress.maximum">
-                {{ formatXp(experienceProgress.maximum) }}
-              </span>
-              <span v-else>Maximum level</span>
-            </div>
-          </div>
-        </section>
-      </div>
-      <div class="col-12 col-md-7">
+      <div class="col-12">
         <section class="border rounded-3 p-3 p-md-4 h-100">
           <div
             v-if="canAct"
@@ -1308,11 +1291,9 @@ import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import type { MenuItem } from "primevue/menuitem";
 import Message from "primevue/message";
-import ProgressBar from "primevue/progressbar";
 import Select from "primevue/select";
 import Textarea from "primevue/textarea";
-import { defineComponent, ref } from "vue";
-import type { RouteLocationNormalizedLoaded, Router } from "vue-router";
+import { defineComponent } from "vue";
 import {
   archiveCharacter,
   castCharacterSpell,
@@ -1371,253 +1352,38 @@ const skillAbilities: Record<string, string> = {
   survival: "wisdom",
 };
 
-function createProfileModel(route: RouteLocationNormalizedLoaded, router: Router) {
-  const campaignId = Number(route.params.id);
-  const characterId = Number(route.params.characterId);
-  const campaign = ref<Campaign>();
-  const character = ref<Character>();
-  const ownCharacter = ref(false);
-  const characters = ref<Character[]>([]);
-  const items = ref<Item[]>([]);
-  const error = ref("");
-  const notice = ref("");
-  if (typeof route.query.level_up_error === "string") {
-    error.value = route.query.level_up_error;
-  }
-  const grantItemId = ref<number>();
-  const grantQuantity = ref(1);
-  const itemAction = ref<"use" | "destroy" | "transfer">();
-  const selectedInventoryItem = ref<{
-    item_id: number;
-    name: string;
-    quantity: number;
-  }>();
-  const itemActionQuantity = ref(1);
-  const itemActionDestination = ref<number>();
-  const itemActionDescription = ref("");
-  const moneyAction = ref<"spend" | "transfer" | "exchange">("spend");
-  const moneyDialog = ref(false);
-  const denomination = ref("gp");
-  const amount = ref(1);
-  const moneyAmounts = ref<Record<string, number>>({
-    pp: 0,
-    gp: 0,
-    ep: 0,
-    sp: 0,
-    cp: 0,
-  });
-  const moneyDestination = ref<number>();
-  const exchangeTargetDenomination = ref("sp");
-  const moneyDescription = ref("");
-  const addItemOpen = ref(false);
-  const activity = ref<LedgerTransaction[]>([]);
-  const healthOpen = ref(false);
-  const hpAdjustmentOpen = ref(false);
-  const healthReason = ref<"damage" | "healing" | "temporary" | "correction">("damage");
-  const healthAmount = ref(1);
-  const healthCurrent = ref(0);
-  const healthTemporary = ref(0);
-  const healthDescription = ref("");
-  const shortRestOpen = ref(false);
-  const shortRestHp = ref(0);
-  const spellCastOpen = ref(false);
-  const castingSpell = ref<Character["spells"][number]>();
-  const castingSlot = ref<string>();
-  const effectOpen = ref(false);
-  const effectName = ref("");
-  const effectSource = ref("");
-  const effectDuration = ref("");
-  const effectReminder = ref("");
-  const effectTarget = ref("ac");
-  const effectValue = ref(0);
-  const denominations = ["cp", "sp", "ep", "gp", "pp"].map((value) => ({
-    title: displayCoin(value),
-    value,
-  }));
-  const xpThresholds = [
-    0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000,
-    140000, 165000, 195000, 225000, 265000, 305000, 355000,
-  ];
-  const displayName = displayIdentifier;
-  const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
-  const formatXp = (value: number) => `${value.toLocaleString()} XP`;
-  const effectTargets = [
-    "ac",
-    "speed",
-    "spell_attack",
-    "spell_dc",
-    "weapon_attack",
-    "weapon_damage",
-    "ability:strength",
-    "ability:dexterity",
-    "ability:constitution",
-    "ability:intelligence",
-    "ability:wisdom",
-    "ability:charisma",
-    "save:strength",
-    "save:dexterity",
-    "save:constitution",
-    "save:intelligence",
-    "save:wisdom",
-    "save:charisma",
-  ].map((value) => ({ title: displayIdentifier(value.replace(":", " ")), value }));
-  const activityAmount = (transaction: LedgerTransaction) =>
-    transaction.entries
-      .filter((entry) => entry.account_name === character.value?.name)
-      .map(
-        (entry) =>
-          `${entry.amount > 0 ? "+" : ""}${entry.amount} ${
-            entry.item_name ??
-            (entry.denomination ? displayCoin(entry.denomination) : "XP")
-          }`,
-      )
-      .join(" · ");
-  const activityDescription = (transaction: LedgerTransaction) =>
-    transaction.description ||
-    transaction.ledger_label ||
-    displayIdentifier(transaction.ledger);
-  const proficiencyLabel = (proficiency: string) =>
-    ({ half: "Half", proficient: "Proficient", expertise: "Expertise" })[proficiency] ??
-    "";
-  const proficiencyClass = (proficiency: string) =>
-    `proficiency-bonus proficiency-bonus--${proficiency}`;
+const xpThresholds = [
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000,
+  140000, 165000, 195000, 225000, 265000, 305000, 355000,
+];
 
-  function openShortRest(): void {
-    if (!character.value) {
-      return;
-    }
-    shortRestHp.value = character.value.sheet.current_hp;
-    shortRestOpen.value = true;
-  }
+const NEAR_LEVEL_UP_XP_THRESHOLD = 1000;
 
-  async function takeRest(kind: "short" | "long"): Promise<void> {
-    if (!character.value) {
-      return;
-    }
-    try {
-      character.value = await restCharacter(
-        campaignId,
-        character.value.id,
-        kind,
-        kind === "short" ? shortRestHp.value : undefined,
-      );
-      shortRestOpen.value = false;
-      notice.value = `${kind === "short" ? "Short" : "Long"} rest recorded.`;
-    } catch (exception) {
-      error.value =
-        exception instanceof Error ? exception.message : "Unable to record rest.";
-    }
-  }
+const denominationOptions = ["cp", "sp", "ep", "gp", "pp"].map((value) => ({
+  title: displayCoin(value),
+  value,
+}));
 
-  function openSpellCast(spell: Character["spells"][number]): void {
-    castingSpell.value = spell;
-    castingSlot.value = undefined;
-    if (spell.level === 0) {
-      void confirmSpellCast();
-    } else {
-      spellCastOpen.value = true;
-    }
-  }
-
-  async function confirmSpellCast(): Promise<void> {
-    if (!character.value || !castingSpell.value) {
-      return;
-    }
-    try {
-      character.value = await castCharacterSpell(
-        campaignId,
-        character.value.id,
-        castingSpell.value.id,
-        castingSpell.value.level === 0 ? undefined : castingSlot.value,
-      );
-      spellCastOpen.value = false;
-      notice.value = `${castingSpell.value.name} recorded.`;
-    } catch (exception) {
-      error.value =
-        exception instanceof Error
-          ? exception.message
-          : "Unable to record spell casting.";
-    }
-  }
-
-  async function archive(): Promise<void> {
-    if (!character.value) {
-      return;
-    }
-    try {
-      await archiveCharacter(campaignId, character.value.id);
-      await router.replace(`/c/${campaignId}/characters`);
-    } catch (exception) {
-      error.value =
-        exception instanceof Error ? exception.message : "Unable to archive character.";
-    }
-  }
-
-  return {
-    route,
-    router,
-    campaignId,
-    characterId,
-    campaign,
-    character,
-    ownCharacter,
-    characters,
-    items,
-    error,
-    notice,
-    grantItemId,
-    grantQuantity,
-    itemAction,
-    selectedInventoryItem,
-    itemActionQuantity,
-    itemActionDestination,
-    itemActionDescription,
-    moneyAction,
-    moneyDialog,
-    denomination,
-    amount,
-    moneyAmounts,
-    moneyDestination,
-    exchangeTargetDenomination,
-    moneyDescription,
-    addItemOpen,
-    activity,
-    healthOpen,
-    hpAdjustmentOpen,
-    healthReason,
-    healthAmount,
-    healthCurrent,
-    healthTemporary,
-    healthDescription,
-    shortRestOpen,
-    shortRestHp,
-    spellCastOpen,
-    castingSpell,
-    castingSlot,
-    effectOpen,
-    effectName,
-    effectSource,
-    effectDuration,
-    effectReminder,
-    effectTarget,
-    effectValue,
-    denominations,
-    xpThresholds,
-    displayName,
-    signed,
-    formatXp,
-    effectTargets,
-    activityAmount,
-    activityDescription,
-    proficiencyLabel,
-    proficiencyClass,
-    openShortRest,
-    takeRest,
-    openSpellCast,
-    confirmSpellCast,
-    archive,
-  };
-}
+const effectTargetOptions = [
+  "ac",
+  "speed",
+  "spell_attack",
+  "spell_dc",
+  "weapon_attack",
+  "weapon_damage",
+  "ability:strength",
+  "ability:dexterity",
+  "ability:constitution",
+  "ability:intelligence",
+  "ability:wisdom",
+  "ability:charisma",
+  "save:strength",
+  "save:dexterity",
+  "save:constitution",
+  "save:intelligence",
+  "save:wisdom",
+  "save:charisma",
+].map((value) => ({ title: displayIdentifier(value.replace(":", " ")), value }));
 
 export default defineComponent({
   components: {
@@ -1628,7 +1394,6 @@ export default defineComponent({
     InputNumber,
     InputText,
     Message,
-    ProgressBar,
     Select,
     Textarea,
     CoinAmountPicker,
@@ -1637,7 +1402,59 @@ export default defineComponent({
     ItemPickerDialog,
   },
   data() {
-    return createProfileModel(this.$route, this.$router);
+    const levelUpError = this.$route.query.level_up_error;
+
+    return {
+      campaignId: Number(this.$route.params.id),
+      characterId: Number(this.$route.params.characterId),
+      campaign: undefined as Campaign | undefined,
+      character: undefined as Character | undefined,
+      ownCharacter: false,
+      characters: [] as Character[],
+      items: [] as Item[],
+      error: typeof levelUpError === "string" ? levelUpError : "",
+      notice: "",
+      grantItemId: undefined as number | undefined,
+      grantQuantity: 1,
+      itemAction: undefined as "use" | "destroy" | "transfer" | undefined,
+      selectedInventoryItem: undefined as
+        { item_id: number; name: string; quantity: number } | undefined,
+      itemActionQuantity: 1,
+      itemActionDestination: undefined as number | undefined,
+      itemActionDescription: "",
+      moneyAction: "spend" as "spend" | "transfer" | "exchange",
+      moneyDialog: false,
+      denomination: "gp",
+      amount: 1,
+      moneyAmounts: { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 } as Record<string, number>,
+      moneyDestination: undefined as number | undefined,
+      exchangeTargetDenomination: "sp",
+      moneyDescription: "",
+      addItemOpen: false,
+      activity: [] as LedgerTransaction[],
+      healthOpen: false,
+      hpAdjustmentOpen: false,
+      healthReason: "damage" as "damage" | "healing" | "temporary" | "correction",
+      healthAmount: 1,
+      healthCurrent: 0,
+      healthTemporary: 0,
+      healthDescription: "",
+      shortRestOpen: false,
+      shortRestHp: 0,
+      spellCastOpen: false,
+      castingSpell: undefined as Character["spells"][number] | undefined,
+      castingSlot: undefined as string | undefined,
+      effectOpen: false,
+      effectName: "",
+      effectSource: "",
+      effectDuration: "",
+      effectReminder: "",
+      effectTarget: "ac",
+      effectValue: 0,
+      denominations: denominationOptions,
+      xpThresholds,
+      effectTargets: effectTargetOptions,
+    };
   },
   computed: {
     characterActionItems(): MenuItem[] {
@@ -1836,8 +1653,19 @@ export default defineComponent({
       const progress = maximum
         ? Math.min(100, Math.max(0, ((current - minimum) / (maximum - minimum)) * 100))
         : 100;
+      const remaining = maximum === undefined ? null : Math.max(0, maximum - current);
+      const isNearLevelUp =
+        remaining !== null && remaining < NEAR_LEVEL_UP_XP_THRESHOLD;
 
-      return { current, level, maximum, minimum, progress };
+      return {
+        current,
+        isNearLevelUp,
+        level,
+        maximum,
+        minimum,
+        progress,
+        remaining,
+      };
     },
     abilityGroups() {
       if (!this.character) {
@@ -1898,9 +1726,120 @@ export default defineComponent({
   },
   methods: {
     displayCoin,
+    displayName: displayIdentifier,
     formatCoinPouch,
     formatGoldValue,
     formatMoneyValue,
+    signed(value: number): string {
+      return value >= 0 ? `+${value}` : `${value}`;
+    },
+    formatXp(value: number): string {
+      return `${value.toLocaleString()} XP`;
+    },
+    activityAmount(transaction: LedgerTransaction): string {
+      return transaction.entries
+        .filter((entry) => entry.account_name === this.character?.name)
+        .map(
+          (entry) =>
+            `${entry.amount > 0 ? "+" : ""}${entry.amount} ${
+              entry.item_name ??
+              (entry.denomination ? displayCoin(entry.denomination) : "XP")
+            }`,
+        )
+        .join(" · ");
+    },
+    activityDescription(transaction: LedgerTransaction): string {
+      return (
+        transaction.description ||
+        transaction.ledger_label ||
+        displayIdentifier(transaction.ledger)
+      );
+    },
+    proficiencyLabel(proficiency: string): string {
+      return (
+        {
+          half: "Half",
+          proficient: "Proficient",
+          expertise: "Expertise",
+        }[proficiency] ?? ""
+      );
+    },
+    proficiencyClass(proficiency: string): string {
+      return `proficiency-bonus proficiency-bonus--${proficiency}`;
+    },
+    openShortRest(): void {
+      if (!this.character) {
+        return;
+      }
+
+      this.shortRestHp = this.character.sheet.current_hp;
+      this.shortRestOpen = true;
+    },
+    async takeRest(kind: "short" | "long"): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        this.character = await restCharacter(
+          this.campaignId,
+          this.character.id,
+          kind,
+          kind === "short" ? this.shortRestHp : undefined,
+        );
+        this.shortRestOpen = false;
+        this.notice = `${kind === "short" ? "Short" : "Long"} rest recorded.`;
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to record rest.";
+      }
+    },
+    openSpellCast(spell: Character["spells"][number]): void {
+      this.castingSpell = spell;
+      this.castingSlot = undefined;
+
+      if (spell.level === 0) {
+        void this.confirmSpellCast();
+      } else {
+        this.spellCastOpen = true;
+      }
+    },
+    async confirmSpellCast(): Promise<void> {
+      if (!this.character || !this.castingSpell) {
+        return;
+      }
+
+      try {
+        this.character = await castCharacterSpell(
+          this.campaignId,
+          this.character.id,
+          this.castingSpell.id,
+          this.castingSpell.level === 0 ? undefined : this.castingSlot,
+        );
+        this.spellCastOpen = false;
+        this.notice = `${this.castingSpell.name} recorded.`;
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to record spell casting.";
+      }
+    },
+    async archive(): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        await archiveCharacter(this.campaignId, this.character.id);
+        await this.$router.replace(`/c/${this.campaignId}/characters`);
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to archive character.";
+      }
+    },
     choosePortrait(): void {
       const input = this.$refs.portraitInput as HTMLInputElement;
 
@@ -2369,6 +2308,11 @@ export default defineComponent({
 </script>
 
 <style scoped>
+.level-up-near {
+  color: var(--hoard-gold);
+  font-weight: var(--bs-body-font-weight);
+}
+
 @media (min-width: 576px) {
   .coin-value-column {
     border-top: 0 !important;
@@ -2376,4 +2320,3 @@ export default defineComponent({
   }
 }
 </style>
-FileUpload,

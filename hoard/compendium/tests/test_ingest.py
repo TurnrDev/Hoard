@@ -102,7 +102,10 @@ class CompendiumIngestTests(TestCase):
             payload = self._write_rpg_resource(root, "5e", "weapon", "sword", "Sword")
             self._write_rpg_resource(root, "5e2024", "weapon", "sword", "Sword")
 
-            repository = CompendiumRepository.objects.get(identifier="default")
+            repository, _ = CompendiumRepository.objects.get_or_create(
+                identifier="default",
+                defaults={"name": "Default"},
+            )
             source_2014 = CompendiumSource.objects.create(
                 repository=repository, identifier="5e", name="5e"
             )

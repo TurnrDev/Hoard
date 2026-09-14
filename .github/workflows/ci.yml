@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups --locked
       - name: Run tests
-        run: uv run python manage.py test
+        run: uv run pytest
       - name: Check linting
         run: uv run ruff check hoard
       - name: Check formatting

@@ -10,6 +10,20 @@ from .actions import (
 )
 from .calendar import CampaignCalendarService
 from .characters import CharacterLifecycleService
+from .combat import (
+    active_encounter,
+    add_character_combatant,
+    add_encounter_combatant,
+    encounter_data,
+    finish_encounter,
+    remove_character_condition,
+    remove_combatant,
+    remove_combatant_condition,
+    set_character_condition,
+    set_combatant_condition,
+    start_encounter,
+    update_combatant,
+)
 from .experience import (
     activate_character,
     award_shared_experience,
@@ -58,4 +72,16 @@ __all__ = [
     "CampaignCalendarService",
     "CharacterHealthService",
     "CharacterLifecycleService",
+    "active_encounter",
+    "add_character_combatant",
+    "add_encounter_combatant",
+    "encounter_data",
+    "finish_encounter",
+    "remove_character_condition",
+    "remove_combatant",
+    "remove_combatant_condition",
+    "set_combatant_condition",
+    "set_character_condition",
+    "start_encounter",
+    "update_combatant",
 ]

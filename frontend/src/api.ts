@@ -319,6 +319,9 @@ export type LedgerTransaction = {
   discarded_amount?: number;
   actor: string | null;
   character_name?: string;
+  condition?: string;
+  condition_instance_id?: number;
+  encounter_id?: number | null;
   changes?: Record<string, { before: unknown; after: unknown }>;
   current_hp_delta?: number;
   temporary_hp_delta?: number;

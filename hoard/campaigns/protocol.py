@@ -132,6 +132,16 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.invites.revoke",
         "campaign.level.approve",
         "campaign.presence.heartbeat",
+        "campaign.encounter.start",
+        "campaign.encounter.end",
+        "campaign.encounter.combatants.add_character",
+        "campaign.encounter.combatants.add",
+        "campaign.encounter.combatants.update",
+        "campaign.encounter.combatants.remove",
+        "campaign.encounter.conditions.set",
+        "campaign.encounter.conditions.remove",
+        "characters.conditions.set",
+        "characters.conditions.remove",
         "characters.create",
         "characters.update",
         "characters.portrait.remove",
@@ -186,10 +196,18 @@ def operation_definitions() -> dict[str, OperationDefinition]:
     from .payloads import (
         CalendarAdjustmentCommand,
         CampaignCalendarData,
+        CharacterConditionCommand,
+        CharacterConditionIdentifierCommand,
         CharacterCreateCommand,
         CharacterHealthCommand,
         CharacterIdentifierCommand,
         CharacterUpdateCommand,
+        CombatantConditionCommand,
+        CombatantConditionIdentifierCommand,
+        EncounterCharacterAddCommand,
+        EncounterCombatantAddCommand,
+        EncounterCombatantIdentifierCommand,
+        EncounterCombatantUpdateCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
         MemberDeactivationCommand,
@@ -216,6 +234,52 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         kind=OperationKind.COMMAND,
         payload_model=CalendarAdjustmentCommand,
         result_model=CampaignCalendarData,
+    )
+    for name in ("campaign.encounter.start", "campaign.encounter.end"):
+        definitions[name] = OperationDefinition(
+            name=name,
+            kind=OperationKind.COMMAND,
+            payload_model=EmptyPayload,
+        )
+    definitions["campaign.encounter.combatants.add_character"] = OperationDefinition(
+        name="campaign.encounter.combatants.add_character",
+        kind=OperationKind.COMMAND,
+        payload_model=EncounterCharacterAddCommand,
+    )
+    definitions["campaign.encounter.combatants.add"] = OperationDefinition(
+        name="campaign.encounter.combatants.add",
+        kind=OperationKind.COMMAND,
+        payload_model=EncounterCombatantAddCommand,
+    )
+    definitions["campaign.encounter.combatants.update"] = OperationDefinition(
+        name="campaign.encounter.combatants.update",
+        kind=OperationKind.COMMAND,
+        payload_model=EncounterCombatantUpdateCommand,
+    )
+    definitions["campaign.encounter.combatants.remove"] = OperationDefinition(
+        name="campaign.encounter.combatants.remove",
+        kind=OperationKind.COMMAND,
+        payload_model=EncounterCombatantIdentifierCommand,
+    )
+    definitions["campaign.encounter.conditions.set"] = OperationDefinition(
+        name="campaign.encounter.conditions.set",
+        kind=OperationKind.COMMAND,
+        payload_model=CombatantConditionCommand,
+    )
+    definitions["campaign.encounter.conditions.remove"] = OperationDefinition(
+        name="campaign.encounter.conditions.remove",
+        kind=OperationKind.COMMAND,
+        payload_model=CombatantConditionIdentifierCommand,
+    )
+    definitions["characters.conditions.set"] = OperationDefinition(
+        name="characters.conditions.set",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterConditionCommand,
+    )
+    definitions["characters.conditions.remove"] = OperationDefinition(
+        name="characters.conditions.remove",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterConditionIdentifierCommand,
     )
     definitions["campaign.members.deactivate"] = OperationDefinition(
         name="campaign.members.deactivate",

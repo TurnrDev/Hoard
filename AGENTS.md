@@ -6,6 +6,18 @@
 - Do not use leading-underscore “private” methods or functions in Python; Python
   has no private methods and the convention makes the code harder to read.
 
+## Testing
+
+- Run backend tests with `uv run pytest --reuse-db` so pytest-django reuses the
+  existing PostgreSQL test database.
+- When migrations or stale test state require a clean database, run
+  `uv run pytest --create-db --reuse-db`. This recreates the test database and
+  retains it for the next run.
+- Give database access only to tests that need it, using Django's `TestCase` or
+  `TransactionTestCase`, the `db` fixture, or `@pytest.mark.django_db`. Do not add
+  an autouse `db` fixture unless the whole test suite intentionally becomes
+  database-backed.
+
 ## API architecture
 
 - All new application APIs must use WebSocket. Do not add new HTTP/REST endpoints
