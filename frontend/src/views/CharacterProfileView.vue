@@ -489,6 +489,87 @@
             </div>
           </div>
         </section>
+
+        <section
+          class="mt-4"
+          aria-labelledby="skills-heading"
+        >
+          <header class="mb-3">
+            <h2
+              id="skills-heading"
+              class="h4 mb-1"
+            >
+              Skills
+            </h2>
+            <p class="small text-body-secondary mb-0">
+              Bonuses are grouped by the ability used for each check.
+            </p>
+          </header>
+
+          <div class="border rounded-3 p-2 p-md-3">
+            <div class="row g-0">
+              <div
+                v-for="(column, columnIndex) in skillColumns"
+                :key="columnIndex"
+                class="col-6"
+              >
+                <section
+                  class="h-100"
+                  :class="
+                    columnIndex === 0 ? 'pe-2 pe-md-3' : 'ps-2 ps-md-3 border-start'
+                  "
+                >
+                  <div
+                    v-for="(ability, abilityIndex) in column"
+                    :key="ability.key"
+                    :class="{ 'mt-4': abilityIndex > 0 }"
+                  >
+                    <h3 class="h6 text-uppercase text-body-secondary mb-1">
+                      {{ ability.label }}
+                    </h3>
+                    <ul class="list-group list-group-flush">
+                      <li
+                        v-for="skill in ability.skills"
+                        :key="skill.name"
+                        class="list-group-item bg-transparent px-0 py-2 d-flex align-items-center justify-content-between gap-3"
+                      >
+                        <span class="skill-name">{{ displayName(skill.name) }}</span>
+                        <span
+                          class="d-inline-flex flex-shrink-0 align-items-center gap-1 tabular-nums"
+                        >
+                          <span
+                            v-if="proficiencyIcon(skill.proficiency)"
+                            :class="[
+                              'mdi',
+                              proficiencyIcon(skill.proficiency),
+                              'skill-proficiency-icon',
+                              {
+                                'text-body-secondary': skill.proficiency === 'half',
+                              },
+                            ]"
+                            role="img"
+                            :aria-label="proficiencyLabel(skill.proficiency)"
+                            :title="proficiencyLabel(skill.proficiency)"
+                          />
+                          <strong
+                            :class="
+                              skill.proficiency !== 'none'
+                                ? proficiencyClass(skill.proficiency)
+                                : undefined
+                            "
+                          >
+                            {{ signed(skill.bonus) }}
+                          </strong>
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="mt-4 border rounded-3 p-3 p-md-4">
           <header class="d-flex align-items-center gap-2 flex-wrap">
             Inventory
@@ -694,46 +775,6 @@
             </span>
           </div>
         </section>
-        <div class="mt-4 skills-panel">
-          <details>
-            <summary>Skills</summary>
-            <div class="mt-3">
-              <div class="row g-3">
-                <div
-                  v-for="(column, columnIndex) in skillColumns"
-                  :key="columnIndex"
-                  class="col-12 col-sm-6"
-                >
-                  <div
-                    v-for="ability in column"
-                    :key="ability.key"
-                    class="mb-3"
-                  >
-                    <div class="fw-semibold border-bottom pb-1 mb-1">
-                      {{ ability.label }}
-                    </div>
-                    <div
-                      v-for="skill in ability.skills"
-                      :key="skill.name"
-                      class="d-flex justify-content-between gap-3 py-1"
-                    >
-                      <strong
-                        :class="
-                          skill.proficiency !== 'none'
-                            ? proficiencyClass(skill.proficiency)
-                            : ''
-                        "
-                      >
-                        {{ signed(skill.bonus) }}
-                      </strong>
-                      <span>{{ displayName(skill.name) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
         <div class="mt-4">
           <details>
             <summary>Notes ({{ character.notes.length }})</summary>
@@ -2000,6 +2041,15 @@ export default defineComponent({
     proficiencyClass(proficiency: string): string {
       return `proficiency-bonus proficiency-bonus--${proficiency}`;
     },
+    proficiencyIcon(proficiency: string): string {
+      return (
+        {
+          half: "mdi-circle-half-full",
+          proficient: "mdi-shield-check",
+          expertise: "mdi-star-four-points",
+        }[proficiency] ?? ""
+      );
+    },
     async applyCondition(condition: ConditionMutation): Promise<void> {
       if (!this.character) {
         return;
@@ -2603,6 +2653,14 @@ export default defineComponent({
 <style scoped>
 .level-up-near {
   font-weight: var(--bs-body-font-weight);
+}
+
+.skill-proficiency-icon {
+  color: var(--hoard-gold);
+}
+
+.skill-name {
+  min-width: 0;
 }
 
 .ability-card-flip-enter-active,
