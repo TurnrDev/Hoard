@@ -504,6 +504,6 @@ export default defineComponent({
 }
 
 .item-picker-dialog__result--selected {
-  border-color: var(--hoard-gold);
+  border-color: var(--hoard-accent);
 }
 </style>

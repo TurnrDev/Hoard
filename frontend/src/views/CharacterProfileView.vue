@@ -13,7 +13,8 @@
     />
 
     <header
-      class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4"
+      class="position-relative mb-4"
+      :class="{ 'pe-5': canEdit }"
     >
       <div class="d-flex flex-wrap align-items-center gap-3">
         <CharacterAvatar
@@ -36,7 +37,7 @@
           </p>
         </div>
       </div>
-      <div class="d-flex gap-2">
+      <div class="position-absolute top-0 end-0 d-flex gap-2">
         <ActionMenu
           v-if="canEdit"
           label="Character actions"
@@ -344,34 +345,147 @@
             </div>
           </div>
         </section>
-        <section class="border rounded-3 p-3 p-md-4">
-          <div>
-            <div class="row g-0">
-              <div
-                v-for="ability in abilityGroups"
-                :key="ability.key"
-                class="col-12 col-sm-6 col-md-4 col-lg-2 ability-save-cell"
+        <section aria-labelledby="abilities-heading">
+          <header class="mb-3">
+            <h2
+              id="abilities-heading"
+              class="h4 mb-1"
+            >
+              Abilities and saving throws
+            </h2>
+            <p class="small text-body-secondary mb-0">
+              Flip a card to see how its totals are calculated.
+            </p>
+          </header>
+
+          <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+            <div
+              v-for="ability in abilityGroups"
+              :key="ability.key"
+              class="col"
+            >
+              <Transition
+                name="ability-card-flip"
+                mode="out-in"
               >
-                <div class="ability-save">
-                  <div class="ability-save-heading">
-                    <span class="ability-save-name">{{ ability.abbreviation }}</span>
-                    <strong>{{ signed(ability.modifier) }}</strong>
-                    <span class="ability-save-score">{{ ability.score }}</span>
+                <article
+                  v-if="flippedAbilityKey !== ability.key"
+                  :key="`${ability.key}-front`"
+                  class="border rounded-3 p-3 h-100 text-center"
+                >
+                  <header class="mb-3">
+                    <h3 class="h5 mb-0">{{ ability.label }}</h3>
+                    <span class="small text-uppercase text-body-secondary">
+                      {{ ability.abbreviation }} · {{ ability.score }}
+                    </span>
+                  </header>
+
+                  <div class="row row-cols-2 g-2 align-items-start tabular-nums">
+                    <div class="col">
+                      <span class="small text-body-secondary d-block mb-1">
+                        Modifier
+                      </span>
+                      <strong class="fs-3 lh-1">
+                        {{ signed(ability.modifier) }}
+                      </strong>
+                    </div>
+                    <div class="col">
+                      <span class="small text-body-secondary d-block mb-1">Save</span>
+                      <div
+                        class="d-flex align-items-center justify-content-center gap-1"
+                      >
+                        <span
+                          v-if="ability.save.proficient"
+                          class="mdi mdi-shield-check proficiency-bonus"
+                          role="img"
+                          aria-label="Proficient saving throw"
+                          title="Proficient saving throw"
+                        />
+                        <strong
+                          class="fs-3 lh-1"
+                          :class="
+                            ability.save.proficient
+                              ? proficiencyClass('proficient')
+                              : undefined
+                          "
+                        >
+                          {{ signed(ability.save.bonus) }}
+                        </strong>
+                      </div>
+                    </div>
                   </div>
-                  <Divider class="my-3" />
-                  <div class="ability-save-row">
-                    <span>SAVE</span>
-                    <strong
-                      v-if="ability.save.proficient"
-                      :class="proficiencyClass('proficient')"
-                      :title="proficiencyLabel('proficient')"
-                    >
-                      {{ signed(ability.save.bonus) }}
-                    </strong>
-                    <strong v-else>{{ signed(ability.save.bonus) }}</strong>
+                  <Button
+                    class="mt-3"
+                    size="small"
+                    text
+                    icon="mdi mdi-rotate-3d-variant"
+                    label="Show calculation"
+                    :aria-label="`Show ${ability.label} calculation`"
+                    @click="showAbilityCalculation(ability.key)"
+                  />
+                </article>
+
+                <article
+                  v-else
+                  :key="`${ability.key}-back`"
+                  class="border rounded-3 p-3 h-100"
+                >
+                  <header
+                    class="d-flex align-items-start justify-content-between gap-3 mb-3"
+                  >
+                    <div>
+                      <h3 class="h5 mb-0">{{ ability.label }}</h3>
+                      <span class="small text-body-secondary">Calculation</span>
+                    </div>
+                    <Button
+                      size="small"
+                      text
+                      rounded
+                      icon="mdi mdi-rotate-3d-variant"
+                      :aria-label="`Show ${ability.label} summary`"
+                      @click="hideAbilityCalculation"
+                    />
+                  </header>
+
+                  <CalculationBreakdown
+                    :label="`${ability.label} score`"
+                    :calculation="ability.calculation"
+                    expanded
+                  />
+
+                  <dl class="small mb-3 mt-3 pt-3 border-top">
+                    <div class="d-flex justify-content-between gap-3">
+                      <dt class="text-body-secondary fw-normal">Modifier from score</dt>
+                      <dd class="mb-1 fw-semibold tabular-nums">
+                        {{ signed(ability.modifierFromScore) }}
+                      </dd>
+                    </div>
+                    <div class="d-flex justify-content-between gap-3">
+                      <dt class="text-body-secondary fw-normal">Adjustment</dt>
+                      <dd class="mb-0 fw-semibold tabular-nums">
+                        {{ signed(ability.modifierAdjustment) }}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div class="pt-3 border-top">
+                    <CalculationBreakdown
+                      :label="`${ability.label} saving throw`"
+                      :calculation="ability.save.formula"
+                      expanded
+                    />
                   </div>
-                </div>
-              </div>
+
+                  <Button
+                    class="mt-3"
+                    size="small"
+                    text
+                    icon="mdi mdi-arrow-u-left-top"
+                    label="Back to summary"
+                    @click="hideAbilityCalculation"
+                  />
+                </article>
+              </Transition>
             </div>
           </div>
         </section>
@@ -1366,7 +1480,6 @@
 <script lang="ts">
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
-import Divider from "primevue/divider";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import type { MenuItem } from "primevue/menuitem";
@@ -1476,7 +1589,6 @@ export default defineComponent({
     ActionMenu,
     Button,
     Dialog,
-    Divider,
     InputNumber,
     InputText,
     Message,
@@ -1500,6 +1612,7 @@ export default defineComponent({
       ownCharacter: false,
       characters: [] as Character[],
       items: [] as Item[],
+      flippedAbilityKey: "",
       error: typeof levelUpError === "string" ? levelUpError : "",
       grantItemId: undefined as number | undefined,
       grantQuantity: 1,
@@ -1780,14 +1893,6 @@ export default defineComponent({
       }
 
       const character = this.character;
-      const scores: Record<string, number> = {
-        strength: character.strength,
-        dexterity: character.dexterity,
-        constitution: character.constitution,
-        intelligence: character.intelligence,
-        wisdom: character.wisdom,
-        charisma: character.charisma,
-      };
 
       return [
         ["strength", "Strength", "STR"],
@@ -1796,17 +1901,25 @@ export default defineComponent({
         ["intelligence", "Intelligence", "INT"],
         ["wisdom", "Wisdom", "WIS"],
         ["charisma", "Charisma", "CHA"],
-      ].map(([key, label, abbreviation]) => ({
-        key,
-        label,
-        abbreviation,
-        score: scores[key],
-        modifier: character.sheet.abilities[key].modifier,
-        save: character.sheet.saves[key],
-        skills: Object.entries(character.sheet.skills)
-          .filter(([name]) => skillAbilities[name] === key)
-          .map(([name, skill]) => ({ name, ...skill })),
-      }));
+      ].map(([key, label, abbreviation]) => {
+        const ability = character.sheet.abilities[key];
+        const save = character.sheet.saves[key];
+
+        return {
+          key,
+          label,
+          abbreviation,
+          score: ability.score,
+          calculation: ability.formula,
+          modifier: ability.modifier,
+          modifierFromScore: ability.modifier - ability.adjustment,
+          modifierAdjustment: ability.adjustment,
+          save,
+          skills: Object.entries(character.sheet.skills)
+            .filter(([name]) => skillAbilities[name] === key)
+            .map(([name, skill]) => ({ name, ...skill })),
+        };
+      });
     },
     skillGroups() {
       const order = ["strength", "wisdom", "dexterity", "charisma", "intelligence"];
@@ -1832,6 +1945,12 @@ export default defineComponent({
     },
   },
   methods: {
+    showAbilityCalculation(abilityKey: string): void {
+      this.flippedAbilityKey = abilityKey;
+    },
+    hideAbilityCalculation(): void {
+      this.flippedAbilityKey = "";
+    },
     showSuccess(message: string): void {
       this.$toast.add({
         severity: "success",
@@ -2483,8 +2602,32 @@ export default defineComponent({
 
 <style scoped>
 .level-up-near {
-  color: var(--hoard-gold);
   font-weight: var(--bs-body-font-weight);
+}
+
+.ability-card-flip-enter-active,
+.ability-card-flip-leave-active {
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
+  transform-origin: center;
+}
+
+.ability-card-flip-enter-from {
+  opacity: 0;
+  transform: rotateY(90deg);
+}
+
+.ability-card-flip-leave-to {
+  opacity: 0;
+  transform: rotateY(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ability-card-flip-enter-active,
+  .ability-card-flip-leave-active {
+    transition: none;
+  }
 }
 
 @media (min-width: 576px) {
