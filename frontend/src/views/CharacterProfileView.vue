@@ -636,11 +636,7 @@
                     {{ entry.quantity.toLocaleString() }}
                   </td>
                   <td class="text-end tabular-nums">
-                    {{
-                      entry.item?.equipment.weight_amount
-                        ? `${entry.item.equipment.weight_amount} ${entry.item.equipment.weight_unit}`
-                        : "—"
-                    }}
+                    {{ formatItemWeight(entry.item) }}
                   </td>
                   <td class="text-end tabular-nums">
                     {{
@@ -2484,6 +2480,21 @@ export default defineComponent({
     formatCoinPouch,
     formatGoldValue,
     formatMoneyValue,
+    formatItemWeight(item: Item | null | undefined): string {
+      const amount = item?.equipment.weight_amount;
+
+      if (!amount) {
+        return "—";
+      }
+
+      const numericAmount = Number(amount);
+      const formattedAmount = Number.isFinite(numericAmount)
+        ? numericAmount.toLocaleString()
+        : amount;
+      const unit = item.equipment.weight_unit;
+
+      return unit ? `${formattedAmount} ${unit}` : formattedAmount;
+    },
     signed(value: number): string {
       return value >= 0 ? `+${value}` : `${value}`;
     },
