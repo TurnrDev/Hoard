@@ -768,6 +768,12 @@ PartyRail is a live campaign roster with two explicit modes.
   entry, player profile, builder, GM desk, ledger, Compendium, and management
   screens now load on demand, reducing the initial download for phone users while
   preserving the existing routes and component boundaries.
+- 2026-09-15: completed an isolated Firefox phone-width audit of the rebuilt
+  routes. Audited controls have accessible names, tables have captions, IDs are
+  unique, and tested pages do not create document-level horizontal overflow. The
+  builder progress bar now suppresses PrimeVue's long generated percentage label
+  and exposes the clearer current step through its accessible name and adjacent
+  visible step heading.
 
 ## Open questions
 

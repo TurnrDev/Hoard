@@ -52,6 +52,8 @@
     </Message>
     <ProgressBar
       :value="(step / 6) * 100"
+      :show-value="false"
+      :aria-label="`Character builder progress: step ${step} of 6`"
       class="mb-5"
     />
     <section class="border rounded-3 p-3 p-md-4">
