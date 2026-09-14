@@ -12,7 +12,7 @@
             </p>
             <h1
               id="sign-in-heading"
-              class="display-6"
+              class="public-wordmark display-6"
             >
               Hoard
             </h1>

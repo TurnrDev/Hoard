@@ -39,6 +39,9 @@ queries and commands, realtime events, and permission rules are not.
 - In the Normal palette, green is the primary interaction colour. Parchment gold
   is an accent for tabletop identity, focus, and selected emphasis; it is not the
   default fill for every action button.
+- The Hoard wordmark remains parchment gold in every palette. The favicon uses
+  the same gold coin-and-H mark and adapts its background to the browser's light
+  or dark colour preference.
 
 ### Colour mode
 
@@ -49,18 +52,34 @@ queries and commands, realtime events, and permission rules are not.
 - The selector should offer Light, Dark, and System. System is the initial
   default for a new user; an explicit choice persists locally and is applied
   before the application renders to avoid a theme flash.
+- The appearance menu presents those modes as System, Parchment, and Midnight,
+  and presents the Normal and Melly-vision palettes as Hoard and Melly. These
+  are display labels only; the stored preference values remain stable.
 - Colour mode and palette are nested submenus in the top-right account menu so
   appearance preferences do not permanently consume header space or create
   competing select overlays inside another popup.
 - The selected colour mode changes both PrimeVue tokens and Bootstrap/application
   CSS variables.
 - Both modes must meet the same contrast and non-colour state requirements.
+- Light mode uses a muted `#eee6d5` parchment canvas rather than a bright white
+  application background, keeping the overall brightness closer to a printed
+  character sheet.
+- The header, campaign navigation, and Party Rail share Bootstrap's tertiary
+  background as a single shell-chrome surface. The main content uses the body
+  background, with a subtle contrast between chrome and content in both modes.
 - Support two independently selectable colour palettes in both light and dark
-  mode: Normal and Red–Green Colourblind Friendly.
+  mode: Normal and Melly-vision. Melly-vision is the red–green colourblind
+  friendly palette and also serves as a low-glare option for Melly's
+  astigmatism.
 - The Normal palette may use familiar green and grey status colours, and
   red/orange/yellow health colours.
-- The Red–Green Colourblind Friendly palette uses distinguishable blue, pink,
-  and yellow variations for equivalent state categories.
+- Melly-vision uses distinguishable blue, pink, and yellow variations for
+  equivalent state categories. In dark mode it must avoid pure or near-white
+  text directly against near-black surfaces; use subdued warm-grey foreground
+  steps while retaining WCAG 2.2 AA contrast.
+- Normal dark mode uses the warm `#d8d2c7` parchment-grey foreground to reduce
+  glare. Melly-vision retains its dimmer low-glare foreground. Both palettes use
+  coordinated Hoard, Bootstrap, and PrimeVue foreground tokens.
 - Use icons, symbols, text, ordering, and patterns wherever sensible so palette
   selection improves recognition rather than becoming the only accessibility
   mechanism.
@@ -579,6 +598,18 @@ PartyRail is a live campaign roster with two explicit modes.
   border elements. The expanded mobile initiative rail now renders a centred
   Combatants label between thin rules without the right-hand rule expanding into
   a filled block; the collapsed mobile divider remains vertical.
+- 2026-09-14: softened dark-mode text from near-white to warm light grey only
+  when the Melly-vision palette is selected, addressing issue 4's lower-glare
+  request. Normal dark mode now uses the earlier warm grey preferred during
+  visual review, while Melly-vision retains its dimmer low-glare foreground.
+  Hoard, Bootstrap, and PrimeVue share each palette's foreground steps, all
+  retaining AA contrast.
+- 2026-09-14: restored the gold Hoard wordmark and matched it with an adaptive
+  gold coin-and-H favicon. Light mode now uses a muted parchment canvas instead
+  of the brighter cream background.
+- 2026-09-14: unified the header, navigation, and Party Rail on one Bootstrap
+  tertiary shell surface, distinct from the main content surface in Light and
+  Dark modes.
 - 2026-09-14: audited the rebuilt frontend against the implementation rules. All
   Vue single-file components now begin with `template`, use Options API without
   `script setup` or `setup()`, and locally import PrimeVue controls by their native

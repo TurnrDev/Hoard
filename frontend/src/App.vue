@@ -19,7 +19,7 @@
       Skip to main content
     </a>
 
-    <header class="campaign-header border-bottom">
+    <header class="campaign-header border-bottom bg-body-tertiary">
       <div class="d-flex align-items-center gap-2">
         <Button
           class="d-lg-none"
@@ -79,6 +79,7 @@
 
     <Drawer
       v-model:visible="navigationOpen"
+      class="bg-body-tertiary"
       header="Campaign navigation"
       position="left"
     >
@@ -91,13 +92,15 @@
 
     <div
       class="campaign-layout"
-:class="{
-      'campaign-layout--contextless': !activeContext,
-      'campaign-layout--rail-expanded': partyRailExpanded,
-    }"
+      :class="{
+        'campaign-layout--contextless': !activeContext,
+        'campaign-layout--rail-expanded': partyRailExpanded,
+      }"
     >
-      <aside v-if="activeContext"
-class="campaign-navigation-panel d-none d-lg-block border-end p-3">
+      <aside
+        v-if="activeContext"
+        class="campaign-navigation-panel d-none d-lg-block border-end bg-body-tertiary p-3"
+      >
         <CampaignNavigation
           :context-id="contextId"
           :active-context="activeContext"
@@ -106,7 +109,7 @@ class="campaign-navigation-panel d-none d-lg-block border-end p-3">
 
       <section
         v-if="campaign && activeContext"
-        class="campaign-rail-panel border-start"
+        class="campaign-rail-panel border-start bg-body-tertiary"
       >
         <PartyRail
           :campaign="campaign"
@@ -124,7 +127,7 @@ class="campaign-navigation-panel d-none d-lg-block border-end p-3">
 
       <main
         id="main-content"
-        class="campaign-main container-fluid py-4 py-lg-5"
+        class="campaign-main container-fluid bg-body py-4 py-lg-5"
       >
         <Message
           v-if="shellError"
@@ -267,15 +270,15 @@ export default defineComponent({
         value: ThemePreferences["colourMode"];
       }> = [
         { label: "System", value: "system" },
-          { label: "Light (Pedo mode)", value: "light" },
-        { label: "Dark", value: "dark" },
+        { label: "Parchment (Light)", value: "light" },
+        { label: "Midnight (Dark)", value: "dark" },
       ];
       const palettes: Array<{
         label: string;
         value: ThemePreferences["palette"];
       }> = [
-          { label: "Melly? What colour?", value: "normal" },
-          { label: "Melly-vision", value: "colourblind" },
+        { label: "Hoard", value: "normal" },
+        { label: "Melly", value: "colourblind" },
       ];
 
       return [

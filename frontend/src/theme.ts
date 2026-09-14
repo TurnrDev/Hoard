@@ -2,7 +2,7 @@ import { definePreset, usePreset } from "@primeuix/themes";
 import Lara from "@primeuix/themes/lara";
 
 const hoardSurface = {
-  0: "#fffdf6",
+  0: "#d8d2c7",
   50: "#f8f3e8",
   100: "#eee6d5",
   200: "#dfd1b7",
@@ -132,6 +132,13 @@ export const HoardLaraColourblind = definePreset(HoardLara, {
       800: "{colourblindBlue.800}",
       900: "{colourblindBlue.900}",
       950: "{colourblindBlue.950}",
+    },
+    colorScheme: {
+      dark: {
+        surface: {
+          0: "#c3beb4",
+        },
+      },
     },
   },
 });

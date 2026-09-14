@@ -1,24 +1,39 @@
 :root {
   --hoard-ink: #202218;
-  --hoard-page-bg: #f8f3e8;
+  --hoard-page-bg: #eee6d5;
   --hoard-border: #d6cbb7;
+  --hoard-brand-gold: #9b6818;
   --hoard-gold: #9b6818;
   --hoard-rail-width: 5.75rem;
-  --bs-body-bg: #f8f3e8;
+  --bs-body-bg: #eee6d5;
+  --bs-body-bg-rgb: 238, 230, 213;
   --bs-body-color: #202218;
   --bs-border-color: #d6cbb7;
+  --bs-tertiary-bg: #e4dac4;
+  --bs-tertiary-bg-rgb: 228, 218, 196;
   --bs-link-color: #744c15;
   --bs-link-hover-color: #4e3214;
 }
 
 .hoard-dark {
-  --hoard-ink: #f7f2e8;
+  --hoard-ink: #d8d2c7;
   --hoard-page-bg: #11130f;
   --hoard-border: #3e4235;
+  --hoard-brand-gold: #f2c85c;
   --hoard-gold: #f2c85c;
   --bs-body-bg: #11130f;
-  --bs-body-color: #f7f2e8;
+  --bs-body-bg-rgb: 17, 19, 15;
+  --bs-body-color: #d8d2c7;
+  --bs-body-color-rgb: 216, 210, 199;
+  --bs-emphasis-color: #e3ddd2;
+  --bs-emphasis-color-rgb: 227, 221, 210;
+  --bs-secondary-color: #aaa69d;
+  --bs-secondary-color-rgb: 170, 166, 157;
+  --bs-tertiary-color: #8e8b84;
+  --bs-tertiary-color-rgb: 142, 139, 132;
   --bs-border-color: #3e4235;
+  --bs-tertiary-bg: #191c17;
+  --bs-tertiary-bg-rgb: 25, 28, 23;
   --bs-link-color: #f2c85c;
   --bs-link-hover-color: #f9df91;
 }
@@ -30,6 +45,15 @@
 }
 
 .hoard-dark[data-hoard-palette="colourblind"] {
+  --hoard-ink: #c3beb4;
+  --bs-body-color: #c3beb4;
+  --bs-body-color-rgb: 195, 190, 180;
+  --bs-emphasis-color: #d1cbc0;
+  --bs-emphasis-color-rgb: 209, 203, 192;
+  --bs-secondary-color: #99958d;
+  --bs-secondary-color-rgb: 153, 149, 141;
+  --bs-tertiary-color: #85827c;
+  --bs-tertiary-color-rgb: 133, 130, 124;
   --bs-link-color: #89c4ff;
   --bs-link-hover-color: #b9dcff;
 }
@@ -77,9 +101,13 @@ select:focus-visible {
 }
 
 .campaign-header__wordmark {
-  color: var(--bs-body-color);
+  color: var(--hoard-brand-gold);
   font-size: 1.25rem;
   letter-spacing: 0.08em;
+}
+
+.public-wordmark {
+  color: var(--hoard-brand-gold);
 }
 
 .campaign-header__campaign {
@@ -121,7 +149,6 @@ select:focus-visible {
   position: relative;
   z-index: 1;
   min-width: 0;
-  background: var(--bs-tertiary-bg);
 }
 
 .campaign-navigation a {
