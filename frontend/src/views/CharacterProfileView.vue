@@ -1989,6 +1989,7 @@ import {
   type LedgerTransaction,
 } from "../api";
 import { exchangedCoinAmount } from "../coinExchange";
+import { readCoinDisplayMode, storeCoinDisplayMode } from "../coinDisplayPreference";
 import ActionMenu from "../components/ActionMenu.vue";
 import CalculationBreakdown from "../components/CalculationBreakdown.vue";
 import CharacterAvatar from "../components/CharacterAvatar.vue";
@@ -2094,7 +2095,7 @@ export default defineComponent({
       characters: [] as Character[],
       items: [] as Item[],
       flippedAbilityKey: "",
-      moneyValueVisible: false,
+      moneyValueVisible: readCoinDisplayMode() === "value",
       error: typeof levelUpError === "string" ? levelUpError : "",
       grantItemId: undefined as number | undefined,
       grantQuantity: 1,
@@ -2518,6 +2519,7 @@ export default defineComponent({
     },
     toggleMoneyCard(): void {
       this.moneyValueVisible = !this.moneyValueVisible;
+      storeCoinDisplayMode(this.moneyValueVisible ? "value" : "pouch");
     },
     showSuccess(message: string): void {
       this.$toast.add({

@@ -747,6 +747,10 @@ PartyRail is a live campaign roster with two explicit modes.
   expiry, recent character activity, and ledger history. Relative labels refresh
   while a page remains open, while the precise local date remains available as
   a tooltip and to assistive technology.
+- 2026-09-14: the last coin display selected on the profile's mobile money card
+  is stored as a browser-only preference. The pouch or decimal-value choice now
+  survives reloads and follows the user between characters and campaign contexts
+  in the same browser, without adding server state.
 
 ## Open questions
 
