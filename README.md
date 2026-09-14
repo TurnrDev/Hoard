@@ -2,6 +2,10 @@
 
 A D&D 5e tool for our campaign with specific tools for our homebrew rules. You won't be interested.
 
+<img width="1280" height="800" alt="Screen Shot 2026-09-14 at 21 17 05" src="https://github.com/user-attachments/assets/fd6112ef-b983-4d25-9174-629addde703c" />
+<img width="1081" height="2401" alt="Screen Shot 2026-09-14 at 21 16 53" src="https://github.com/user-attachments/assets/8266b014-71ba-40bf-811a-1a47442467f0" />
+
+
 ## Project layout
 
 - `hoard/` contains the Django project configuration and application packages.
