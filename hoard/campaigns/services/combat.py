@@ -290,7 +290,9 @@ def agreed_tie_winner(
 
 def tie_group_key(group: list[EncounterCombatant]) -> str:
     """Return the stable JSON key for an exact initiative tie group."""
-    return ",".join(str(entry.pk) for entry in sorted(group, key=lambda entry: entry.pk))
+    return ",".join(
+        str(entry.pk) for entry in sorted(group, key=lambda entry: entry.pk)
+    )
 
 
 def valid_tie_votes(
@@ -304,8 +306,7 @@ def valid_tie_votes(
     return [
         vote
         for voter in voters
-        if isinstance(vote := choices.get(str(voter)), int)
-        and vote in valid_targets
+        if isinstance(vote := choices.get(str(voter)), int) and vote in valid_targets
     ]
 
 
@@ -333,9 +334,7 @@ def resolved_tie_winner(
 
 def ordered_combatants(encounter: Encounter) -> list[EncounterCombatant]:
     """Order combatants by roll rules and resolved exact ties."""
-    combatants = list(
-        encounter.combatants.select_related("character__context").all()
-    )
+    combatants = list(encounter.combatants.select_related("character__context").all())
     winners: dict[int, int | None] = {}
     for combatant in combatants:
         group = initiative_tie_group(combatant, combatants)
@@ -417,14 +416,8 @@ def choose_initiative_tie(
         raise ValidationError("That initiative choice is not available.")
 
     group = initiative_tie_group(preferred, combatants)
-    owns_tied_entry = any(
-        entry.character_id == character.pk
-        for entry in group
-    )
-    tied_contexts = {
-        entry.character.context_id
-        for entry in group
-    }
+    owns_tied_entry = any(entry.character_id == character.pk for entry in group)
+    tied_contexts = {entry.character.context_id for entry in group}
     if not owns_tied_entry or len(tied_contexts) < 2:
         raise ValidationError("That combatant is not in your initiative tie.")
 
@@ -458,7 +451,8 @@ def end_player_turn(context: CampaignContext) -> Encounter:
         raise PermissionError("Only the current player may end this turn.")
 
     ordered = [
-        entry for entry in ordered_combatants(encounter)
+        entry
+        for entry in ordered_combatants(encounter)
         if not (entry.character_id and entry.initiative_roll is None)
     ]
     current_index = next(
@@ -496,7 +490,9 @@ def reorder_combatants(
         highest = min(100, max(max(initiatives), -100 + len(initiatives) - 1))
         initiatives = [highest - index for index in range(len(initiatives))]
 
-    ordered_combatants = [combatants_by_id[combatant_id] for combatant_id in combatant_ids]
+    ordered_combatants = [
+        combatants_by_id[combatant_id] for combatant_id in combatant_ids
+    ]
     changed_combatants = []
     for combatant, initiative in zip(ordered_combatants, initiatives, strict=True):
         if combatant.initiative == initiative:

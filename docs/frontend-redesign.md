@@ -756,7 +756,10 @@ PartyRail is a live campaign roster with two explicit modes.
   explicit accessible name.
 - 2026-09-15: corrected profile activity dates to use the ledger's authoritative
   `occurred_at` timestamp. The relative-time component now also reports a missing
-  timestamp as unavailable instead of allowing Moment to interpret it as now.
+  timestamp as unavailable instead of allowing Moment to interpret it as now. A
+  WebSocket regression test covers the character-history path used by inspiration,
+  ensuring listed activity retains its immutable timestamp as well as command
+  responses.
 - 2026-09-15: adopted summary-card rotation as the standard presentation for
   derived statistics. HP, armor class, initiative, and proficiency now show only
   their play-facing values on the front and reveal their full calculation on a

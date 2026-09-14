@@ -190,9 +190,7 @@ class EncounterServiceTests(TestCase):
         )
 
         resolved_rows = encounter_data(self.player)["combatants"]
-        resolved_tie = next(
-            row for row in resolved_rows if row["id"] == hero_entry.pk
-        )
+        resolved_tie = next(row for row in resolved_rows if row["id"] == hero_entry.pk)
         resolved_counts = {
             option["combatant_id"]: option["vote_count"]
             for option in resolved_tie["tie_options"]
@@ -220,9 +218,7 @@ class EncounterServiceTests(TestCase):
 
         choose_initiative_tie(self.player, hero_entry.pk)
         partial_rows = encounter_data(self.player)["combatants"]
-        partial_tie = next(
-            row for row in partial_rows if row["id"] == hero_entry.pk
-        )
+        partial_tie = next(row for row in partial_rows if row["id"] == hero_entry.pk)
         self.assertEqual(partial_tie["tie_votes_cast"], 1)
         self.assertEqual(partial_tie["tie_winner_id"], None)
         self.assertEqual(partial_tie["tie_resolution"], None)
@@ -234,15 +230,12 @@ class EncounterServiceTests(TestCase):
             choose_initiative_tie(other_context, other_entry.pk)
 
         resolved_rows = encounter_data(self.player)["combatants"]
-        resolved_tie = next(
-            row for row in resolved_rows if row["id"] == hero_entry.pk
-        )
+        resolved_tie = next(row for row in resolved_rows if row["id"] == hero_entry.pk)
         resolved_order = [row["id"] for row in encounter_data(self.gm)["combatants"]]
         self.assertEqual(resolved_tie["tie_votes_cast"], 2)
         self.assertEqual(resolved_tie["tie_winner_id"], other_entry.pk)
         self.assertEqual(resolved_tie["tie_resolution"], "random")
         self.assertEqual(resolved_order[0], other_entry.pk)
-
 
     def test_equal_results_put_the_higher_dexterity_modifier_first(self) -> None:
         other_context = CampaignContext.objects.create(

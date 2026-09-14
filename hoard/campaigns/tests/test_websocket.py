@@ -395,9 +395,7 @@ class ContextSocketTests(TransactionTestCase):
             {"type": "campaign.get", "request_id": request_id()},
         )
         returned_character = next(
-            row
-            for row in response["data"]["characters"]
-            if row["id"] == character.pk
+            row for row in response["data"]["characters"] if row["id"] == character.pk
         )
 
         self.assertFalse(returned_character["has_inspiration"])

@@ -823,10 +823,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 for value in _visible_characters(context)
             ],
             "invitations": (
-                [
-                    self._invitation_data(value)
-                    for value in campaign.invitations.all()
-                ]
+                [self._invitation_data(value) for value in campaign.invitations.all()]
                 if context.kind == CampaignContext.Kind.GM
                 else []
             ),
@@ -1222,8 +1219,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
         context = self._context()
         return [
-            _character_data(value, context)
-            for value in _visible_characters(context)
+            _character_data(value, context) for value in _visible_characters(context)
         ]
 
     @database_sync_to_async
@@ -2460,10 +2456,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "spells": target.spells,
             "companions": target.companions,
         }
-        if (
-            context.kind == CampaignContext.Kind.PC
-            and target.context_id == context.pk
-        ):
+        if context.kind == CampaignContext.Kind.PC and target.context_id == context.pk:
             collection_managers["notes"] = target.notes
         collection_changes = [
             {

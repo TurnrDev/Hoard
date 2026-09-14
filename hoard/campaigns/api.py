@@ -820,10 +820,7 @@ def _character_data(
             for item, quantity in character.inventory.items()
         ],
         "notes": (
-            [
-                {"id": note.pk, "body": note.body}
-                for note in character.notes.all()
-            ]
+            [{"id": note.pk, "body": note.body} for note in character.notes.all()]
             if notes_are_visible
             else []
         ),
@@ -1089,9 +1086,7 @@ def calendar_adjust(request, context_id: int, payload: CalendarAdjustment):
 @contexts.get("/{context_id}/characters/")
 def character_list(request, context_id: int):
     context = _context_access(request, context_id)
-    return [
-        _character_data(value, context) for value in _visible_characters(context)
-    ]
+    return [_character_data(value, context) for value in _visible_characters(context)]
 
 
 @contexts.post("/{context_id}/characters/", response={201: dict})
@@ -1824,8 +1819,7 @@ def cah_commit(request, context_id: int, payload: CahCommit):
         target.full_clean()
         target.save()
         notes_import_allowed = (
-            context.kind == CampaignContext.Kind.PC
-            and target.context_id == context.pk
+            context.kind == CampaignContext.Kind.PC and target.context_id == context.pk
         )
         if notes_import_allowed and import_collection("notes"):
             target.notes.all().delete()

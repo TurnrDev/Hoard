@@ -75,9 +75,7 @@ class CharacterHealthChangedEvent(BaseModel):
 class CharacterInspirationChangedEvent(BaseModel):
     """Authoritative inspiration state after a successful change."""
 
-    type: Literal["character.inspiration_changed"] = (
-        "character.inspiration_changed"
-    )
+    type: Literal["character.inspiration_changed"] = "character.inspiration_changed"
     character_id: int
     available: bool
     expires_at: datetime | None = None

@@ -470,6 +470,26 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(response["data"]["count"], 1)
         self.assertEqual(response["data"]["results"][0]["actor"], "gm")
 
+    def test_character_history_transaction_includes_occurred_at(self) -> None:
+        self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "characters.inspiration.set",
+            character_id=self.character.pk,
+            available=True,
+        )
+
+        response = self.socket_request(
+            self.gm_user,
+            self.gm.pk,
+            "transactions.list",
+            character_id=self.character.pk,
+        )
+
+        self.assertEqual(response["data"]["count"], 1)
+        self.assertEqual(response["data"]["results"][0]["ledger"], "character")
+        self.assertIsInstance(response["data"]["results"][0]["occurred_at"], str)
+
     def test_condition_ledger_is_limited_to_the_players_character(self) -> None:
         other_user = get_user_model().objects.create_user(username="other")
         other_context = CampaignContext.objects.create(
