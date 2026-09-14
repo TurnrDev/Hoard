@@ -426,6 +426,33 @@ PartyRail is a live campaign roster with two explicit modes.
   with semantic headings, labelled PrimeVue 4 fields, and Bootstrap-responsive
   layouts. Their inventory and ledger commands remain unchanged; the remaining
   profile action dialogs and final Options API extraction are still active work.
+- 2026-09-14: simplified 5e Companion import to a native, labelled `.cah` file
+  input. Selecting a file immediately prepares the editable preview. Preview
+  choices use PrimeVue 4 binary checkboxes and icon-backed proficiency
+  SelectButtons with accessible text, while the persistent Dialog footer exposes
+  Import only after preview succeeds. Imported strings, numbers, booleans,
+  language lists, and all nine spell-slot levels use controls matching
+  their data types rather than exposing JSON as a generic text area. Numeric
+  fields use horizontal minus/plus steppers; the compact spell-slot grid uses
+  vertical chevron steppers.
+- 2026-09-14: restored the character builder's visible form language after the
+  PrimeVue 4 rewrite. Ancestry overrides now have an explicit switch label and
+  explanation; every ability has a named fieldset for its raw score, ancestry
+  bonus, manual adjustment, and calculated total. Later builder steps likewise
+  use visible labels, working PrimeVue option props, and horizontal numeric
+  steppers instead of relying on unsupported Vuetify-style component props.
+- 2026-09-14: finite Compendium fields now use PrimeVue's filterable Select
+  controls. Race, class, and background lists are populated on opening, and a
+  subrace Select appears only when the selected race supplies choices.
+  MultiSelect is used for finite multiple-choice mode; AutoComplete remains
+  reserved for fields that genuinely permit custom text.
+- 2026-09-14: builder languages use the same explicit editable-list pattern as
+  the 5e Companion import preview, with one labelled input per language and
+  accessible add and remove controls. Blank rows are discarded when saving;
+  the previous guidance about retaining `Choose 1` instructions was removed.
+- 2026-09-14: skill proficiency editing in the builder and 5e Companion import
+  preview now shares one icon-backed PrimeVue SelectButton component. Each
+  control retains a visible skill label and accessible proficiency names.
 
 ## Open questions
 

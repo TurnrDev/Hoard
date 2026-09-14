@@ -1,17 +1,16 @@
 <template>
   <label class="d-grid gap-2">
     <span class="fw-semibold">{{ label }}</span>
-    <AutoComplete
-      :model-value="modelValue"
-      :suggestions="suggestions"
+    <Select
+      :model-value="selectedId"
+      :options="orderedItems"
       :option-label="displayTitle"
       option-value="id"
       :loading="loading"
       :disabled="disabled"
       :show-clear="clearable"
-      dropdown
+      filter
       fluid
-      @complete="search"
       @update:model-value="$emit('update:modelValue', $event ?? undefined)"
     />
   </label>
@@ -19,11 +18,11 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import AutoComplete from "primevue/autocomplete";
+import Select from "primevue/select";
 import type { BuilderEntry } from "../api";
 
 export default defineComponent({
-  components: { AutoComplete },
+  components: { Select },
   props: {
     modelValue: { type: Number, default: undefined },
     items: {
@@ -40,11 +39,6 @@ export default defineComponent({
     },
   },
   emits: ["update:modelValue"],
-  data() {
-    return {
-      query: "",
-    };
-  },
   computed: {
     orderedItems(): BuilderEntry[] {
       const preferred = new Set(this.preferredIds);
@@ -55,22 +49,21 @@ export default defineComponent({
           left.name.localeCompare(right.name),
       );
     },
-    suggestions(): BuilderEntry[] {
-      const normalizedQuery = this.query.trim().toLowerCase();
+    selectedId(): number | undefined {
+      const selectedId = this.modelValue;
 
-      if (!normalizedQuery) {
-        return this.orderedItems;
+      if (selectedId === undefined) {
+        return undefined;
       }
 
-      return this.orderedItems.filter((item) =>
-        this.displayTitle(item).toLowerCase().includes(normalizedQuery),
+      return (
+        this.items.find(
+          (item) => item.id === selectedId || item.alias_ids?.includes(selectedId),
+        )?.id ?? selectedId
       );
     },
   },
   methods: {
-    search(event: { query: string }): void {
-      this.query = event.query;
-    },
     displayTitle(item: BuilderEntry): string {
       return `${item.name} — ${this.sourceTags(item).join(" · ")}`;
     },

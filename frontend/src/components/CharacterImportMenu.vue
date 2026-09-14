@@ -13,30 +13,60 @@
   </div>
   <Dialog
     v-model:visible="open"
+    class="character-import-dialog d-flex flex-column overflow-hidden"
+    header="Import from 5e Companion"
     modal
+    :closable="!busy"
+    :close-on-escape="!busy"
     :style="{ width: 'min(69rem, calc(100vw - 2rem))' }"
   >
-    <section
-      class="d-grid gap-3"
-      aria-labelledby="character-import-heading"
-    >
-      <h2 id="character-import-heading">Import from 5e Companion</h2>
+    <section class="d-grid gap-3">
       <div>
-        <FileUpload
-          v-model="file"
-          accept=".cah"
-          label="CAH export"
-        />
-        <Button
-          :disabled="!file"
-          :loading="busy"
-          @click="loadPreview"
+        <label
+          class="form-label fw-semibold"
+          for="character-import-file"
         >
-          Preview import
-        </Button>
+          5e Companion export
+        </label>
+        <input
+          id="character-import-file"
+          ref="fileInput"
+          class="form-control"
+          type="file"
+          accept=".cah"
+          :disabled="busy"
+          aria-describedby="character-import-file-help"
+          @change="selectImportFile"
+        />
+        <div
+          id="character-import-file-help"
+          class="form-text"
+        >
+          Choose a .cah export. Its contents will be previewed before anything is
+          imported.
+        </div>
+        <div
+          v-if="busy && !preview"
+          class="d-flex align-items-center gap-2 mt-3"
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            class="spinner-border spinner-border-sm"
+            aria-hidden="true"
+          />
+          Preparing preview…
+        </div>
+        <Message
+          v-if="previewError"
+          severity="error"
+          class="mt-3"
+        >
+          {{ previewError }}
+        </Message>
         <template v-if="preview">
           <Message
-            type="info"
+            severity="info"
             variant="tonal"
             class="mt-4"
           >
@@ -46,7 +76,7 @@
           </Message>
           <Message
             v-if="preview.warnings.length"
-            type="warning"
+            severity="warn"
             class="mt-4"
           >
             <div
@@ -87,7 +117,7 @@
                     <td class="checkbox-column">
                       <Checkbox
                         v-model="change.enabled"
-                        color="primary"
+                        binary
                         :aria-label="`Import ${title(change.field)}`"
                       />
                     </td>
@@ -101,22 +131,8 @@
                     </td>
                     <td class="py-2">
                       <template v-if="change.enabled">
-                        <InputText
-                          v-if="typeof change.after === 'string'"
-                          v-model="change.after"
-                          density="compact"
-                          hide-details
-                        />
-                        <InputNumber
-                          v-else-if="typeof change.after === 'number'"
-                          :model-value="change.after"
-                          control-variant="stacked"
-                          density="compact"
-                          hide-details
-                          @update:model-value="setNumberField(change, $event)"
-                        />
                         <div
-                          v-else-if="change.field === 'skill_proficiencies'"
+                          v-if="change.field === 'skill_proficiencies'"
                           class="row g-3"
                         >
                           <div
@@ -124,20 +140,120 @@
                             :key="skill"
                             class="col-12 col-sm-6"
                           >
-                            <Select
+                            <SkillProficiencyPicker
                               :model-value="
                                 proficiencyValues(change.after)[skill] ?? 'none'
                               "
-                              :items="proficiencyChoices"
+                              :input-id="`import-skill-${skill}`"
                               :label="title(skill)"
-                              density="compact"
-                              hide-details
                               @update:model-value="
                                 setSkillProficiency(change, skill, $event)
                               "
                             />
                           </div>
                         </div>
+                        <fieldset
+                          v-else-if="change.field === 'languages'"
+                          class="border-0 p-0 m-0"
+                        >
+                          <legend class="visually-hidden">Imported languages</legend>
+                          <div
+                            v-for="(language, index) in stringListValues(change.after)"
+                            :key="index"
+                            class="input-group mb-2"
+                          >
+                            <InputText
+                              :model-value="language"
+                              :aria-label="`Language ${index + 1}`"
+                              @update:model-value="
+                                setStringListItem(change, index, $event)
+                              "
+                            />
+                            <Button
+                              icon="mdi mdi-delete-outline"
+                              severity="danger"
+                              outlined
+                              :aria-label="`Remove language ${language || index + 1}`"
+                              @click="removeStringListItem(change, index)"
+                            />
+                          </div>
+                          <Button
+                            icon="mdi mdi-plus"
+                            label="Add language"
+                            size="small"
+                            outlined
+                            @click="addStringListItem(change)"
+                          />
+                        </fieldset>
+                        <fieldset
+                          v-else-if="change.field === 'spell_slot_current'"
+                          class="border-0 p-0 m-0"
+                        >
+                          <legend class="visually-hidden">
+                            Current spell slots by spell level
+                          </legend>
+                          <div class="row row-cols-2 row-cols-md-4 g-2">
+                            <div
+                              v-for="level in spellSlotLevels"
+                              :key="level.key"
+                              class="col"
+                            >
+                              <label
+                                class="form-label small fw-semibold"
+                                :for="`import-spell-slot-${level.key}`"
+                              >
+                                {{ level.label }}
+                              </label>
+                              <InputNumber
+                                :input-id="`import-spell-slot-${level.key}`"
+                                :model-value="spellSlotValues(change.after)[level.key]"
+                                :min="0"
+                                :use-grouping="false"
+                                show-buttons
+                                button-layout="vertical"
+                                increment-button-icon="mdi mdi-chevron-up"
+                                decrement-button-icon="mdi mdi-chevron-down"
+                                fluid
+                                @update:model-value="
+                                  setSpellSlot(change, level.key, $event)
+                                "
+                              />
+                            </div>
+                          </div>
+                        </fieldset>
+                        <div
+                          v-else-if="typeof change.after === 'boolean'"
+                          class="d-flex align-items-center gap-2"
+                        >
+                          <Checkbox
+                            :input-id="`import-field-${change.field}`"
+                            :model-value="change.after"
+                            binary
+                            @update:model-value="setBooleanField(change, $event)"
+                          />
+                          <label :for="`import-field-${change.field}`">
+                            {{ change.after ? "Yes" : "No" }}
+                          </label>
+                        </div>
+                        <InputText
+                          v-else-if="typeof change.after === 'string'"
+                          v-model="change.after"
+                          :aria-label="`Imported ${title(change.field)}`"
+                          fluid
+                        />
+                        <InputNumber
+                          v-else-if="typeof change.after === 'number'"
+                          :model-value="change.after"
+                          :aria-label="`Imported ${title(change.field)}`"
+                          :min="numberFieldMinimum(change.field)"
+                          :use-grouping="false"
+                          show-buttons
+                          button-layout="horizontal"
+                          increment-button-icon="mdi mdi-plus"
+                          decrement-button-icon="mdi mdi-minus"
+                          fluid
+                          @update:model-value="setNumberField(change, $event)"
+                        />
                         <Textarea
                           v-else
                           :model-value="
@@ -173,7 +289,7 @@
               v-if="
                 preview.collection_changes.some((change) => change.before_count > 0)
               "
-              type="warning"
+              severity="warn"
               variant="tonal"
               class="mb-3"
             >
@@ -198,7 +314,7 @@
                     <div class="d-flex align-items-center gap-2 mb-3">
                       <Checkbox
                         v-model="change.enabled"
-                        color="primary"
+                        binary
                         :aria-label="`Replace ${title(change.collection)} with imported content`"
                       />
                       <span>Replace this section with imported content</span>
@@ -252,23 +368,41 @@
                 </p>
                 <div class="row g-3">
                   <div class="col-12 col-sm-3">
+                    <label
+                      class="form-label small fw-semibold"
+                      :for="`import-quantity-${line.line_id}`"
+                    >
+                      Quantity
+                    </label>
                     <InputNumber
-                      v-model.number="line.quantity"
-                      control-variant="stacked"
+                      :input-id="`import-quantity-${line.line_id}`"
+                      v-model="line.quantity"
                       :min="1"
-                      density="compact"
-                      label="Quantity"
+                      :use-grouping="false"
+                      show-buttons
+                      button-layout="horizontal"
+                      increment-button-icon="mdi mdi-plus"
+                      decrement-button-icon="mdi mdi-minus"
+                      fluid
                     />
                   </div>
                   <div class="col-12 col-sm-3">
+                    <label
+                      class="form-label small fw-semibold"
+                      :for="`import-action-${line.line_id}`"
+                    >
+                      Action
+                    </label>
                     <Select
+                      :input-id="`import-action-${line.line_id}`"
                       v-model="line.action"
-                      density="compact"
-                      label="Action"
-                      :items="[
+                      :options="[
                         { title: 'Add', value: 'add' },
                         { title: 'Leave untouched', value: 'leave' },
                       ]"
+                      option-label="title"
+                      option-value="value"
+                      fluid
                     />
                   </div>
                   <div class="col-12 col-sm-6">
@@ -316,11 +450,9 @@
                     expanded
                   />
                   <span
-                    class="calculation-arrow align-self-center"
-                    color="primary"
-                  >
-                    mdi-arrow-right
-                  </span>
+                    class="mdi mdi-arrow-right calculation-arrow align-self-center fs-4 text-body-secondary"
+                    aria-hidden="true"
+                  />
                   <CalculationBreakdown
                     :calculation="row.after"
                     label="After import"
@@ -332,18 +464,24 @@
           </section>
         </template>
       </div>
-      <footer class="d-flex justify-content-end gap-2">
-        <Button @click="cancel">Cancel</Button>
+    </section>
+    <template #footer>
+      <div class="d-flex justify-content-end gap-2 w-100">
         <Button
-          color="primary"
-          :disabled="!preview || hasFieldErrors"
+          :disabled="busy"
+          @click="cancel"
+        >
+          Cancel
+        </Button>
+        <Button
+          :disabled="!preview || hasFieldErrors || busy"
           :loading="busy"
           @click="commit"
         >
           Import
         </Button>
-      </footer>
-    </section>
+      </div>
+    </template>
   </Dialog>
 </template>
 
@@ -352,7 +490,6 @@ import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import Chip from "primevue/chip";
 import Dialog from "primevue/dialog";
-import FileUpload from "primevue/fileupload";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
@@ -371,6 +508,7 @@ import { displayIdentifier } from "../display";
 import type { PickerCandidate } from "../itemPicker";
 import CalculationBreakdown from "./CalculationBreakdown.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
+import SkillProficiencyPicker from "./SkillProficiencyPicker.vue";
 
 type CalculationRow = {
   key: string;
@@ -398,7 +536,6 @@ export default defineComponent({
     Checkbox,
     Chip,
     Dialog,
-    FileUpload,
     InputNumber,
     InputText,
     Message,
@@ -406,12 +543,14 @@ export default defineComponent({
     Textarea,
     CalculationBreakdown,
     ItemPickerDialog,
+    SkillProficiencyPicker,
   },
   data() {
     return {
       open: false,
       file: undefined as File | undefined,
       preview: undefined as CahPreview | undefined,
+      previewError: "",
       busy: false,
       fieldErrors: {} as Record<string, string>,
       jsonFieldValues: {} as Record<string, string>,
@@ -435,11 +574,16 @@ export default defineComponent({
         "stealth",
         "survival",
       ],
-      proficiencyChoices: [
-        { title: "None", value: "none" },
-        { title: "Half proficiency", value: "half" },
-        { title: "Proficient", value: "proficient" },
-        { title: "Expertise", value: "expertise" },
+      spellSlotLevels: [
+        { key: "first", label: "1st" },
+        { key: "second", label: "2nd" },
+        { key: "third", label: "3rd" },
+        { key: "fourth", label: "4th" },
+        { key: "fifth", label: "5th" },
+        { key: "sixth", label: "6th" },
+        { key: "seventh", label: "7th" },
+        { key: "eighth", label: "8th" },
+        { key: "ninth", label: "9th" },
       ],
     };
   },
@@ -542,6 +686,9 @@ export default defineComponent({
       if (Array.isArray(value)) {
         return value.length ? value.join(", ") : "None";
       }
+      if (typeof value === "boolean") {
+        return value ? "Yes" : "No";
+      }
       if (typeof value === "object") {
         const entries = Object.entries(value as Record<string, unknown>);
         return entries.length
@@ -551,6 +698,71 @@ export default defineComponent({
           : "None";
       }
       return String(value);
+    },
+
+    stringListValues(value: unknown): string[] {
+      if (!Array.isArray(value)) {
+        return [];
+      }
+
+      return value.filter((entry): entry is string => typeof entry === "string");
+    },
+
+    setStringListItem(
+      change: CahPreview["field_changes"][number],
+      index: number,
+      value: string | undefined,
+    ): void {
+      const values = [...this.stringListValues(change.after)];
+      values[index] = value ?? "";
+      change.after = values;
+    },
+
+    addStringListItem(change: CahPreview["field_changes"][number]): void {
+      change.after = [...this.stringListValues(change.after), ""];
+    },
+
+    removeStringListItem(
+      change: CahPreview["field_changes"][number],
+      index: number,
+    ): void {
+      change.after = this.stringListValues(change.after).filter(
+        (_value, valueIndex) => valueIndex !== index,
+      );
+    },
+
+    spellSlotValues(value: unknown): Record<string, number> {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return {};
+      }
+
+      return Object.fromEntries(
+        Object.entries(value).flatMap(([level, amount]) => {
+          const numericAmount = Number(amount);
+
+          return Number.isFinite(numericAmount) ? [[level, numericAmount]] : [];
+        }),
+      );
+    },
+
+    setSpellSlot(
+      change: CahPreview["field_changes"][number],
+      level: string,
+      value: string | number | null,
+    ): void {
+      const amount = Number(value);
+
+      change.after = {
+        ...this.spellSlotValues(change.after),
+        [level]: Number.isFinite(amount) ? Math.max(0, amount) : 0,
+      };
+    },
+
+    setBooleanField(
+      change: CahPreview["field_changes"][number],
+      value: boolean | undefined,
+    ): void {
+      change.after = Boolean(value);
     },
 
     proficiencyValues(value: unknown): Record<string, string> {
@@ -599,6 +811,30 @@ export default defineComponent({
       }
     },
 
+    numberFieldMinimum(field: string): number | undefined {
+      if (
+        [
+          "base_hp",
+          "base_ac",
+          "strength",
+          "dexterity",
+          "constitution",
+          "intelligence",
+          "wisdom",
+          "charisma",
+          "npc_level",
+        ].includes(field)
+      ) {
+        return 1;
+      }
+
+      if (field === "temporary_hp") {
+        return 0;
+      }
+
+      return undefined;
+    },
+
     setJsonField(change: CahPreview["field_changes"][number], value: string): void {
       this.jsonFieldValues[change.field] = value;
       try {
@@ -635,12 +871,35 @@ export default defineComponent({
       );
     },
 
+    async selectImportFile(event: Event): Promise<void> {
+      const input = event.target as HTMLInputElement;
+      const selectedFile = input.files?.item(0);
+
+      if (!selectedFile) {
+        return;
+      }
+
+      this.file = selectedFile;
+
+      await this.loadPreview();
+    },
+
     async loadPreview(): Promise<void> {
       if (!this.file) {
         return;
       }
+
       this.busy = true;
+      this.previewError = "";
+
+      const previousPreview = this.preview;
+      this.preview = undefined;
+
       try {
+        if (previousPreview) {
+          await cancelCahImport(this.contextId, previousPreview.token);
+        }
+
         const nextPreview = await previewCahImport(
           this.contextId,
           this.characterId,
@@ -656,10 +915,11 @@ export default defineComponent({
         );
         this.preview = nextPreview;
       } catch (exception) {
-        this.$emit(
-          "error",
-          exception instanceof Error ? exception.message : "Unable to preview import.",
-        );
+        this.previewError =
+          exception instanceof Error ? exception.message : "Unable to preview import.";
+        this.file = undefined;
+        this.resetFileInput();
+        this.$emit("error", this.previewError);
       } finally {
         this.busy = false;
       }
@@ -688,6 +948,7 @@ export default defineComponent({
         this.open = false;
         this.preview = undefined;
         this.file = undefined;
+        this.resetFileInput();
         this.$emit("completed");
       } catch (exception) {
         this.$emit(
@@ -709,32 +970,57 @@ export default defineComponent({
       }
       this.preview = undefined;
       this.file = undefined;
+      this.previewError = "";
+      this.resetFileInput();
       this.open = false;
+    },
+
+    resetFileInput(): void {
+      const input = this.$refs.fileInput as HTMLInputElement | undefined;
+
+      if (input) {
+        input.value = "";
+      }
     },
   },
 });
 </script>
 
 <style scoped>
+:deep(.character-import-dialog) {
+  max-height: calc(100dvh - 2rem);
+}
+
+:deep(.character-import-dialog .p-dialog-content) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:deep(.character-import-dialog .p-dialog-footer) {
+  flex: 0 0 auto;
+  border-top: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color);
+}
+
 .checkbox-column {
   width: 56px;
 }
 
-.import-fields-table :deep(table) {
+.import-fields-table {
   table-layout: fixed;
   width: 100%;
 }
 
-.import-fields-table :deep(th:nth-child(2)) {
+.import-fields-table th:nth-child(2) {
   width: 14%;
 }
 
-.import-fields-table :deep(td:nth-child(3)) {
+.import-fields-table td:nth-child(3) {
   width: 28%;
   overflow-wrap: anywhere;
 }
 
-.import-fields-table :deep(td:nth-child(4)) {
+.import-fields-table td:nth-child(4) {
   width: 52%;
 }
 

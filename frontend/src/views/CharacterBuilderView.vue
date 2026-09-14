@@ -132,64 +132,123 @@
           </label>
         </template>
         <template v-else-if="step === 2">
-          <ToggleSwitch
-            v-model="raceOverride"
-            color="warning"
-            label="Use a custom race override"
-          />
-          <CompendiumEntryPicker
-            v-if="!raceOverride"
-            v-model="form.race_entry_id"
-            label="Race"
-            :items="definition?.race"
-            :loading="definitionLoading || draftLoading"
-            :disabled="definitionLoading || draftLoading"
-            @update:model-value="loadEntryData"
-          />
-          <InputText
-            v-else
-            v-model="form.race"
-            label="Custom race (override)"
-          />
-          <CompendiumChoicePicker
-            v-model="form.subrace_name"
-            :items="raceSubchoices()"
-            label="Subrace or custom ancestry choice"
-            :loading="draftLoading || entryLoading(form.race_entry_id)"
-            :disabled="
-              definitionLoading || draftLoading || entryLoading(form.race_entry_id)
-            "
-          />
-          <div class="col-12 text-uppercase fw-semibold small text-body-secondary mt-3">
-            Raw ability scores
+          <div class="col-12">
+            <div class="d-flex align-items-center gap-2">
+              <ToggleSwitch
+                v-model="raceOverride"
+                input-id="race-override"
+              />
+              <label
+                for="race-override"
+                class="fw-semibold"
+              >
+                Use a custom ancestry
+              </label>
+            </div>
+            <small class="d-block text-body-secondary mt-1">
+              Enable this when the character's ancestry is not available in the
+              Compendium.
+            </small>
           </div>
-          <div class="col-12 row g-3">
-            <div
-              v-for="ability in abilities"
-              :key="ability"
-              class="col-12 col-md-4 d-grid gap-2"
+          <div class="col-12">
+            <CompendiumEntryPicker
+              v-if="!raceOverride"
+              :model-value="form.race_entry_id"
+              label="Race"
+              :items="definition?.race"
+              :loading="definitionLoading || draftLoading"
+              :disabled="definitionLoading || draftLoading"
+              @update:model-value="selectRace"
+            />
+            <label
+              v-else
+              class="d-grid gap-2"
             >
-              <InputNumber
-                v-model.number="form[ability]"
-                control-variant="stacked"
-                :label="`${ability} raw`"
+              <span class="fw-semibold">Custom race</span>
+              <InputText
+                v-model="form.race"
+                fluid
               />
-              <InputNumber
-                v-model.number="form.ability_bonuses[ability]"
-                control-variant="stacked"
-                label="Ancestry adjustment"
-                density="compact"
-              />
-              <InputNumber
-                v-model.number="form.ability_score_adjustments[ability]"
-                control-variant="stacked"
-                label="Custom override"
-                density="compact"
-              />
-              <div class="small text-body-secondary tabular-nums">
-                {{ form[ability] }} + {{ form.ability_bonuses[ability] ?? 0 }} +
-                {{ form.ability_score_adjustments[ability] ?? 0 }} =
-                {{ finalAbility(ability) }}
+            </label>
+          </div>
+          <div
+            v-if="!raceOverride && raceSubchoices().length > 0"
+            class="col-12"
+          >
+            <CompendiumChoicePicker
+              v-model="form.subrace_name"
+              :items="raceSubchoices()"
+              label="Subrace"
+              hint="Choose a subrace provided by the selected race."
+              :allow-custom="false"
+              :loading="draftLoading || entryLoading(form.race_entry_id)"
+              :disabled="
+                definitionLoading || draftLoading || entryLoading(form.race_entry_id)
+              "
+            />
+          </div>
+          <div class="col-12 mt-3">
+            <h3 class="h5 mb-1">Ability scores</h3>
+            <p class="text-body-secondary mb-0">
+              Enter the rolled or standard score, then apply any ancestry bonus or
+              manual adjustment. The calculated score is shown for each ability.
+            </p>
+          </div>
+          <div class="col-12">
+            <div class="row g-3">
+              <div
+                v-for="ability in abilities"
+                :key="ability"
+                class="col-12 col-md-6 col-xl-4"
+              >
+                <fieldset class="border rounded-3 p-3 h-100 d-grid gap-3">
+                  <legend class="float-none w-auto h5 mb-0">
+                    {{ displayIdentifier(ability) }}
+                  </legend>
+                  <label class="d-grid gap-2">
+                    <span class="fw-semibold">Raw score</span>
+                    <InputNumber
+                      v-model.number="form[ability]"
+                      show-buttons
+                      button-layout="horizontal"
+                      :min="1"
+                      :max="30"
+                      fluid
+                    />
+                  </label>
+                  <label class="d-grid gap-2">
+                    <span class="fw-semibold">Ancestry bonus</span>
+                    <InputNumber
+                      v-model.number="form.ability_bonuses[ability]"
+                      show-buttons
+                      button-layout="horizontal"
+                      :min="-10"
+                      :max="10"
+                      fluid
+                    />
+                  </label>
+                  <label class="d-grid gap-2">
+                    <span class="fw-semibold">Manual adjustment</span>
+                    <InputNumber
+                      v-model.number="form.ability_score_adjustments[ability]"
+                      show-buttons
+                      button-layout="horizontal"
+                      :min="-30"
+                      :max="30"
+                      fluid
+                    />
+                  </label>
+                  <div class="border-top pt-2 tabular-nums">
+                    <span class="text-body-secondary">Calculated score</span>
+                    <strong class="float-end fs-5">
+                      {{ finalAbility(ability) }}
+                    </strong>
+                    <small class="d-block text-body-secondary mt-1">
+                      {{ form[ability] }} + {{ form.ability_bonuses[ability] ?? 0 }} +
+                      {{ form.ability_score_adjustments[ability] ?? 0 }}
+                    </small>
+                  </div>
+                </fieldset>
               </div>
             </div>
           </div>
@@ -219,17 +278,24 @@
                 :disabled="definitionLoading || draftLoading"
                 @update:model-value="selectClass(row, $event)"
               />
-              <InputText
+              <label
                 v-else
-                v-model="row.class_name"
-                label="Custom class (override)"
-              />
-              <Checkbox
-                v-model="row.is_override"
-                color="warning"
-                label="Custom override"
-                density="compact"
-              />
+                class="d-grid gap-2"
+              >
+                <span class="fw-semibold">Custom class</span>
+                <InputText
+                  v-model="row.class_name"
+                  fluid
+                />
+              </label>
+              <div class="d-flex align-items-center gap-2 mt-2">
+                <Checkbox
+                  v-model="row.is_override"
+                  :input-id="`class-override-${row.level}`"
+                  binary
+                />
+                <label :for="`class-override-${row.level}`">Use a custom class</label>
+              </div>
             </div>
             <div class="col-12 col-lg-5">
               <CompendiumChoicePicker
@@ -274,32 +340,68 @@
           </div>
         </template>
         <template v-else-if="step === 4">
-          <ToggleSwitch
-            v-model="backgroundOverride"
-            color="warning"
-            label="Use a custom background override"
-          />
-          <CompendiumEntryPicker
-            v-if="!backgroundOverride"
-            v-model="form.background_entry_id"
-            label="Background"
-            :items="definition?.background"
-            :loading="definitionLoading || draftLoading"
-            :disabled="definitionLoading || draftLoading"
-            @update:model-value="loadEntryData"
-          />
-          <InputText
-            v-else
-            v-model="form.background"
-            label="Custom background (override)"
-          />
-          <Textarea
-            v-model="languageText"
-            label="Languages"
-            hint="One language or instruction per line. Keep entries such as “Choose 1” as written."
-            persistent-hint
-            rows="3"
-          />
+          <div class="col-12">
+            <div class="d-flex align-items-center gap-2">
+              <ToggleSwitch
+                v-model="backgroundOverride"
+                input-id="background-override"
+              />
+              <label
+                for="background-override"
+                class="fw-semibold"
+              >
+                Use a custom background
+              </label>
+            </div>
+          </div>
+          <div class="col-12">
+            <CompendiumEntryPicker
+              v-if="!backgroundOverride"
+              v-model="form.background_entry_id"
+              label="Background"
+              :items="definition?.background"
+              :loading="definitionLoading || draftLoading"
+              :disabled="definitionLoading || draftLoading"
+              @update:model-value="loadEntryData"
+            />
+            <label
+              v-else
+              class="d-grid gap-2"
+            >
+              <span class="fw-semibold">Custom background</span>
+              <InputText
+                v-model="form.background"
+                fluid
+              />
+            </label>
+          </div>
+          <fieldset class="col-12 border-0 p-0 m-0">
+            <legend class="h6 mb-2">Languages</legend>
+            <div
+              v-for="(language, index) in form.languages"
+              :key="index"
+              class="input-group mb-2"
+            >
+              <InputText
+                v-model="form.languages[index]"
+                :aria-label="`Language ${index + 1}`"
+              />
+              <Button
+                icon="mdi mdi-delete-outline"
+                severity="danger"
+                outlined
+                :aria-label="`Remove language ${language || index + 1}`"
+                @click="removeLanguage(index)"
+              />
+            </div>
+            <Button
+              icon="mdi mdi-plus"
+              label="Add language"
+              size="small"
+              outlined
+              @click="addLanguage"
+            />
+          </fieldset>
           <div class="col-12 text-uppercase fw-semibold small text-body-secondary mt-3">
             Skill proficiencies
           </div>
@@ -309,19 +411,16 @@
             class="mb-3"
           />
           <div class="col-12 row g-3">
-            <div
+            <SkillProficiencyPicker
               v-for="skill in definition?.skills"
               :key="skill"
-              class="col-12 col-md-6 col-lg-4"
-            >
-              <Select
-                v-model="form.skill_proficiencies[skill]"
-                :label="displayIdentifier(skill)"
-                :items="proficiencyOptions"
-                :loading="draftLoading"
-                :disabled="draftLoading"
-              />
-            </div>
+              v-model="form.skill_proficiencies[skill]"
+              class="col-12 col-md-6 col-lg-4 d-grid gap-2"
+              :input-id="`builder-skill-${skill}`"
+              :label="displayIdentifier(skill)"
+              :loading="draftLoading"
+              :disabled="draftLoading"
+            />
           </div>
           <div class="col-12 text-uppercase fw-semibold small text-body-secondary mt-3">
             Equipment proficiencies
@@ -349,24 +448,38 @@
           />
         </template>
         <template v-else-if="step === 5">
-          <InputNumber
-            v-model.number="form.base_hp"
-            control-variant="split"
-            :min="1"
-            label="Base HP (hit-die pool before ability modifiers)"
-          />
-          <Select
-            v-model="form.hp_ability"
-            :items="abilities"
-            label="HP ability"
-            :loading="draftLoading"
-            :disabled="draftLoading"
-          />
-          <InputNumber
-            v-model.number="form.hp_adjustment"
-            control-variant="split"
-            label="HP-only adjustment"
-          />
+          <label class="col-12 col-md-4 d-grid gap-2 align-content-start">
+            <span class="fw-semibold">Base HP</span>
+            <InputNumber
+              v-model.number="form.base_hp"
+              show-buttons
+              button-layout="horizontal"
+              :min="1"
+              fluid
+            />
+            <small class="text-body-secondary">
+              Hit-die pool before ability modifiers
+            </small>
+          </label>
+          <label class="col-12 col-md-4 d-grid gap-2 align-content-start">
+            <span class="fw-semibold">HP ability</span>
+            <Select
+              v-model="form.hp_ability"
+              :options="[...abilities]"
+              :loading="draftLoading"
+              :disabled="draftLoading"
+              fluid
+            />
+          </label>
+          <label class="col-12 col-md-4 d-grid gap-2 align-content-start">
+            <span class="fw-semibold">HP-only adjustment</span>
+            <InputNumber
+              v-model.number="form.hp_adjustment"
+              show-buttons
+              button-layout="horizontal"
+              fluid
+            />
+          </label>
           <section class="col-12 border rounded-3 p-3">
             <strong>Maximum HP: {{ maxHp }}</strong>
             <div>
@@ -472,6 +585,7 @@ import CompendiumChoicePicker, {
   type CompendiumChoice,
 } from "../components/CompendiumChoicePicker.vue";
 import CompendiumEntryPicker from "../components/CompendiumEntryPicker.vue";
+import SkillProficiencyPicker from "../components/SkillProficiencyPicker.vue";
 import { displayIdentifier } from "../display";
 
 type ClassLevel = {
@@ -499,6 +613,7 @@ export default defineComponent({
     CharacterImportMenu,
     CompendiumChoicePicker,
     CompendiumEntryPicker,
+    SkillProficiencyPicker,
   },
   data() {
     const abilities = [
@@ -514,12 +629,6 @@ export default defineComponent({
     return {
       abilities,
       equipmentCategories,
-      proficiencyOptions: [
-        { title: "No proficiency", value: "none" },
-        { title: "Half proficiency", value: "half" },
-        { title: "Proficient", value: "proficient" },
-        { title: "Expertise", value: "expertise" },
-      ],
       stepTitles: [
         "Identity",
         "Ancestry and ability scores",
@@ -607,17 +716,6 @@ export default defineComponent({
           this.form.hp_adjustment,
       );
     },
-    languageText: {
-      get(): string {
-        return this.form.languages.join("\n");
-      },
-      set(value: string) {
-        this.form.languages = value
-          .split(/\r?\n/)
-          .map((entry) => entry.trim())
-          .filter(Boolean);
-      },
-    },
     ruleChoicesLoading(): boolean {
       return [
         this.form.race_entry_id,
@@ -629,6 +727,12 @@ export default defineComponent({
   watch: {
     step(value: number) {
       this.saveCurrentStep(value);
+    },
+    raceOverride(value: boolean) {
+      if (value) {
+        this.form.subrace_name = "";
+        this.form.subrace_identifier = "";
+      }
     },
   },
   methods: {
@@ -659,6 +763,14 @@ export default defineComponent({
 
     showImportError(message: string): void {
       this.error = message;
+    },
+
+    addLanguage(): void {
+      this.form.languages.push("");
+    },
+
+    removeLanguage(index: number): void {
+      this.form.languages.splice(index, 1);
     },
 
     async loadDefinition(): Promise<BuilderDefinition> {
@@ -792,6 +904,13 @@ export default defineComponent({
       this.entryRequests.set(id, request);
 
       return request;
+    },
+
+    async selectRace(raceEntryId: number | undefined): Promise<void> {
+      this.form.race_entry_id = raceEntryId;
+      this.form.subrace_name = "";
+      this.form.subrace_identifier = "";
+      await this.loadEntryData(raceEntryId);
     },
 
     async loadEntryDetails(id: number, candidate: BuilderEntry): Promise<void> {
@@ -1019,7 +1138,12 @@ export default defineComponent({
           }
         });
         await saveCharacterBuilder(this.contextId, this.characterId, {
-          fields: this.form,
+          fields: {
+            ...this.form,
+            languages: this.form.languages
+              .map((language) => language.trim())
+              .filter(Boolean),
+          },
           class_levels: this.classLevels,
           choices: [
             {

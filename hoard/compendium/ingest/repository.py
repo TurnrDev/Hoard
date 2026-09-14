@@ -12,11 +12,11 @@ import tarfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Callable
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 from zipfile import BadZipFile, ZipFile
 
+import requests
 from django.core.exceptions import ValidationError
+from requests.utils import urlparse
 
 from hoard.compendium.ingest.sources import import_resources, import_source_directory
 from hoard.compendium.models import CompendiumRepository, CompendiumSource
@@ -300,17 +300,18 @@ def _github_archive_url(repository: str, ref: str) -> str:
     owner, name = parts
     api_url = f"https://api.github.com/repos/{owner}/{name}"
     _validate_public_https(api_url)
-    request = Request(
-        api_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "Hoard Compendium importer",
-        },
-    )
     try:
-        with urlopen(request, timeout=20) as response:
-            payload = json.load(response)
-    except (OSError, json.JSONDecodeError) as error:
+        response = requests.get(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Hoard Compendium importer",
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as error:
         raise ValidationError("Could not resolve the GitHub repository.") from error
     if not isinstance(payload, dict):
         raise ValidationError("GitHub returned an invalid repository response.")
@@ -324,9 +325,15 @@ def _download(
     url: str, destination: Path, progress: ProgressCallback | None
 ) -> tuple[str, str]:
     _validate_public_https(url)
-    request = Request(url, headers={"User-Agent": "Hoard Compendium importer"})
     try:
-        with urlopen(request, timeout=20) as response:
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Hoard Compendium importer"},
+            stream=True,
+            timeout=20,
+        )
+        try:
+            response.raise_for_status()
             _validate_public_https(response.url)
             checksum = hashlib.sha256()
             size = 0
@@ -337,7 +344,9 @@ def _download(
                 else None
             )
             with destination.open("wb") as output:
-                while chunk := response.read(64 * 1024):
+                for chunk in response.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
                     size += len(chunk)
                     if size > MAX_ARCHIVE_BYTES:
                         raise ValidationError(
@@ -352,7 +361,9 @@ def _download(
                         size,
                         total,
                     )
-    except OSError as error:
+        finally:
+            response.close()
+    except (OSError, requests.RequestException) as error:
         raise ValidationError("Could not download repository archive.") from error
     return response.url, checksum.hexdigest()
 

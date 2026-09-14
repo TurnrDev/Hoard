@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from urllib.request import urlopen
-
+import requests
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 
@@ -20,9 +18,10 @@ SUPPORTED_TAGS = frozenset({"5e", "5e2024"})
 def sync_registry() -> dict[str, CompendiumRepository]:
     """Fetch the community directory and upsert its repository records."""
     try:
-        with urlopen(REGISTRY_URL, timeout=20) as response:
-            rows = json.load(response)
-    except (OSError, json.JSONDecodeError) as error:
+        response = requests.get(REGISTRY_URL, timeout=20)
+        response.raise_for_status()
+        rows = response.json()
+    except (requests.RequestException, ValueError) as error:
         raise ValidationError(
             "The RPG Companion community registry is unavailable."
         ) from error

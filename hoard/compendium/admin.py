@@ -11,7 +11,14 @@ class CompendiumSourceAdmin(admin.ModelAdmin):
 @admin.register(CompendiumRepository)
 class CompendiumRepositoryAdmin(admin.ModelAdmin):
     list_display = ("name", "identifier", "campaign", "repository_url")
-    search_fields = ("name", "slug")
+    search_fields = (
+        "name",
+        "identifier",
+        "description",
+        "repository_url",
+        "github_repository",
+        "campaign__name",
+    )
 
 
 @admin.register(CompendiumEntry)
