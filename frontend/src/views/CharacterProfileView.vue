@@ -92,14 +92,78 @@
         <section class="border rounded-3 p-3 p-md-4 h-100">
           <div
             v-if="canAct"
-            class="float-end"
+            class="d-none d-sm-block float-end"
           >
             <ActionMenu
               label="Coin actions"
               :items="coinActionItems"
             />
           </div>
-          <div class="row g-0 h-100">
+          <div class="d-sm-none">
+            <Transition
+              name="ability-card-flip"
+              mode="out-in"
+            >
+              <div
+                v-if="!moneyValueVisible"
+                key="coin-pouch"
+              >
+                <header class="d-flex align-items-start justify-content-between gap-2">
+                  <div class="text-uppercase fw-semibold small text-body-secondary">
+                    Coin pouch
+                  </div>
+                  <div class="d-flex align-items-center gap-1">
+                    <Button
+                      icon="mdi mdi-rotate-3d-variant"
+                      text
+                      rounded
+                      size="small"
+                      aria-label="Show coin value"
+                      @click="toggleMoneyCard"
+                    />
+                    <ActionMenu
+                      v-if="canAct"
+                      label="Coin actions"
+                      :items="coinActionItems"
+                    />
+                  </div>
+                </header>
+                <div class="fs-5 tabular-nums mt-3">
+                  {{ formatCoinPouch(character.money) }}
+                </div>
+              </div>
+
+              <div
+                v-else
+                key="coin-value"
+              >
+                <header class="d-flex align-items-start justify-content-between gap-2">
+                  <div class="text-uppercase fw-semibold small text-body-secondary">
+                    Coin value
+                  </div>
+                  <div class="d-flex align-items-center gap-1">
+                    <Button
+                      icon="mdi mdi-rotate-3d-variant"
+                      text
+                      rounded
+                      size="small"
+                      aria-label="Show coin pouch"
+                      @click="toggleMoneyCard"
+                    />
+                    <ActionMenu
+                      v-if="canAct"
+                      label="Coin actions"
+                      :items="coinActionItems"
+                    />
+                  </div>
+                </header>
+                <div class="h3 mt-3 mb-0">
+                  {{ formatGoldValue(character.money.gold_value) }} ¤
+                </div>
+              </div>
+            </Transition>
+          </div>
+          <div class="row g-0 h-100 d-none d-sm-flex">
             <div class="col-12 col-sm-7">
               <div>
                 <div class="text-uppercase fw-semibold small text-body-secondary">
@@ -2024,6 +2088,7 @@ export default defineComponent({
       characters: [] as Character[],
       items: [] as Item[],
       flippedAbilityKey: "",
+      moneyValueVisible: false,
       error: typeof levelUpError === "string" ? levelUpError : "",
       grantItemId: undefined as number | undefined,
       grantQuantity: 1,
@@ -2444,6 +2509,9 @@ export default defineComponent({
     },
     hideAbilityCalculation(): void {
       this.flippedAbilityKey = "";
+    },
+    toggleMoneyCard(): void {
+      this.moneyValueVisible = !this.moneyValueVisible;
     },
     showSuccess(message: string): void {
       this.$toast.add({

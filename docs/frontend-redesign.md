@@ -738,6 +738,10 @@ PartyRail is a live campaign roster with two explicit modes.
   distributed with character state and inspiration events; each connected
   client schedules a refresh at the next expiry so names, menus, and rails stop
   showing inspiration without requiring another user action.
+- 2026-09-14: the profile money card uses the established card-flip interaction
+  on phones to switch between the denomination pouch and decimal gold value.
+  Coin actions remain available on either face. Tablet and desktop layouts keep
+  both values visible side by side.
 
 ## Open questions
 
