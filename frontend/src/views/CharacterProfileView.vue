@@ -335,6 +335,12 @@
               <strong>
                 {{ character.has_inspiration ? "Available" : "Not available" }}
               </strong>
+              <template
+                v-if="character.has_inspiration && character.inspiration_expires_at"
+              >
+                {{ " · " }}expires
+                <RelativeTime :value="character.inspiration_expires_at" />
+              </template>
               <span class="ms-4">
                 Spell attack:
                 <strong>{{ signed(character.sheet.spell_attack) }}</strong>
@@ -1270,9 +1276,7 @@
                   :key="`${transaction.ledger}-${transaction.id}`"
                 >
                   <td class="text-nowrap">
-                    <time :datetime="transaction.created_at">
-                      {{ formatActivityDate(transaction.created_at) }}
-                    </time>
+                    <RelativeTime :value="transaction.created_at" />
                   </td>
                   <td class="text-end text-nowrap tabular-nums fw-semibold">
                     {{ activityAmount(transaction) }}
@@ -1993,6 +1997,7 @@ import ConditionManager from "../components/ConditionManager.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import MarkdownContent from "../components/MarkdownContent.vue";
 import PlayerEncounterActions from "../components/PlayerEncounterActions.vue";
+import RelativeTime from "../components/RelativeTime.vue";
 import SheetDisclosure from "../components/SheetDisclosure.vue";
 import { displayCoin, displayIdentifier, formatCoinPouch } from "../display";
 import type { PickerCandidate } from "../itemPicker";
@@ -2074,6 +2079,7 @@ export default defineComponent({
     ItemPickerDialog,
     MarkdownContent,
     PlayerEncounterActions,
+    RelativeTime,
     SheetDisclosure,
   },
   data() {
@@ -2530,12 +2536,6 @@ export default defineComponent({
     },
     formatXp(value: number): string {
       return `${value.toLocaleString()} XP`;
-    },
-    formatActivityDate(value: string): string {
-      return new Date(value).toLocaleString([], {
-        dateStyle: "medium",
-        timeStyle: "short",
-      });
     },
     activityAmount(transaction: LedgerTransaction): string {
       return transaction.entries

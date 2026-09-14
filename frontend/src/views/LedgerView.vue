@@ -30,7 +30,7 @@
         <caption>Immutable campaign audit history</caption>
         <thead>
           <tr>
-            <th scope="col">Real datetime</th>
+            <th scope="col">When</th>
             <th scope="col">Campaign date</th>
             <th scope="col">Type</th>
             <th scope="col">From</th>
@@ -52,7 +52,7 @@
             :key="`${transaction.ledger}-${transaction.id}`"
           >
             <th scope="row">
-              {{ new Date(transaction.occurred_at).toLocaleString() }}
+              <RelativeTime :value="transaction.occurred_at" />
             </th>
             <td>{{ transaction.campaign_date ?? "Campaign date unavailable" }}</td>
             <td>
@@ -149,9 +149,10 @@ import {
 } from "../api";
 import { campaignRefreshRevision } from "../realtime";
 import { displayCoin, displayIdentifier } from "../display";
+import RelativeTime from "../components/RelativeTime.vue";
 
 export default defineComponent({
-  components: { Button, Dialog, Message },
+  components: { Button, Dialog, Message, RelativeTime },
   data() {
     return {
       campaign: undefined as Campaign | undefined,

@@ -18,7 +18,8 @@
               Join {{ details.campaign_name }}
             </h1>
             <p class="mb-0 text-body-secondary">
-              Invitation expires {{ new Date(details.expires_at).toLocaleString() }}
+              Invitation expires
+              <RelativeTime :value="details.expires_at" />
             </p>
           </header>
           <Message
@@ -102,6 +103,7 @@ import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
 import ProgressSpinner from "primevue/progressspinner";
+import RelativeTime from "../components/RelativeTime.vue";
 import {
   acceptInvite,
   initialiseCsrf,
@@ -112,7 +114,7 @@ import {
 } from "../api";
 
 export default defineComponent({
-  components: { Button, InputText, Message, ProgressSpinner },
+  components: { Button, InputText, Message, ProgressSpinner, RelativeTime },
   data() {
     return {
       details: undefined as InviteDetails | undefined,

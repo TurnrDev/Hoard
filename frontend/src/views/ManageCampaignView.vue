@@ -128,7 +128,7 @@
                   <strong>{{ invitation.email || "Shareable link" }}</strong>
                   <span class="d-block small text-body-secondary">
                     {{ displayIdentifier(invitation.status) }} · expires
-                    {{ new Date(invitation.expires_at).toLocaleString() }}
+                    <RelativeTime :value="invitation.expires_at" />
                   </span>
                 </div>
                 <div class="d-flex gap-1">
@@ -311,9 +311,10 @@ import {
 } from "../api";
 import { campaignRefreshRevision } from "../realtime";
 import { displayIdentifier } from "../display";
+import RelativeTime from "../components/RelativeTime.vue";
 
 export default defineComponent({
-  components: { Button, InputText, Message },
+  components: { Button, InputText, Message, RelativeTime },
   data() {
     return {
       campaign: undefined as Campaign | undefined,

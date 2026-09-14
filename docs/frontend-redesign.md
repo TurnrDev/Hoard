@@ -742,6 +742,11 @@ PartyRail is a live campaign roster with two explicit modes.
   on phones to switch between the denomination pouch and decimal gold value.
   Coin actions remain available on either face. Tablet and desktop layouts keep
   both values visible side by side.
+- 2026-09-14: installed Moment and added a shared, locally imported relative-time
+  component for human-readable dates such as invitation expiry, inspiration
+  expiry, recent character activity, and ledger history. Relative labels refresh
+  while a page remains open, while the precise local date remains available as
+  a tooltip and to assistive technology.
 
 ## Open questions
 
