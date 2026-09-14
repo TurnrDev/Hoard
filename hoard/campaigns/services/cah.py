@@ -188,11 +188,18 @@ def parse_cah(raw: bytes) -> CahPreview:
         value = _integer(source.get(source_key), minimum=minimum)
         if value is not None:
             fields[target] = value
+    required_race = _dict(source.get("requiredRace"))
     speed = source.get("speed")
     if isinstance(speed, str) and speed.strip():
         fields["speed"] = speed.strip()
+    else:
+        base_speed = _integer(
+            _dict(required_race.get("speed")).get("normal"), minimum=0
+        )
+        speed_modifier = _integer(source.get("speedModifier")) or 0
+        if base_speed is not None:
+            fields["speed"] = str(max(0, base_speed + speed_modifier))
 
-    required_race = _dict(source.get("requiredRace"))
     race = (
         required_race.get("name")
         or _dict(source.get("race")).get("subraceId")

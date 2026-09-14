@@ -115,8 +115,8 @@
         </section>
       </div>
       <div class="col-12">
-        <div class="row g-3">
-          <div class="col-12 col-sm-6 col-lg-3">
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5 g-3">
+          <div class="col">
             <section
               class="border rounded-3 p-3 p-md-4 h-100"
               :class="{ 'hp-card--interactive': canEdit }"
@@ -160,7 +160,7 @@
               </div>
             </section>
           </div>
-          <div class="col-12 col-sm-6 col-lg-3">
+          <div class="col">
             <section class="border rounded-3 p-3 p-md-4 h-100">
               <div>
                 <div class="text-uppercase fw-semibold small text-body-secondary">
@@ -178,7 +178,7 @@
               </div>
             </section>
           </div>
-          <div class="col-12 col-sm-6 col-lg-3">
+          <div class="col">
             <section class="border rounded-3 p-3 p-md-4 h-100">
               <div>
                 <div class="text-uppercase fw-semibold small text-body-secondary">
@@ -194,7 +194,7 @@
               </div>
             </section>
           </div>
-          <div class="col-12 col-sm-6 col-lg-3">
+          <div class="col">
             <section class="border rounded-3 p-3 p-md-4 h-100">
               <div>
                 <div class="text-uppercase fw-semibold small text-body-secondary">
@@ -207,6 +207,31 @@
                     :activator-label="signed(character.sheet.proficiency_bonus)"
                   />
                 </div>
+              </div>
+            </section>
+          </div>
+          <div class="col">
+            <section class="border rounded-3 p-3 p-md-4 h-100">
+              <div class="d-flex align-items-start justify-content-between gap-2">
+                <div class="text-uppercase fw-semibold small text-body-secondary">
+                  Movement speed
+                </div>
+                <Button
+                  v-if="canEdit"
+                  icon="mdi mdi-pencil-outline"
+                  text
+                  rounded
+                  size="small"
+                  aria-label="Edit movement speed"
+                  @click="openSpeedEditor"
+                />
+              </div>
+              <div class="h4 mt-3 mb-0 tabular-nums">
+                <span
+                  class="mdi mdi-run me-1"
+                  aria-hidden="true"
+                />
+                {{ movementSpeedLabel }}
               </div>
             </section>
           </div>
@@ -1191,6 +1216,60 @@
       </section>
     </Dialog>
     <Dialog
+      v-model:visible="speedOpen"
+      :style="{ width: 'min(26rem, calc(100vw - 2rem))' }"
+    >
+      <section
+        class="d-grid gap-3"
+        aria-labelledby="edit-speed-heading"
+      >
+        <h2
+          id="edit-speed-heading"
+          class="h3 mb-0"
+        >
+          Edit movement speed
+        </h2>
+        <label class="form-label mb-0">
+          Walking speed
+          <InputNumber
+            v-model.number="speedFeet"
+            input-id="character-speed"
+            :min="0"
+            :max="1000"
+            :step="5"
+            :invalid="speedFeet !== null && speedFeet % 5 !== 0"
+            suffix=" ft"
+            show-buttons
+            button-layout="horizontal"
+            fluid
+          >
+            <template #decrementicon>
+              <span aria-hidden="true">−5</span>
+            </template>
+            <template #incrementicon>
+              <span aria-hidden="true">+5</span>
+            </template>
+          </InputNumber>
+          <small class="d-block text-body-secondary mt-1">
+            Enter a multiple of 5 feet.
+          </small>
+        </label>
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            label="Cancel"
+            severity="secondary"
+            outlined
+            @click="speedOpen = false"
+          />
+          <Button
+            label="Save speed"
+            :disabled="speedInvalid"
+            @click="saveSpeed"
+          />
+        </footer>
+      </section>
+    </Dialog>
+    <Dialog
       v-model:visible="healthOpen"
       :style="{ width: 'min(33rem, calc(100vw - 2rem))' }"
     >
@@ -1313,6 +1392,7 @@ import {
   restCharacter,
   setCharacterCondition,
   setCharacterInspiration,
+  updateCharacter,
   uploadCharacterPortrait,
   type Campaign,
   type Character,
@@ -1441,6 +1521,8 @@ export default defineComponent({
       activity: [] as LedgerTransaction[],
       healthOpen: false,
       hpAdjustmentOpen: false,
+      speedOpen: false,
+      speedFeet: null as number | null,
       healthReason: "damage" as "damage" | "healing" | "temporary" | "correction",
       healthAmount: 1,
       healthCurrent: 0,
@@ -1634,6 +1716,24 @@ export default defineComponent({
       const sheet = this.character?.sheet;
 
       return Boolean(sheet && sheet.current_hp < sheet.max_hp);
+    },
+    movementSpeedLabel(): string {
+      const speed = this.character?.sheet.speed.trim();
+
+      if (!speed) {
+        return "Not set";
+      }
+
+      return /^\d+$/.test(speed) ? `${speed} ft` : speed;
+    },
+    speedInvalid(): boolean {
+      return (
+        this.speedFeet === null ||
+        !Number.isInteger(this.speedFeet) ||
+        this.speedFeet < 0 ||
+        this.speedFeet > 1000 ||
+        this.speedFeet % 5 !== 0
+      );
     },
     castingSlots() {
       const spell = this.castingSpell;
@@ -2217,6 +2317,34 @@ export default defineComponent({
     openHpAdjustment(): void {
       this.healthAmount = 1;
       this.hpAdjustmentOpen = true;
+    },
+    openSpeedEditor(): void {
+      const distance = this.character?.sheet.speed.match(/\d+/)?.[0];
+
+      this.speedFeet = distance ? Number(distance) : null;
+      this.speedOpen = true;
+    },
+    async saveSpeed(): Promise<void> {
+      if (!this.character || this.speedInvalid) {
+        return;
+      }
+
+      const speed = String(this.speedFeet as number);
+
+      try {
+        await updateCharacter(this.campaignId, this.character.id, { speed });
+        this.character = {
+          ...this.character,
+          sheet: { ...this.character.sheet, speed },
+        };
+        this.speedOpen = false;
+        this.showSuccess("Movement speed updated.");
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to update movement speed.";
+      }
     },
     async submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
       if (!this.character) {
