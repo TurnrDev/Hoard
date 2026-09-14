@@ -774,6 +774,16 @@ PartyRail is a live campaign roster with two explicit modes.
   builder progress bar now suppresses PrimeVue's long generated percentage label
   and exposes the clearer current step through its accessible name and adjacent
   visible step heading.
+- 2026-09-15: completed a genuine 200% full-page zoom audit in isolated Firefox.
+  The GM desk, character directory, playable profile, builder, Compendium,
+  ledger, and campaign management all reflow without document-level horizontal
+  overflow at an effective 720 by 407 CSS-pixel viewport. The ledger retains its
+  intentional, keyboard-focusable horizontal table scroller rather than widening
+  the page.
+- 2026-09-15: made profile inventory weight display resilient to incomplete
+  Compendium metadata. A present amount is formatted without insignificant
+  trailing zeroes, and a missing unit is omitted instead of exposing `null` in
+  the player-facing table.
 
 ## Open questions
 
