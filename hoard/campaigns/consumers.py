@@ -818,8 +818,17 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 ).select_related("user")
             ],
             "characters": [
-                _character_data(value) for value in _visible_characters(context)
+                _character_data(value, context)
+                for value in _visible_characters(context)
             ],
+            "invitations": (
+                [
+                    self._invitation_data(value)
+                    for value in campaign.invitations.all()
+                ]
+                if context.kind == CampaignContext.Kind.GM
+                else []
+            ),
             "incomplete_level_ups": self._incomplete_level_ups(campaign),
         }
 
@@ -1211,7 +1220,10 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import _character_data, _visible_characters
 
         context = self._context()
-        return [_character_data(value) for value in _visible_characters(context)]
+        return [
+            _character_data(value, context)
+            for value in _visible_characters(context)
+        ]
 
     @database_sync_to_async
     def _character_get(self, content: dict[str, object]) -> dict[str, object]:
@@ -1221,7 +1233,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         character = _character(context, self._integer(content, "character_id"))
         if not _visible_characters(context).filter(pk=character.pk).exists():
             raise HttpError(404, "Character not found.")
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _character_create(self, content: dict[str, object]) -> dict[str, object]:
@@ -1246,7 +1258,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 request_id=str(content["request_id"]),
             ),
         )
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _character_update(self, content: dict[str, object]) -> dict[str, object]:
@@ -1273,7 +1285,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 request_id=str(content["request_id"]),
             ),
         )
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _character_portrait_remove(
@@ -1288,7 +1300,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         character.portrait.delete(save=True)
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _character_archive(self, content: dict[str, object]) -> dict[str, object]:
@@ -1312,7 +1324,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 request_id=str(content["request_id"]),
             ),
         )
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _builder_definition(self, content: dict[str, object]) -> dict[str, object]:
@@ -1434,7 +1446,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             context, self._integer(content, "character_id")
         )
         return {
-            "character": _character_data(character),
+            "character": _character_data(character, context),
             "class_levels": [
                 {
                     "level": row.level,
@@ -1584,7 +1596,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 description=self._string(content, "description"),
             )
         notify_campaign_changed(context.campaign_id)
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _builder_complete(self, content: dict[str, object]) -> dict[str, object]:
@@ -1650,7 +1662,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 ),
             )
         notify_campaign_changed(context.campaign_id)
-        return _character_data(character)
+        return _character_data(character, context)
 
     def _pending_level_up(self, context, character_id: int):
         from .api import _editable_sheet_character
@@ -1710,7 +1722,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             if entry is not None and entry.pk not in preferred_class_ids:
                 preferred_class_ids.append(entry.pk)
         return {
-            "character": _character_data(character),
+            "character": _character_data(character, context),
             "level": context.campaign.level,
             "preferred_class_ids": preferred_class_ids,
             "classes": [
@@ -2031,7 +2043,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 description=f"Completed level {context.campaign.level} level up",
             )
         notify_campaign_changed(context.campaign_id)
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _health_post(self, content: dict[str, object]) -> dict[str, object]:
@@ -2081,6 +2093,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         command = self._string(content, "type", required=True)
         operation = command.rsplit(".", 1)[-1]
         resource = command.split(".")[1]
+        if resource == "notes":
+            character = api.notes_character(context, character_id)
+
         functions = {
             ("notes", "create"): api.note_create,
             ("notes", "update"): api.note_update,
@@ -2431,11 +2446,15 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             for name, value in preview.fields.items()
         ]
         collection_managers = {
-            "notes": target.notes,
             "features": target.features,
             "spells": target.spells,
             "companions": target.companions,
         }
+        if (
+            context.kind == CampaignContext.Kind.PC
+            and target.context_id == context.pk
+        ):
+            collection_managers["notes"] = target.notes
         collection_changes = [
             {
                 "collection": name,
@@ -2501,6 +2520,12 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             or not all(isinstance(value, bool) for value in collection_choices.values())
         ):
             raise ValidationError("Import collection choices are invalid.")
+        if (
+            context.kind != CampaignContext.Kind.PC
+            or character.context_id != context.pk
+        ):
+            collection_choices = {**collection_choices, "notes": False}
+
         imported_current = draft["fields"].pop("current_hp", before_current)
         imported_temporary = draft["fields"].pop("temporary_hp", before_temporary)
         cache.set(cache_key, draft, timeout=900)
@@ -2531,7 +2556,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         )
         from .api import _character_data
 
-        return _character_data(character)
+        return _character_data(character, context)
 
     @database_sync_to_async
     def _cah_cancel(self, content: dict[str, object]) -> None:

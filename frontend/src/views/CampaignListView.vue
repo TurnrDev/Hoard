@@ -12,7 +12,16 @@
     >
       {{ error }}
     </Message>
-    <ul class="list-unstyled row g-3">
+    <div
+      v-if="loading"
+      class="d-flex justify-content-center py-5"
+    >
+      <ProgressSpinner aria-label="Loading campaigns" />
+    </div>
+    <ul
+      v-else-if="contexts.length"
+      class="list-unstyled row g-3"
+    >
       <li
         v-for="context in contexts"
         :key="context.id"
@@ -33,7 +42,7 @@
       </li>
     </ul>
     <Message
-      v-if="!error && !contexts.length"
+      v-else-if="!error"
       severity="info"
     >
       You are not yet a member of a campaign.
@@ -44,13 +53,18 @@
 <script lang="ts">
 import { defineComponent } from "vue";
 import Message from "primevue/message";
+import ProgressSpinner from "primevue/progressspinner";
 import { getContexts, type CampaignContext } from "../api";
 import { contextPath } from "../context";
 
 export default defineComponent({
-  components: { Message },
+  components: { Message, ProgressSpinner },
   data() {
-    return { contexts: [] as CampaignContext[], error: "" };
+    return {
+      contexts: [] as CampaignContext[],
+      error: "",
+      loading: true,
+    };
   },
   async mounted(): Promise<void> {
     try {
@@ -63,7 +77,10 @@ export default defineComponent({
         await this.$router.replace(contextPath(target));
       }
     } catch (exception) {
-      this.error = String(exception);
+      this.error =
+        exception instanceof Error ? exception.message : "Unable to load campaigns.";
+    } finally {
+      this.loading = false;
     }
   },
   methods: {

@@ -1,4 +1,5 @@
 import time
+from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid7
 
@@ -14,9 +15,11 @@ from hoard.campaigns.consumers import ContextConsumer, UserConsumer
 from hoard.campaigns.models import (
     Campaign,
     CampaignContext,
+    CampaignInvitation,
     Character,
     CharacterClassLevel,
     CharacterLevelProgress,
+    CharacterNote,
 )
 from hoard.compendium.models import (
     CompendiumEntry,
@@ -287,6 +290,13 @@ class ContextSocketTests(TransactionTestCase):
             user=player,
             kind=CampaignContext.Kind.PC,
         )
+        CampaignInvitation.objects.create(
+            campaign=self.campaign,
+            created_by=self.context,
+            token_digest="a" * 64,
+            delivery_email="invited@example.com",
+            expires_at=timezone.now() + timedelta(days=1),
+        )
 
         message = {"type": "campaign.get", "request_id": request_id()}
         response = async_to_sync(self.socket_request)(
@@ -305,6 +315,109 @@ class ContextSocketTests(TransactionTestCase):
         self.assertEqual(members["socket-user"]["last_name"], "Smith")
         self.assertEqual(members["party-player"]["first_name"], "")
         self.assertEqual(members["party-player"]["last_name"], "")
+        self.assertEqual(response["data"]["invitations"], [])
+
+    def test_character_notes_are_private_to_the_owning_player_context(self) -> None:
+        player = get_user_model().objects.create_user(username="note-owner")
+        player_context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=player,
+            kind=CampaignContext.Kind.PC,
+        )
+        character = Character.objects.create(
+            campaign=self.campaign,
+            context=player_context,
+            name="Private notebook",
+            strength=10,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+            is_active=True,
+        )
+        note = CharacterNote.objects.create(
+            character=character,
+            title="Secret",
+            body="The game master must not receive this.",
+        )
+
+        player_response = async_to_sync(self.socket_request)(
+            player,
+            player_context.pk,
+            {"type": "campaign.get", "request_id": request_id()},
+        )
+        gm_response = async_to_sync(self.socket_request)(
+            self.user,
+            self.context.pk,
+            {"type": "campaign.get", "request_id": request_id()},
+        )
+        gm_update = async_to_sync(self.socket_request)(
+            self.user,
+            self.context.pk,
+            {
+                "type": "characters.notes.update",
+                "request_id": request_id(),
+                "character_id": character.pk,
+                "record_id": note.pk,
+                "fields": {"body": "Read by the game master."},
+            },
+        )
+
+        player_character = next(
+            row
+            for row in player_response["data"]["characters"]
+            if row["id"] == character.pk
+        )
+        gm_character = next(
+            row
+            for row in gm_response["data"]["characters"]
+            if row["id"] == character.pk
+        )
+        self.assertEqual(
+            player_character["notes"],
+            [
+                {
+                    "id": note.pk,
+                    "title": "Secret",
+                    "body": "The game master must not receive this.",
+                }
+            ],
+        )
+        self.assertEqual(gm_character["notes"], [])
+        self.assertEqual(gm_update["type"], "command.error")
+        note.refresh_from_db()
+        self.assertEqual(note.body, "The game master must not receive this.")
+
+    def test_gm_campaign_response_includes_invitations(self) -> None:
+        invitation = CampaignInvitation.objects.create(
+            campaign=self.campaign,
+            created_by=self.context,
+            token_digest="b" * 64,
+            delivery_email="invited@example.com",
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+
+        response = async_to_sync(self.socket_request)(
+            self.user,
+            self.context.pk,
+            {"type": "campaign.get", "request_id": request_id()},
+        )
+
+        self.assertEqual(response["type"], "query.result")
+        self.assertEqual(
+            response["data"]["invitations"],
+            [
+                {
+                    "id": invitation.pk,
+                    "email": "invited@example.com",
+                    "created_at": invitation.created_at.isoformat(),
+                    "expires_at": invitation.expires_at.isoformat(),
+                    "accepted_at": None,
+                    "status": "pending",
+                }
+            ],
+        )
 
     def test_context_socket_rejects_a_different_user(self) -> None:
         stranger = get_user_model().objects.create_user(username="stranger")

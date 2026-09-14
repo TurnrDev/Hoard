@@ -368,6 +368,7 @@ export type Campaign = CampaignSummary & {
   encounter: Encounter | null;
   members: CampaignMember[];
   characters: Character[];
+  invitations: CampaignInvitation[];
 };
 
 export type CompendiumSource = {

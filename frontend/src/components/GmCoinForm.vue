@@ -62,11 +62,11 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
+import { defineComponent, type PropType } from "vue";
 import Button from "primevue/button";
 import Message from "primevue/message";
 import Textarea from "primevue/textarea";
-import { createMoneyTransfer, getCharacters, type Character } from "../api";
+import { createMoneyTransfer, type Character } from "../api";
 import CoinAmountPicker from "./CoinAmountPicker.vue";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 export default defineComponent({
@@ -77,7 +77,10 @@ export default defineComponent({
     CoinAmountPicker,
     GmCharacterSelect,
   },
-  props: { contextId: { type: Number, required: true } },
+  props: {
+    contextId: { type: Number, required: true },
+    characters: { type: Array as PropType<Character[]>, required: true },
+  },
   emits: ["completed"],
   data() {
     return {
@@ -86,7 +89,6 @@ export default defineComponent({
       amounts: { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 } as Record<string, number>,
       description: "",
       error: "",
-      characters: [] as Character[],
     };
   },
   computed: {
@@ -108,10 +110,6 @@ export default defineComponent({
     hasAmounts(): boolean {
       return Object.keys(this.submittedAmounts).length > 0;
     },
-  },
-
-  async mounted(): Promise<void> {
-    this.characters = await getCharacters(this.contextId);
   },
   methods: {
     async submit(): Promise<void> {

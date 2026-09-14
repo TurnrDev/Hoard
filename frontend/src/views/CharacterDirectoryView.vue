@@ -38,7 +38,10 @@
       {{ campaign.incomplete_level_ups.map((row) => row.character_name).join(", ") }}
       still need to complete level {{ campaign.level }}.
     </Message>
-    <ul class="list-unstyled row g-4">
+    <ul
+      v-if="playerCharacters.length"
+      class="list-unstyled row g-4"
+    >
       <li
         v-for="character in playerCharacters"
         :key="character.id"
@@ -68,22 +71,29 @@
           </div>
           <footer class="d-flex flex-wrap gap-2 mt-3">
             <Button
+              v-if="ownIds.has(character.id)"
+              severity="primary"
+              :as="'router-link'"
+              :to="actingPath(character)"
+              :label="`Play as ${character.name}`"
+            />
+            <Button
+              v-else
               :as="'router-link'"
               :to="`/c/${campaignId}/characters/${character.id}`"
               label="View sheet"
               outlined
             />
-            <Button
-              v-if="ownIds.has(character.id)"
-              severity="primary"
-              :as="'router-link'"
-              :to="actingPath(character)"
-              label="Open profile"
-            ></Button>
           </footer>
         </article>
       </li>
     </ul>
+    <p
+      v-else-if="campaign"
+      class="border rounded-3 p-4 text-body-secondary"
+    >
+      No player characters are currently visible in this campaign.
+    </p>
     <section
       v-if="campaign?.is_game_master && hasNpcs"
       class="mt-5"
@@ -102,16 +112,18 @@
           :key="character.id"
         >
           <RouterLink
-            class="list-group-item list-group-item-action d-flex justify-content-between gap-3"
+            class="list-group-item list-group-item-action d-flex align-items-center gap-3"
             :to="`/c/${campaignId}/characters/${character.id}`"
           >
             <CharacterAvatar
               :character="character"
               size="rail"
             />
-            <span>{{ character.name }}</span>
-            <span class="text-body-secondary">
-              {{ character.race }} · {{ character.class }}
+            <span class="d-grid">
+              <strong>{{ character.name }}</strong>
+              <span class="text-body-secondary">
+                {{ character.race }} · {{ character.class }}
+              </span>
             </span>
           </RouterLink>
         </li>
@@ -126,13 +138,7 @@ import Message from "primevue/message";
 import { defineComponent } from "vue";
 import CharacterAvatar from "../components/CharacterAvatar.vue";
 import { formatGoldValue } from "../money";
-import {
-  getCampaign,
-  getCharacters,
-  getMyCharacters,
-  type Campaign,
-  type Character,
-} from "../api";
+import { getCampaign, type Campaign, type Character } from "../api";
 import { campaignRefreshRevision } from "../realtime";
 
 export default defineComponent({
@@ -171,16 +177,14 @@ export default defineComponent({
     formatGoldValue,
     async load(): Promise<void> {
       try {
-        const [nextCampaign, visible, own] = await Promise.all([
-          getCampaign(this.campaignId),
-          getCharacters(this.campaignId),
-          getMyCharacters(this.campaignId),
-        ]);
+        const nextCampaign = await getCampaign(this.campaignId);
+
         this.campaign = nextCampaign;
-        this.characters = visible;
+        this.characters = nextCampaign.characters;
         this.ownIds = new Set(
-          own
+          nextCampaign.characters
             .filter((character) => character.is_active && !character.is_archived)
+            .filter((character) => character.context_id === this.campaignId)
             .map((character) => character.id),
         );
       } catch (exception) {

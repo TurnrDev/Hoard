@@ -759,7 +759,15 @@ def _sheet_data(character: Character) -> dict[str, object]:
     }
 
 
-def _character_data(character: Character) -> dict[str, object]:
+def _character_data(
+    character: Character, viewing_context: CampaignContext | None = None
+) -> dict[str, object]:
+    notes_are_visible = (
+        viewing_context is not None
+        and viewing_context.kind == CampaignContext.Kind.PC
+        and character.context_id == viewing_context.pk
+    )
+
     return {
         "id": character.pk,
         "context_id": character.context_id,
@@ -804,10 +812,14 @@ def _character_data(character: Character) -> dict[str, object]:
             {"item_id": item.pk, "name": item.name, "quantity": quantity}
             for item, quantity in character.inventory.items()
         ],
-        "notes": [
-            {"id": note.pk, "title": note.title, "body": note.body}
-            for note in character.notes.all()
-        ],
+        "notes": (
+            [
+                {"id": note.pk, "title": note.title, "body": note.body}
+                for note in character.notes.all()
+            ]
+            if notes_are_visible
+            else []
+        ),
         "features": [
             {
                 "id": feature.pk,
@@ -1033,7 +1045,7 @@ def context_detail(request, context_id: int):
         "calendar": _calendar_data(context.campaign),
         "party_money": _party_money(context.campaign),
         "characters": [
-            _character_data(value) for value in _visible_characters(context)
+            _character_data(value, context) for value in _visible_characters(context)
         ],
     }
 
@@ -1070,7 +1082,9 @@ def calendar_adjust(request, context_id: int, payload: CalendarAdjustment):
 @contexts.get("/{context_id}/characters/")
 def character_list(request, context_id: int):
     context = _context_access(request, context_id)
-    return [_character_data(value) for value in _visible_characters(context)]
+    return [
+        _character_data(value, context) for value in _visible_characters(context)
+    ]
 
 
 @contexts.post("/{context_id}/characters/", response={201: dict})
@@ -1084,7 +1098,7 @@ def character_create(request, context_id: int, payload: CharacterCreate):
             campaign=context.campaign, is_active=True, **values
         )
         notify_campaign_changed(context.campaign_id)
-        return 201, _character_data(character)
+        return 201, _character_data(character, context)
     if CampaignContext.objects.filter(
         campaign=context.campaign,
         user=context.user,
@@ -1106,7 +1120,7 @@ def character_create(request, context_id: int, payload: CharacterCreate):
         )
         character.activate()
     notify_campaign_changed(context.campaign_id)
-    return 201, _character_data(character)
+    return 201, _character_data(character, pc_context)
 
 
 @contexts.get("/{context_id}/characters/{character_id}/")
@@ -1115,7 +1129,7 @@ def character_detail(request, context_id: int, character_id: int):
     character = _character(context, character_id)
     if not _visible_characters(context).filter(pk=character.pk).exists():
         raise HttpError(404, "Character not found.")
-    return _character_data(character)
+    return _character_data(character, context)
 
 
 @contexts.patch("/{context_id}/characters/{character_id}/")
@@ -1141,7 +1155,7 @@ def character_update(
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
     notify_campaign_changed(context.campaign_id)
-    return _character_data(character)
+    return _character_data(character, context)
 
 
 def _editable_sheet_character(context: CampaignContext, character_id: int) -> Character:
@@ -1149,6 +1163,26 @@ def _editable_sheet_character(context: CampaignContext, character_id: int) -> Ch
     if context.kind != CampaignContext.Kind.GM and not _is_owner(context, character):
         raise HttpError(403, "You may only edit your own character.")
     return character
+
+
+def notes_character(context: CampaignContext, character_id: int) -> Character:
+    """Return a character only when the acting player owns its private notes."""
+    character = _character(context, character_id)
+    if context.kind != CampaignContext.Kind.PC or character.context_id != context.pk:
+        raise HttpError(403, "Only the character's player may access their notes.")
+
+    return character
+
+
+def note_record(
+    context: CampaignContext, character_id: int, record_id: int
+) -> CharacterNote:
+    """Return a private note belonging to the acting player's character."""
+    return get_object_or_404(
+        CharacterNote,
+        pk=record_id,
+        character=notes_character(context, character_id),
+    )
 
 
 def _enabled_entry(campaign: Campaign, entry_id: int | None, kind: str | None = None):
@@ -1164,9 +1198,7 @@ def _enabled_entry(campaign: Campaign, entry_id: int | None, kind: str | None = 
 
 @contexts.post("/{context_id}/characters/{character_id}/notes/", response={201: dict})
 def note_create(request, context_id: int, character_id: int, payload: SheetRecord):
-    character = _editable_sheet_character(
-        _context_access(request, context_id), character_id
-    )
+    character = notes_character(_context_access(request, context_id), character_id)
     note = CharacterNote.objects.create(
         character=character, title=payload.title, body=payload.body
     )
@@ -1362,7 +1394,7 @@ def cast_spell(
         description=f"Cast {spell.name}",
         changes={"spell": {"id": spell.pk, "name": spell.name, "slot": slot}},
     )
-    return _character_data(character)
+    return _character_data(character, created_by)
 
 
 def take_rest(
@@ -1407,7 +1439,7 @@ def take_rest(
             }
         },
     )
-    return _character_data(character)
+    return _character_data(character, created_by)
 
 
 def set_inspiration(
@@ -1425,7 +1457,7 @@ def set_inspiration(
         description="Awarded inspiration" if available else "Spent inspiration",
         changes={"inspiration": {"available": available}},
     )
-    return _character_data(character)
+    return _character_data(character, created_by)
 
 
 @contexts.delete(
@@ -1470,7 +1502,7 @@ def note_update(
     request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
 ):
     context = _context_access(request, context_id)
-    note = _sheet_record(context, character_id, CharacterNote, record_id)
+    note = note_record(context, character_id, record_id)
     for field in ("title", "body"):
         if field in payload.model_fields_set:
             setattr(note, field, getattr(payload, field))
@@ -1482,9 +1514,7 @@ def note_update(
     "/{context_id}/characters/{character_id}/notes/{record_id}/", response={204: None}
 )
 def note_delete(request, context_id: int, character_id: int, record_id: int):
-    note = _sheet_record(
-        _context_access(request, context_id), character_id, CharacterNote, record_id
-    )
+    note = note_record(_context_access(request, context_id), character_id, record_id)
     note.delete()
     return 204, None
 
@@ -1600,7 +1630,7 @@ def character_archive(request, context_id: int, character_id: int):
         character.context.is_active = False
         character.context.save(update_fields=("is_active",))
     notify_campaign_changed(context.campaign_id)
-    return _character_data(character)
+    return _character_data(character, context)
 
 
 def _available_entries(campaign: Campaign, kind: str):
@@ -1786,7 +1816,11 @@ def cah_commit(request, context_id: int, payload: CahCommit):
             setattr(target, name, value)
         target.full_clean()
         target.save()
-        if import_collection("notes"):
+        notes_import_allowed = (
+            context.kind == CampaignContext.Kind.PC
+            and target.context_id == context.pk
+        )
+        if notes_import_allowed and import_collection("notes"):
             target.notes.all().delete()
             CharacterNote.objects.bulk_create(
                 [
@@ -1885,7 +1919,7 @@ def cah_commit(request, context_id: int, payload: CahCommit):
                 )
     cache.delete(key)
     notify_campaign_changed(context.campaign_id)
-    return status, _character_data(target)
+    return status, _character_data(target, context)
 
 
 def _editable_item(context: CampaignContext, item_id: int) -> CompendiumEntry:

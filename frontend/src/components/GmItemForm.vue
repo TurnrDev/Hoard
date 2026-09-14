@@ -76,12 +76,7 @@ import Button from "primevue/button";
 import InputNumber from "primevue/inputnumber";
 import Message from "primevue/message";
 import Textarea from "primevue/textarea";
-import {
-  createInventoryTransaction,
-  getCharacters,
-  type Character,
-  type Item,
-} from "../api";
+import { createInventoryTransaction, type Character, type Item } from "../api";
 import type { PickerCandidate } from "../itemPicker";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
@@ -97,6 +92,7 @@ export default defineComponent({
   },
   props: {
     contextId: { type: Number, required: true },
+    characters: { type: Array as PropType<Character[]>, required: true },
     items: { type: Array as PropType<Item[]>, required: true },
   },
   emits: ["completed"],
@@ -108,7 +104,6 @@ export default defineComponent({
       description: "",
       action: "give" as "give" | "take",
       error: "",
-      characters: [] as Character[],
     };
   },
   computed: {
@@ -133,9 +128,6 @@ export default defineComponent({
         this.itemId = undefined;
       }
     },
-  },
-  async mounted(): Promise<void> {
-    this.characters = await getCharacters(this.contextId);
   },
   methods: {
     async submit(): Promise<void> {

@@ -115,7 +115,10 @@
               </li>
             </ul>
             <h3 class="h4 mt-2">Invitations</h3>
-            <ul class="list-group">
+            <ul
+              v-if="invitations.length"
+              class="list-group"
+            >
               <li
                 v-for="invitation in invitations"
                 :key="invitation.id"
@@ -146,110 +149,143 @@
                 </div>
               </li>
             </ul>
-          </div>
-        </section>
-      </div>
-      <div class="col-12 col-xl-5">
-        <section
-          class="border rounded-3 p-3 p-md-4 mb-4"
-          aria-labelledby="campaign-tools-heading"
-        >
-          <header>
-            <h2
-              id="campaign-tools-heading"
-              class="h3"
+            <p
+              v-else
+              class="text-body-secondary mb-0"
             >
-              Campaign tools
-            </h2>
-          </header>
-          <div>
-            <p class="text-body-secondary">
-              Manage the campaign’s equipment in the dedicated compendium.
+              No invitations have been created.
             </p>
-            <Button
-              :as="'router-link'"
-              :to="`/c/${campaignId}/compendium`"
-              icon="mdi mdi-book-open-variant"
-              label="Open compendium"
-            />
           </div>
         </section>
       </div>
       <div class="col-12 col-xl-5">
-        <section
-          class="border rounded-3 p-3 p-md-4"
-          aria-labelledby="characters-heading"
-        >
-          <header>
-            <h2
-              id="characters-heading"
-              class="h3"
-            >
-              NPCs
-            </h2>
-          </header>
-          <div class="d-grid gap-3">
-            <form
-              class="row g-2"
-              @submit.prevent="createNpc"
-            >
-              <div class="col-12">
-                <InputText
-                  v-model="characterName"
-                  placeholder="NPC name"
-                  fluid
-                />
-              </div>
-              <div class="col-6">
-                <InputText
-                  v-model="characterRace"
-                  placeholder="Race"
-                  fluid
-                />
-              </div>
-              <div class="col-6">
-                <InputText
-                  v-model="characterClass"
-                  placeholder="Class"
-                  fluid
-                />
-              </div>
-              <div class="col-12">
-                <Button
-                  type="submit"
-                  label="Create NPC"
-                />
-              </div>
-            </form>
-            <ul class="list-group">
-              <li
-                v-for="character in characters"
-                :key="character.id"
-                class="list-group-item d-flex align-items-center justify-content-between gap-3"
+        <div class="d-grid gap-4">
+          <section
+            class="border rounded-3 p-3 p-md-4"
+            aria-labelledby="campaign-tools-heading"
+          >
+            <header>
+              <h2
+                id="campaign-tools-heading"
+                class="h3"
               >
-                <div>
-                  <strong>{{ character.name }}</strong>
-                  <span class="d-block small text-body-secondary">
-                    {{
-                      character.is_archived
-                        ? "Archived"
-                        : character.is_active
-                          ? "Active"
-                          : "Inactive"
-                    }}
-                  </span>
+                Campaign tools
+              </h2>
+            </header>
+            <div>
+              <p class="text-body-secondary">
+                Manage the campaign’s equipment in the dedicated compendium.
+              </p>
+              <Button
+                :as="'router-link'"
+                :to="`/c/${campaignId}/compendium`"
+                icon="mdi mdi-book-open-variant"
+                label="Open compendium"
+              />
+            </div>
+          </section>
+          <section
+            class="border rounded-3 p-3 p-md-4"
+            aria-labelledby="characters-heading"
+          >
+            <header>
+              <h2
+                id="characters-heading"
+                class="h3"
+              >
+                NPCs
+              </h2>
+            </header>
+            <div class="d-grid gap-3">
+              <form
+                class="row g-2"
+                @submit.prevent="createNpc"
+              >
+                <div class="col-12">
+                  <label
+                    class="form-label"
+                    for="npc-name"
+                  >
+                    Name
+                  </label>
+                  <InputText
+                    id="npc-name"
+                    v-model="characterName"
+                    fluid
+                  />
                 </div>
-                <Button
-                  v-if="!character.is_archived"
-                  icon="mdi mdi-archive"
-                  text
-                  :aria-label="`Archive ${character.name}`"
-                  @click="archive(character)"
-                />
-              </li>
-            </ul>
-          </div>
-        </section>
+                <div class="col-6">
+                  <label
+                    class="form-label"
+                    for="npc-race"
+                  >
+                    Ancestry
+                  </label>
+                  <InputText
+                    id="npc-race"
+                    v-model="characterRace"
+                    fluid
+                  />
+                </div>
+                <div class="col-6">
+                  <label
+                    class="form-label"
+                    for="npc-class"
+                  >
+                    Class
+                  </label>
+                  <InputText
+                    id="npc-class"
+                    v-model="characterClass"
+                    fluid
+                  />
+                </div>
+                <div class="col-12">
+                  <Button
+                    type="submit"
+                    label="Create NPC"
+                  />
+                </div>
+              </form>
+              <ul
+                v-if="characters.length"
+                class="list-group"
+              >
+                <li
+                  v-for="character in characters"
+                  :key="character.id"
+                  class="list-group-item d-flex align-items-center justify-content-between gap-3"
+                >
+                  <div>
+                    <strong>{{ character.name }}</strong>
+                    <span class="d-block small text-body-secondary">
+                      {{
+                        character.is_archived
+                          ? "Archived"
+                          : character.is_active
+                            ? "Active"
+                            : "Inactive"
+                      }}
+                    </span>
+                  </div>
+                  <Button
+                    v-if="!character.is_archived"
+                    icon="mdi mdi-archive"
+                    text
+                    :aria-label="`Archive ${character.name}`"
+                    @click="archive(character)"
+                  />
+                </li>
+              </ul>
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No NPCs have been created.
+              </p>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   </section>
@@ -264,10 +300,7 @@ import {
   archiveCharacter,
   createInvitation,
   createCharacter,
-  getCharacters,
   getCampaign,
-  getInvitations,
-  getMembers,
   removeMember,
   resendInvitation,
   revokeInvitation,
@@ -314,6 +347,13 @@ export default defineComponent({
   },
   methods: {
     displayIdentifier,
+    showSuccess(message: string): void {
+      this.$toast.add({
+        severity: "success",
+        summary: message,
+        life: 4_000,
+      });
+    },
     async load(): Promise<void> {
       try {
         const next = await getCampaign(this.campaignId);
@@ -322,11 +362,11 @@ export default defineComponent({
           return;
         }
         this.campaign = next;
-        [this.members, this.characters, this.invitations] = await Promise.all([
-          getMembers(this.campaignId),
-          getCharacters(this.campaignId),
-          getInvitations(this.campaignId),
-        ]);
+        this.members = next.members;
+        this.characters = next.characters.filter(
+          (character) => !character.is_player_character,
+        );
+        this.invitations = next.invitations;
       } catch (exception) {
         this.error =
           exception instanceof Error
@@ -353,6 +393,7 @@ export default defineComponent({
         });
         this.characterName = "";
         await this.load();
+        this.showSuccess("NPC created.");
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to create NPC.";
@@ -362,6 +403,7 @@ export default defineComponent({
       try {
         await archiveCharacter(this.campaignId, character.id);
         await this.load();
+        this.showSuccess(`${character.name} archived.`);
       } catch (exception) {
         this.error =
           exception instanceof Error
@@ -379,6 +421,7 @@ export default defineComponent({
         this.invitationEmail = "";
         this.invitationLink = invitation.link ?? "";
         await this.load();
+        this.showSuccess("Invitation created.");
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to invite player.";
@@ -387,13 +430,19 @@ export default defineComponent({
       }
     },
     async copyInvite(link: string): Promise<void> {
-      await navigator.clipboard.writeText(link);
+      try {
+        await navigator.clipboard.writeText(link);
+        this.showSuccess("Invitation link copied.");
+      } catch {
+        this.error = "Unable to copy the invitation link.";
+      }
     },
     async resend(invitation: CampaignInvitation): Promise<void> {
       try {
         const updated = await resendInvitation(this.campaignId, invitation.id);
         this.invitationLink = updated.link ?? "";
         await this.load();
+        this.showSuccess("Invitation resent.");
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to resend.";
@@ -403,6 +452,7 @@ export default defineComponent({
       try {
         await revokeInvitation(this.campaignId, invitation.id);
         await this.load();
+        this.showSuccess("Invitation revoked.");
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to revoke.";
@@ -412,6 +462,7 @@ export default defineComponent({
       try {
         await removeMember(this.campaignId, member.id);
         await this.load();
+        this.showSuccess(`${member.username} deactivated.`);
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to remove member.";

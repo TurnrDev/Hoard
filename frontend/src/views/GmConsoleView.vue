@@ -122,6 +122,7 @@
         <section class="col-12 col-xl-4">
           <GmItemForm
             :context-id="contextId"
+            :characters="characters"
             :items="items"
             @completed="completed"
           />
@@ -129,6 +130,7 @@
         <section class="col-12 col-xl-4">
           <GmCoinForm
             :context-id="contextId"
+            :characters="characters"
             @completed="completed"
           />
         </section>
@@ -157,7 +159,6 @@ import GmSharedXpForm from "../components/GmSharedXpForm.vue";
 import {
   approveCampaignLevel,
   getCampaign,
-  getCharacters,
   getItems,
   type Campaign,
   type Character,
@@ -215,9 +216,8 @@ export default defineComponent({
     },
     async load(): Promise<void> {
       try {
-        const [nextCampaign, nextCharacters, nextItems] = await Promise.all([
+        const [nextCampaign, nextItems] = await Promise.all([
           getCampaign(this.contextId),
-          getCharacters(this.contextId),
           getItems(this.contextId),
         ]);
         if (!nextCampaign.is_game_master) {
@@ -225,7 +225,7 @@ export default defineComponent({
           return;
         }
         this.campaign = nextCampaign;
-        this.characters = nextCharacters;
+        this.characters = nextCampaign.characters;
         this.items = nextItems;
       } catch (exception) {
         this.error =

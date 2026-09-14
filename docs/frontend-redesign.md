@@ -666,6 +666,57 @@ PartyRail is a live campaign roster with two explicit modes.
   and an unused rail selector was removed. The responsive shell still requires its
   custom three-column-to-stacked grid because the narrow, expandable global rail is
   application-specific chrome rather than an ordinary content grid.
+- 2026-09-14: rebuilt the profile's notes, features and feats, spells, and
+  companions into a shared native disclosure pattern. The sections now provide
+  consistent headings and counts, explicit empty states, readable multiline
+  content, spell level and preparation state, preserved casting actions, and
+  semantic companion statistics. The repeated interaction lives in
+  `SheetDisclosure` while the domain content remains in the existing profile
+  view; layout and spacing continue to use Bootstrap utilities.
+- 2026-09-14: completed the profile's remaining dense-data presentation.
+  Equipment and active effects now share a clearly headed, bordered section with
+  separate captioned native tables and explicit counts. Recent activity is now a
+  captioned, zebra-striped ledger table with scoped headers, machine-readable
+  dates, right-aligned tabular changes, and a keyboard-focusable responsive
+  overflow wrapper instead of unlabeled visual rows.
+- 2026-09-14: removed redundant roster request waterfalls from the GM item and
+  coin command panels. The GM desk now loads the campaign, roster, and item
+  catalogue once and passes the same roster snapshot to all three command forms,
+  keeping sibling controls consistent with the page's initial-query model and
+  realtime refresh cycle.
+- 2026-09-14: simplified the character directory around one clear action per
+  card: an owned character offers `Play as …`, while another visible character
+  offers `View sheet`. The directory now has an explicit empty state and a
+  consistently aligned GM-only NPC list. The directory, character profile, and
+  GM desk all reuse the characters returned by `campaign.get` rather than
+  issuing duplicate `characters.list` queries.
+- 2026-09-14: completed the campaign-management page payload and layout pass.
+  GM `campaign.get` responses now include invitation metadata, while player
+  responses explicitly receive an empty invitation collection. Management
+  therefore renders members, NPCs, and invitations from one initial query. The
+  NPC list now excludes player characters, its creation fields have visible
+  labels, empty invitation/NPC states are explicit, and campaign tools and NPC
+  management stack in one balanced right-hand column. Successful management
+  commands use the shared Toast feedback pattern.
+- 2026-09-14: completed the playable profile's descriptive character data.
+  Background, alignment, about text, personality traits, ideals, bonds, flaws,
+  languages, and grouped equipment proficiencies are now available in two
+  scan-friendly native disclosures. Empty fields are omitted inside each group
+  and explicit fallback text remains, keeping optional reference material
+  available without adding default-page cognitive load.
+- 2026-09-14: completed a public-entry loading and failure-state pass.
+  Campaign selection now distinguishes an in-progress query from a genuinely
+  empty membership list, the context redirect uses Bootstrap layout utilities
+  instead of legacy page classes and handles failed context queries explicitly,
+  and invitation registration provides username, email, and password-manager
+  autocomplete metadata.
+- 2026-09-14: made character notes manageable from the playable profile. Owners
+  can add or edit a titled multiline note inline, cancel an unfinished edit, and
+  remove a note through an explicit confirmation. Notes are private player data:
+  only the owning PC context receives or mutates them, including when the same
+  campaign is viewed by its game master. All note mutations use the existing
+  WebSocket sheet-record commands, refresh from shared campaign state, and
+  report successful outcomes through Toasts.
 
 ## Open questions
 

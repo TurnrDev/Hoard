@@ -506,7 +506,7 @@
             </p>
           </header>
 
-          <div class="border rounded-3 p-2 p-md-3">
+          <div class="border rounded-3 p-2">
             <div class="row g-0">
               <div
                 v-for="(column, columnIndex) in skillColumns"
@@ -515,9 +515,7 @@
               >
                 <section
                   class="h-100"
-                  :class="
-                    columnIndex === 0 ? 'pe-2 pe-md-3' : 'ps-2 ps-md-3 border-start'
-                  "
+                  :class="columnIndex === 0 ? 'pe-2' : 'ps-2 border-start'"
                 >
                   <div
                     v-for="(ability, abilityIndex) in column"
@@ -662,9 +660,17 @@
             </span>
           </div>
         </section>
-        <section class="mt-4">
-          <header class="d-flex align-items-center gap-2 flex-wrap">
-            Equipment &amp; active effects
+        <section
+          class="mt-4 border rounded-3 p-3 p-md-4"
+          aria-labelledby="equipment-heading"
+        >
+          <header class="d-flex align-items-center gap-2 flex-wrap mb-3">
+            <h2
+              id="equipment-heading"
+              class="h4 mb-0"
+            >
+              Equipment and effects
+            </h2>
             <span class="flex-grow-1" />
             <Button
               v-if="canEdit"
@@ -675,186 +681,528 @@
               Add effect
             </Button>
           </header>
-          <div>
-            <div
-              v-if="character.loadout.length"
-              class="table-responsive"
-            >
-              <table class="table table-striped mb-4">
-                <caption class="visually-hidden">Character equipment</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Item</th>
-                    <th scope="col">Slot</th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="item in character.loadout"
-                    :key="item.id"
-                  >
-                    <th scope="row">{{ item.name }}</th>
-                    <td>{{ displayName(item.slot) }}</td>
-                    <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div
-              v-if="character.effects.length"
-              class="table-responsive"
-            >
-              <table class="table table-striped">
-                <caption class="visually-hidden">Character active effects</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Effect</th>
-                    <th scope="col">Duration</th>
-                    <th scope="col">Modifiers and reminder</th>
-                    <th
-                      v-if="canEdit"
-                      scope="col"
+
+          <div class="d-grid gap-4">
+            <section v-if="character.loadout.length">
+              <h3 class="h6 mb-2">
+                Equipment
+                <span class="fw-normal text-body-secondary">
+                  {{ character.loadout.length }}
+                </span>
+              </h3>
+              <div
+                class="table-responsive"
+                tabindex="0"
+                aria-label="Character equipment table"
+              >
+                <table class="table table-striped mb-0">
+                  <caption class="visually-hidden">
+                    Equipment carried by {{ character.name }}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Item</th>
+                      <th scope="col">Slot</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="item in character.loadout"
+                      :key="item.id"
                     >
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="effect in character.effects"
-                    :key="effect.id"
-                  >
-                    <th scope="row">
-                      {{ effect.name }}
-                      <span v-if="effect.source">· {{ effect.source }}</span>
-                    </th>
-                    <td>
-                      {{ effect.duration || displayName(effect.expires_on_rest) }}
-                    </td>
-                    <td>
-                      {{
-                        effect.modifiers
-                          .map(
-                            (modifier) =>
-                              `${modifier.label || displayName(modifier.target)} ${signed(modifier.value)}`,
-                          )
-                          .join(" · ") ||
-                        effect.reminder ||
-                        "—"
-                      }}
-                    </td>
-                    <td v-if="canEdit">
-                      <Button
-                        size="small"
-                        text
-                        :aria-label="`${effect.enabled ? 'Deactivate' : 'Activate'} ${effect.name}`"
-                        @click="toggleEffect(effect)"
+                      <th scope="row">{{ item.name }}</th>
+                      <td>{{ displayName(item.slot) }}</td>
+                      <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section v-if="character.effects.length">
+              <h3 class="h6 mb-2">
+                Active effects
+                <span class="fw-normal text-body-secondary">
+                  {{ character.effects.length }}
+                </span>
+              </h3>
+              <div
+                class="table-responsive"
+                tabindex="0"
+                aria-label="Character active effects table"
+              >
+                <table class="table table-striped mb-0">
+                  <caption class="visually-hidden">
+                    Effects applied to {{ character.name }}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Effect</th>
+                      <th scope="col">Duration</th>
+                      <th scope="col">Modifiers and reminder</th>
+                      <th
+                        v-if="canEdit"
+                        scope="col"
+                        class="text-end"
                       >
-                        {{ effect.enabled ? "Deactivate" : "Activate" }}
-                      </Button>
-                      <Button
-                        size="small"
-                        text
-                        severity="danger"
-                        :aria-label="`Remove ${effect.name}`"
-                        @click="deleteEffect(effect)"
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="effect in character.effects"
+                      :key="effect.id"
+                    >
+                      <th scope="row">
+                        {{ effect.name }}
+                        <span
+                          v-if="effect.source"
+                          class="d-block small fw-normal text-body-secondary"
+                        >
+                          {{ effect.source }}
+                        </span>
+                      </th>
+                      <td>
+                        {{ effect.duration || displayName(effect.expires_on_rest) }}
+                      </td>
+                      <td>
+                        {{
+                          effect.modifiers
+                            .map(
+                              (modifier) =>
+                                `${modifier.label || displayName(modifier.target)} ${signed(modifier.value)}`,
+                            )
+                            .join(" · ") ||
+                          effect.reminder ||
+                          "—"
+                        }}
+                      </td>
+                      <td
+                        v-if="canEdit"
+                        class="text-end text-nowrap"
                       >
-                        Remove
-                      </Button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <span
+                        <Button
+                          size="small"
+                          text
+                          :aria-label="`${effect.enabled ? 'Deactivate' : 'Activate'} ${effect.name}`"
+                          @click="toggleEffect(effect)"
+                        >
+                          {{ effect.enabled ? "Deactivate" : "Activate" }}
+                        </Button>
+                        <Button
+                          size="small"
+                          text
+                          severity="danger"
+                          :aria-label="`Remove ${effect.name}`"
+                          @click="deleteEffect(effect)"
+                        >
+                          Remove
+                        </Button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <p
               v-if="!character.loadout.length && !character.effects.length"
-              class="text-body-secondary"
+              class="text-body-secondary mb-0"
             >
               No equipment is equipped and no effects are tracked.
-            </span>
+            </p>
           </div>
         </section>
-        <div class="mt-4">
-          <details>
-            <summary>Notes ({{ character.notes.length }})</summary>
-            <div>
-              <ul class="list-group list-group-flush">
+        <section
+          class="mt-4"
+          aria-labelledby="character-reference-heading"
+        >
+          <h2
+            id="character-reference-heading"
+            class="h4 mb-3"
+          >
+            Character details
+          </h2>
+
+          <div class="d-grid gap-2">
+            <SheetDisclosure title="Background and personality">
+              <dl
+                v-if="biographyFields.length"
+                class="row g-3 mb-0"
+              >
+                <div
+                  v-for="field in biographyFields"
+                  :key="field.label"
+                  :class="field.wide ? 'col-12' : 'col-12 col-md-6'"
+                >
+                  <dt class="small text-body-secondary mb-1">{{ field.label }}</dt>
+                  <dd class="mb-0 sheet-copy">{{ field.value }}</dd>
+                </div>
+              </dl>
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No background or personality details recorded.
+              </p>
+            </SheetDisclosure>
+
+            <SheetDisclosure title="Languages and proficiencies">
+              <div
+                v-if="character.languages.length || equipmentProficiencyGroups.length"
+                class="row g-4"
+              >
+                <section
+                  v-if="character.languages.length"
+                  class="col-12 col-md-6"
+                  aria-labelledby="languages-heading"
+                >
+                  <h3
+                    id="languages-heading"
+                    class="h6 mb-2"
+                  >
+                    Languages
+                  </h3>
+                  <p class="mb-0">{{ character.languages.join(", ") }}</p>
+                </section>
+                <section
+                  v-if="equipmentProficiencyGroups.length"
+                  class="col-12 col-md-6"
+                  aria-labelledby="equipment-proficiencies-heading"
+                >
+                  <h3
+                    id="equipment-proficiencies-heading"
+                    class="h6 mb-2"
+                  >
+                    Equipment proficiencies
+                  </h3>
+                  <dl class="mb-0">
+                    <div
+                      v-for="group in equipmentProficiencyGroups"
+                      :key="group.label"
+                      class="mb-2"
+                    >
+                      <dt class="small text-body-secondary">{{ group.label }}</dt>
+                      <dd class="mb-0">{{ group.values.join(", ") }}</dd>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No languages or equipment proficiencies recorded.
+              </p>
+            </SheetDisclosure>
+
+            <SheetDisclosure
+              v-if="ownCharacter"
+              title="Notes"
+              :count="character.notes.length"
+            >
+              <div
+                v-if="!noteEditorOpen"
+                class="d-flex justify-content-end mb-3"
+              >
+                <Button
+                  label="Add note"
+                  icon="mdi mdi-note-plus-outline"
+                  size="small"
+                  @click="startAddingNote"
+                />
+              </div>
+
+              <form
+                v-if="noteEditorOpen"
+                class="border rounded p-3 mb-3"
+                @submit.prevent="saveNote"
+              >
+                <h3 class="h6 mb-3">
+                  {{ editingNoteId === undefined ? "Add note" : "Edit note" }}
+                </h3>
+
+                <div class="mb-3">
+                  <label
+                    for="note-title"
+                    class="form-label"
+                  >
+                    Title
+                  </label>
+                  <InputText
+                    id="note-title"
+                    v-model="noteTitle"
+                    class="w-100"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label
+                    for="note-body"
+                    class="form-label"
+                  >
+                    Note
+                  </label>
+                  <Textarea
+                    id="note-body"
+                    v-model="noteBody"
+                    class="w-100"
+                    rows="5"
+                    auto-resize
+                  />
+                </div>
+
+                <div class="d-flex flex-wrap justify-content-end gap-2">
+                  <Button
+                    type="button"
+                    label="Cancel"
+                    severity="secondary"
+                    outlined
+                    :disabled="noteBusy"
+                    @click="closeNoteEditor"
+                  />
+                  <Button
+                    type="submit"
+                    :label="editingNoteId === undefined ? 'Add note' : 'Save note'"
+                    icon="mdi mdi-content-save-outline"
+                    :loading="noteBusy"
+                    :disabled="noteIsEmpty"
+                  />
+                </div>
+              </form>
+
+              <ul
+                v-if="character.notes.length"
+                class="list-group list-group-flush"
+              >
                 <li
                   v-for="note in character.notes"
                   :key="note.id"
+                  class="list-group-item bg-transparent px-0 py-3"
                 >
-                  <strong>{{ note.title || "Note" }}</strong>
-                  <span v-if="note.body">{{ note.body }}</span>
+                  <article>
+                    <header
+                      class="d-flex align-items-start justify-content-between gap-3 mb-2"
+                    >
+                      <h3 class="h6 mb-0">{{ note.title || "Note" }}</h3>
+                      <div
+                        v-if="ownCharacter"
+                        class="d-flex flex-shrink-0 gap-1"
+                      >
+                        <Button
+                          icon="mdi mdi-pencil-outline"
+                          severity="secondary"
+                          text
+                          rounded
+                          size="small"
+                          :aria-label="`Edit ${note.title || 'note'}`"
+                          :disabled="noteEditorOpen || noteBusy"
+                          @click="startEditingNote(note)"
+                        />
+                        <Button
+                          icon="mdi mdi-delete-outline"
+                          severity="danger"
+                          text
+                          rounded
+                          size="small"
+                          :aria-label="`Remove ${note.title || 'note'}`"
+                          :disabled="noteEditorOpen || noteBusy"
+                          @click="askToRemoveNote(note)"
+                        />
+                      </div>
+                    </header>
+                    <p
+                      v-if="note.body"
+                      class="mb-0 sheet-copy"
+                    >
+                      {{ note.body }}
+                    </p>
+                  </article>
                 </li>
               </ul>
-            </div>
-          </details>
-          <details>
-            <summary>Features &amp; feats ({{ character.features.length }})</summary>
-            <div>
-              <ul class="list-group list-group-flush">
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No notes recorded.
+              </p>
+            </SheetDisclosure>
+
+            <SheetDisclosure
+              title="Features and feats"
+              :count="character.features.length"
+            >
+              <ul
+                v-if="character.features.length"
+                class="list-group list-group-flush"
+              >
                 <li
                   v-for="feature in character.features"
                   :key="feature.id"
+                  class="list-group-item bg-transparent px-0 py-3"
                 >
-                  <strong>{{ feature.name }}</strong>
-                  <span v-if="feature.description || feature.notes">
-                    {{ feature.description || feature.notes }}
-                  </span>
+                  <article>
+                    <div class="d-flex align-items-start gap-2 flex-wrap mb-2">
+                      <h3 class="h6 mb-0">{{ feature.name }}</h3>
+                      <span class="small text-body-secondary">
+                        {{ displayName(feature.kind) }}
+                      </span>
+                    </div>
+                    <p
+                      v-if="feature.description"
+                      class="mb-2 sheet-copy"
+                    >
+                      {{ feature.description }}
+                    </p>
+                    <p
+                      v-if="feature.notes"
+                      class="small text-body-secondary mb-0 sheet-copy"
+                    >
+                      <strong>Notes:</strong>
+                      {{ feature.notes }}
+                    </p>
+                  </article>
                 </li>
               </ul>
-            </div>
-          </details>
-          <details>
-            <summary>Spells ({{ character.spells.length }})</summary>
-            <div>
-              <ul class="list-group list-group-flush">
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No features or feats recorded.
+              </p>
+            </SheetDisclosure>
+
+            <SheetDisclosure
+              title="Spells"
+              :count="character.spells.length"
+            >
+              <ul
+                v-if="character.spells.length"
+                class="list-group list-group-flush"
+              >
                 <li
                   v-for="spell in character.spells"
                   :key="spell.id"
+                  class="list-group-item bg-transparent px-0 py-3"
                 >
-                  <strong>{{ spell.name }} · level {{ spell.level }}</strong>
-                  <span v-if="spell.description || spell.notes">
-                    {{ spell.description || spell.notes }}
-                  </span>
-                  <Button
-                    v-if="canEdit"
-                    size="small"
-                    text
-                    :disabled="spell.level > 0 && !spell.prepared"
-                    :aria-label="`Record casting ${spell.name}`"
-                    @click="openSpellCast(spell)"
-                  >
-                    Cast
-                  </Button>
+                  <article class="d-flex align-items-start gap-3">
+                    <div class="flex-grow-1">
+                      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                        <h3 class="h6 mb-0">{{ spell.name }}</h3>
+                        <span class="small text-body-secondary">
+                          {{ spell.level === 0 ? "Cantrip" : `Level ${spell.level}` }}
+                        </span>
+                        <span
+                          v-if="spell.level > 0"
+                          class="small"
+                        >
+                          {{ spell.prepared ? "Prepared" : "Not prepared" }}
+                        </span>
+                      </div>
+                      <p
+                        v-if="spell.description"
+                        class="mb-2 sheet-copy"
+                      >
+                        {{ spell.description }}
+                      </p>
+                      <p
+                        v-if="spell.notes"
+                        class="small text-body-secondary mb-0 sheet-copy"
+                      >
+                        <strong>Notes:</strong>
+                        {{ spell.notes }}
+                      </p>
+                    </div>
+                    <Button
+                      v-if="canEdit"
+                      size="small"
+                      text
+                      class="flex-shrink-0"
+                      :disabled="spell.level > 0 && !spell.prepared"
+                      :aria-label="`Record casting ${spell.name}`"
+                      @click="openSpellCast(spell)"
+                    >
+                      Cast
+                    </Button>
+                  </article>
                 </li>
               </ul>
-            </div>
-          </details>
-          <details>
-            <summary>Companions ({{ character.companions.length }})</summary>
-            <div>
-              <ul class="list-group list-group-flush">
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No spells recorded.
+              </p>
+            </SheetDisclosure>
+
+            <SheetDisclosure
+              title="Companions"
+              :count="character.companions.length"
+            >
+              <ul
+                v-if="character.companions.length"
+                class="list-group list-group-flush"
+              >
                 <li
                   v-for="companion in character.companions"
                   :key="companion.id"
+                  class="list-group-item bg-transparent px-0 py-3"
                 >
-                  <strong>{{ companion.name }}</strong>
-                  <span>
-                    AC {{ companion.armor_class }} · HP {{ companion.current_hp }}/{{
-                      companion.max_hp
-                    }}
-                    · {{ companion.speed }}
-                  </span>
+                  <article>
+                    <h3 class="h6 mb-3">{{ companion.name }}</h3>
+                    <dl class="row g-2 mb-0">
+                      <div class="col-4 col-md-auto me-md-4">
+                        <dt class="small text-body-secondary">Armor class</dt>
+                        <dd class="fs-5 tabular-nums mb-0">
+                          {{ companion.armor_class }}
+                        </dd>
+                      </div>
+                      <div class="col-4 col-md-auto me-md-4">
+                        <dt class="small text-body-secondary">Hit points</dt>
+                        <dd class="fs-5 tabular-nums mb-0">
+                          {{ companion.current_hp }} / {{ companion.max_hp }}
+                        </dd>
+                      </div>
+                      <div class="col-4 col-md-auto">
+                        <dt class="small text-body-secondary">Speed</dt>
+                        <dd class="fs-5 tabular-nums mb-0">
+                          {{ companion.speed || "—" }}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p
+                      v-if="companion.notes"
+                      class="small text-body-secondary mt-3 mb-0 sheet-copy"
+                    >
+                      <strong>Notes:</strong>
+                      {{ companion.notes }}
+                    </p>
+                  </article>
                 </li>
               </ul>
-            </div>
-          </details>
-        </div>
-        <section class="mt-4 activity-card">
-          <header class="d-flex align-items-center gap-2 flex-wrap">
-            Recent activity
+              <p
+                v-else
+                class="text-body-secondary mb-0"
+              >
+                No companions recorded.
+              </p>
+            </SheetDisclosure>
+          </div>
+        </section>
+        <section
+          class="mt-4 border rounded-3 p-3 p-md-4"
+          aria-labelledby="activity-heading"
+        >
+          <header class="d-flex align-items-center gap-2 flex-wrap mb-3">
+            <h2
+              id="activity-heading"
+              class="h4 mb-0"
+            >
+              Recent activity
+            </h2>
             <span class="flex-grow-1" />
             <Button
               :as="'router-link'"
@@ -864,26 +1212,55 @@
               label="View full ledger"
             />
           </header>
-          <div>
-            <template v-if="activity.length">
-              <div
-                v-for="transaction in activity"
-                :key="`${transaction.ledger}-${transaction.id}`"
-                class="row py-2 border-bottom"
-              >
-                <span>{{ new Date(transaction.created_at).toLocaleString() }}</span>
-                <strong>{{ activityAmount(transaction) }}</strong>
-                <span>{{ activityDescription(transaction) }}</span>
-                <span>{{ transaction.actor ? `by ${transaction.actor}` : "—" }}</span>
-              </div>
-            </template>
-            <span
-              v-else
-              class="text-body-secondary"
-            >
-              No recent activity.
-            </span>
+
+          <div
+            v-if="activity.length"
+            class="table-responsive"
+            tabindex="0"
+            aria-label="Recent character activity table"
+          >
+            <table class="table table-striped mb-0">
+              <caption class="visually-hidden">
+                Recent activity for {{ character.name }}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th
+                    scope="col"
+                    class="text-end"
+                  >
+                    Change
+                  </th>
+                  <th scope="col">Details</th>
+                  <th scope="col">By</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="transaction in activity"
+                  :key="`${transaction.ledger}-${transaction.id}`"
+                >
+                  <td class="text-nowrap">
+                    <time :datetime="transaction.created_at">
+                      {{ formatActivityDate(transaction.created_at) }}
+                    </time>
+                  </td>
+                  <td class="text-end text-nowrap tabular-nums fw-semibold">
+                    {{ activityAmount(transaction) }}
+                  </td>
+                  <td>{{ activityDescription(transaction) }}</td>
+                  <td>{{ transaction.actor || "—" }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+          <p
+            v-else
+            class="text-body-secondary mb-0"
+          >
+            No recent activity.
+          </p>
         </section>
       </div>
     </div>
@@ -936,6 +1313,36 @@
         </footer>
       </section>
     </Dialog>
+    <Dialog
+      v-model:visible="noteRemoveOpen"
+      modal
+      header="Remove note?"
+      :style="{ width: 'min(30rem, calc(100vw - 2rem))' }"
+      @update:visible="closeNoteRemovalWhenClosed"
+    >
+      <p class="mb-4">
+        Remove
+        <strong>{{ noteToRemove?.title || "this note" }}</strong>
+        ? This cannot be undone.
+      </p>
+      <footer class="d-flex flex-wrap justify-content-end gap-2">
+        <Button
+          label="Cancel"
+          severity="secondary"
+          outlined
+          :disabled="noteBusy"
+          @click="closeNoteRemoval"
+        />
+        <Button
+          label="Remove note"
+          icon="mdi mdi-delete-outline"
+          severity="danger"
+          :loading="noteBusy"
+          @click="removeNote"
+        />
+      </footer>
+    </Dialog>
+
     <Dialog
       v-model:visible="moneyDialog"
       :style="{ width: 'min(39rem, calc(100vw - 2rem))' }"
@@ -1536,9 +1943,7 @@ import {
   createMoneyExchange,
   createMoneyTransfer,
   getCampaign,
-  getCharacters,
   getItems,
-  getMyCharacters,
   getTransactions,
   postHealth,
   removeCharacterCondition,
@@ -1550,6 +1955,7 @@ import {
   uploadCharacterPortrait,
   type Campaign,
   type Character,
+  type CharacterNote,
   type ConditionMutation,
   type Item,
   type LedgerTransaction,
@@ -1562,6 +1968,7 @@ import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import ConditionManager from "../components/ConditionManager.vue";
 import ItemPickerDialog from "../components/ItemPickerDialog.vue";
 import PlayerEncounterActions from "../components/PlayerEncounterActions.vue";
+import SheetDisclosure from "../components/SheetDisclosure.vue";
 import { displayCoin, displayIdentifier, formatCoinPouch } from "../display";
 import type { PickerCandidate } from "../itemPicker";
 import { formatGoldValue, formatMoneyValue } from "../money";
@@ -1641,6 +2048,7 @@ export default defineComponent({
     CharacterAvatar,
     ItemPickerDialog,
     PlayerEncounterActions,
+    SheetDisclosure,
   },
   data() {
     const levelUpError = this.$route.query.level_up_error;
@@ -1694,6 +2102,13 @@ export default defineComponent({
       effectReminder: "",
       effectTarget: "ac",
       effectValue: 0,
+      noteEditorOpen: false,
+      editingNoteId: undefined as number | undefined,
+      noteTitle: "",
+      noteBody: "",
+      noteBusy: false,
+      noteRemoveOpen: false,
+      noteToRemove: undefined as CharacterNote | undefined,
       denominations: denominationOptions,
       xpThresholds,
       effectTargets: effectTargetOptions,
@@ -1861,6 +2276,9 @@ export default defineComponent({
     canEdit(): boolean {
       return this.ownCharacter || Boolean(this.campaign?.is_game_master);
     },
+    noteIsEmpty(): boolean {
+      return !this.noteTitle.trim() && !this.noteBody.trim();
+    },
     canDamage(): boolean {
       const sheet = this.character?.sheet;
 
@@ -1979,6 +2397,37 @@ export default defineComponent({
         ),
       ];
     },
+    biographyFields(): Array<{ label: string; value: string; wide: boolean }> {
+      if (!this.character) {
+        return [];
+      }
+
+      return [
+        { label: "Background", value: this.character.background, wide: false },
+        { label: "Alignment", value: this.character.alignment, wide: false },
+        { label: "About", value: this.character.about, wide: true },
+        {
+          label: "Personality traits",
+          value: this.character.personality_traits,
+          wide: true,
+        },
+        { label: "Ideals", value: this.character.ideals, wide: true },
+        { label: "Bonds", value: this.character.bonds, wide: true },
+        { label: "Flaws", value: this.character.flaws, wide: true },
+      ].filter((field) => field.value.trim());
+    },
+    equipmentProficiencyGroups(): Array<{ label: string; values: string[] }> {
+      if (!this.character) {
+        return [];
+      }
+
+      return Object.entries(this.character.equipment_proficiencies)
+        .map(([group, values]) => ({
+          label: displayIdentifier(group),
+          values: values.map(displayIdentifier),
+        }))
+        .filter((group) => group.values.length);
+    },
   },
   watch: {
     refreshRevision(): void {
@@ -2009,6 +2458,12 @@ export default defineComponent({
     },
     formatXp(value: number): string {
       return `${value.toLocaleString()} XP`;
+    },
+    formatActivityDate(value: string): string {
+      return new Date(value).toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
     },
     activityAmount(transaction: LedgerTransaction): string {
       return transaction.entries
@@ -2208,22 +2663,120 @@ export default defineComponent({
           exception instanceof Error ? exception.message : "Unable to remove portrait.";
       }
     },
+    startAddingNote(): void {
+      this.editingNoteId = undefined;
+      this.noteTitle = "";
+      this.noteBody = "";
+      this.noteEditorOpen = true;
+    },
+    startEditingNote(note: CharacterNote): void {
+      this.editingNoteId = note.id;
+      this.noteTitle = note.title;
+      this.noteBody = note.body;
+      this.noteEditorOpen = true;
+    },
+    closeNoteEditor(): void {
+      if (this.noteBusy) {
+        return;
+      }
+
+      this.noteEditorOpen = false;
+      this.editingNoteId = undefined;
+      this.noteTitle = "";
+      this.noteBody = "";
+    },
+    async saveNote(): Promise<void> {
+      if (!this.character || this.noteIsEmpty || this.noteBusy) {
+        return;
+      }
+
+      const operation = this.editingNoteId === undefined ? "create" : "update";
+
+      this.noteBusy = true;
+
+      try {
+        await changeCharacterSheetRecord(
+          this.campaignId,
+          this.character.id,
+          "notes",
+          operation,
+          {
+            title: this.noteTitle.trim(),
+            body: this.noteBody.trim(),
+          },
+          this.editingNoteId,
+        );
+        this.noteEditorOpen = false;
+        this.editingNoteId = undefined;
+        this.noteTitle = "";
+        this.noteBody = "";
+        this.showSuccess(operation === "create" ? "Note added." : "Note updated.");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to save note.";
+      } finally {
+        this.noteBusy = false;
+      }
+    },
+    askToRemoveNote(note: CharacterNote): void {
+      this.noteToRemove = note;
+      this.noteRemoveOpen = true;
+    },
+    closeNoteRemoval(): void {
+      if (this.noteBusy) {
+        return;
+      }
+
+      this.noteRemoveOpen = false;
+      this.noteToRemove = undefined;
+    },
+    closeNoteRemovalWhenClosed(open: boolean): void {
+      if (!open) {
+        this.closeNoteRemoval();
+      }
+    },
+    async removeNote(): Promise<void> {
+      if (!this.character || !this.noteToRemove || this.noteBusy) {
+        return;
+      }
+
+      this.noteBusy = true;
+
+      try {
+        await changeCharacterSheetRecord(
+          this.campaignId,
+          this.character.id,
+          "notes",
+          "delete",
+          {},
+          this.noteToRemove.id,
+        );
+        this.noteRemoveOpen = false;
+        this.noteToRemove = undefined;
+        this.showSuccess("Note removed.");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to remove note.";
+      } finally {
+        this.noteBusy = false;
+      }
+    },
     async load(): Promise<void> {
       try {
-        const [nextCampaign, visible, own, nextItems, recent] = await Promise.all([
+        const [nextCampaign, nextItems, recent] = await Promise.all([
           getCampaign(this.campaignId),
-          getCharacters(this.campaignId),
-          getMyCharacters(this.campaignId),
           getItems(this.campaignId),
           getTransactions(this.campaignId, "all", 1, this.characterId),
         ]);
 
         this.campaign = nextCampaign;
-        this.characters = visible;
-        this.character =
-          visible.find((candidate) => candidate.id === this.characterId) ??
-          own.find((candidate) => candidate.id === this.characterId);
-        this.ownCharacter = own.some((candidate) => candidate.id === this.characterId);
+        this.characters = nextCampaign.characters;
+        this.character = nextCampaign.characters.find(
+          (candidate) => candidate.id === this.characterId,
+        );
+        this.ownCharacter = this.character?.context_id === this.campaignId;
 
         if (this.ownCharacter && this.character && !this.character.is_build_complete) {
           await this.$router.replace(
@@ -2661,6 +3214,11 @@ export default defineComponent({
 
 .skill-name {
   min-width: 0;
+}
+
+.sheet-copy {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 
 .ability-card-flip-enter-active,

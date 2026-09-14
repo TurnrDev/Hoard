@@ -48,6 +48,7 @@
                 <span class="fw-semibold">Username</span>
                 <InputText
                   v-model="username"
+                  autocomplete="username"
                   required
                   fluid
                 />
@@ -57,6 +58,7 @@
                 <InputText
                   v-model="email"
                   type="email"
+                  autocomplete="email"
                   required
                   fluid
                 />

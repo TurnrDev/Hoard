@@ -3,6 +3,7 @@ import { campaignRequest, ensureCampaignRealtime } from "./realtime";
 import {
   addCharacterToEncounter,
   addEncounterCombatant,
+  changeCharacterSheetRecord,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
@@ -95,6 +96,46 @@ describe("API client", () => {
       character_id: 2,
       given: { gp: 1 },
       received: { sp: 10 },
+    });
+  });
+
+  it("creates, updates, and removes character notes over the context socket", async () => {
+    await changeCharacterSheetRecord(8, 2, "notes", "create", {
+      title: "Plans",
+      body: "Visit the old mill.",
+    });
+    await changeCharacterSheetRecord(
+      8,
+      2,
+      "notes",
+      "update",
+      {
+        title: "New plans",
+        body: "Avoid the old mill.",
+      },
+      17,
+    );
+    await changeCharacterSheetRecord(8, 2, "notes", "delete", {}, 17);
+
+    expect(campaignRequest).toHaveBeenNthCalledWith(1, "characters.notes.create", {
+      character_id: 2,
+      fields: {
+        title: "Plans",
+        body: "Visit the old mill.",
+      },
+    });
+    expect(campaignRequest).toHaveBeenNthCalledWith(2, "characters.notes.update", {
+      character_id: 2,
+      fields: {
+        title: "New plans",
+        body: "Avoid the old mill.",
+      },
+      record_id: 17,
+    });
+    expect(campaignRequest).toHaveBeenNthCalledWith(3, "characters.notes.delete", {
+      character_id: 2,
+      fields: {},
+      record_id: 17,
     });
   });
 
