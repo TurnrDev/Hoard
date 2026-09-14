@@ -190,98 +190,52 @@
       <div class="col-12">
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5 g-3">
           <div class="col">
-            <section
-              class="border rounded-3 p-3 p-md-4 h-100"
-              :class="{ 'hp-card--interactive': canEdit }"
-              :role="canEdit ? 'button' : undefined"
-              :tabindex="canEdit ? 0 : undefined"
-              @click="canEdit && openHpAdjustment()"
-              @keydown.enter="canEdit && openHpAdjustment()"
-              @keydown.space.prevent="canEdit && openHpAdjustment()"
+            <CalculationCard
+              label="HP"
+              :summary="`${character.sheet.current_hp} / ${character.sheet.max_hp}`"
+              :calculation="character.sheet.hp_calculation"
+              :interactive="canEdit"
+              activation-label="Adjust hit points"
+              calculation-label="Maximum HP"
+              @activate="openHpAdjustment"
             >
-              <div>
-                <div class="d-flex align-items-start justify-content-between gap-2">
-                  <div class="text-uppercase fw-semibold small text-body-secondary">
-                    HP
-                  </div>
-                  <div
-                    v-if="canEdit"
-                    class="hp-actions"
-                    @click.stop
-                    @keydown.stop
-                  >
-                    <ActionMenu
-                      label="More HP options"
-                      :items="hpActionItems"
-                    />
-                  </div>
-                </div>
-                <div class="hp-summary mt-3">
-                  <div class="h4 hp-value">
-                    {{ character.sheet.current_hp }}
-                    <template v-if="character.sheet.temporary_hp">
-                      + {{ character.sheet.temporary_hp }}
-                    </template>
-                    <span aria-hidden="true">/</span>
-                    <CalculationBreakdown
-                      label="Maximum HP"
-                      :calculation="character.sheet.hp_calculation"
-                      :activator-label="String(character.sheet.max_hp)"
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
+              <template #actions>
+                <ActionMenu
+                  v-if="canEdit"
+                  label="More HP options"
+                  :items="hpActionItems"
+                />
+              </template>
+              <template #summary>
+                {{ character.sheet.current_hp }}
+                <template v-if="character.sheet.temporary_hp">
+                  + {{ character.sheet.temporary_hp }}
+                </template>
+                <span aria-hidden="true">/</span>
+                {{ character.sheet.max_hp }}
+              </template>
+            </CalculationCard>
           </div>
           <div class="col">
-            <section class="border rounded-3 p-3 p-md-4 h-100">
-              <div>
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Armor class
-                </div>
-                <div class="h4 mt-3">
-                  <CalculationBreakdown
-                    label="Armor class"
-                    :calculation="character.sheet.armor_class_calculation"
-                    :activator-label="
-                      String(character.sheet.armor_class_calculation.value)
-                    "
-                  />
-                </div>
-              </div>
-            </section>
+            <CalculationCard
+              label="Armor class"
+              :summary="String(character.sheet.armor_class_calculation.value)"
+              :calculation="character.sheet.armor_class_calculation"
+            />
           </div>
           <div class="col">
-            <section class="border rounded-3 p-3 p-md-4 h-100">
-              <div>
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Initiative bonus
-                </div>
-                <div class="h4">
-                  <CalculationBreakdown
-                    label="Initiative bonus"
-                    :calculation="character.sheet.initiative"
-                    :activator-label="signed(character.sheet.initiative.value)"
-                  />
-                </div>
-              </div>
-            </section>
+            <CalculationCard
+              label="Initiative bonus"
+              :summary="signed(character.sheet.initiative.value)"
+              :calculation="character.sheet.initiative"
+            />
           </div>
           <div class="col">
-            <section class="border rounded-3 p-3 p-md-4 h-100">
-              <div>
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Proficiency bonus
-                </div>
-                <div class="h4">
-                  <CalculationBreakdown
-                    label="Proficiency bonus"
-                    :calculation="character.sheet.proficiency_bonus_calculation"
-                    :activator-label="signed(character.sheet.proficiency_bonus)"
-                  />
-                </div>
-              </div>
-            </section>
+            <CalculationCard
+              label="Proficiency bonus"
+              :summary="signed(character.sheet.proficiency_bonus)"
+              :calculation="character.sheet.proficiency_bonus_calculation"
+            />
           </div>
           <div class="col">
             <section class="border rounded-3 p-3 p-md-4 h-100">
@@ -1987,6 +1941,7 @@ import { exchangedCoinAmount } from "../coinExchange";
 import { readCoinDisplayMode, storeCoinDisplayMode } from "../coinDisplayPreference";
 import ActionMenu from "../components/ActionMenu.vue";
 import CalculationBreakdown from "../components/CalculationBreakdown.vue";
+import CalculationCard from "../components/CalculationCard.vue";
 import CharacterAvatar from "../components/CharacterAvatar.vue";
 import CoinAmountPicker from "../components/CoinAmountPicker.vue";
 import ConditionManager from "../components/ConditionManager.vue";
@@ -2062,6 +2017,7 @@ export default defineComponent({
   components: {
     ActionMenu,
     Button,
+    CalculationCard,
     Dialog,
     InputNumber,
     InputText,

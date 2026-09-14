@@ -260,6 +260,10 @@ Do not expand already-clear expressions merely for the sake of verbosity.
   obvious with a high-contrast visible indicator.
 - Preserve readable type and layouts when users increase text size or apply WCAG text
   spacing overrides; avoid tight tracking and text conveyed only through colour.
+- Present derived statistic cards with their frequently used value on the front and
+  a labelled rotate action that reveals the calculation on the reverse. Reuse the
+  shared calculation-card treatment, provide a clear way back to the summary, and
+  disable the rotation animation when reduced motion is requested.
 - Use PrimeVue 4's locally imported `InputNumber` for numeric entry. Use horizontal
   minus/plus buttons when a field has room for side controls and vertical buttons
   for compact grids or table cells; set meaningful `min`, `max`, `step`, and
