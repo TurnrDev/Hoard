@@ -764,6 +764,10 @@ PartyRail is a live campaign roster with two explicit modes.
   derived statistics. HP, armor class, initiative, and proficiency now show only
   their play-facing values on the front and reveal their full calculation on a
   reduced-motion-safe reverse face, matching the established ability-card pattern.
+- 2026-09-15: changed route views to native Vue Router lazy imports. The public
+  entry, player profile, builder, GM desk, ledger, Compendium, and management
+  screens now load on demand, reducing the initial download for phone users while
+  preserving the existing routes and component boundaries.
 
 ## Open questions
 

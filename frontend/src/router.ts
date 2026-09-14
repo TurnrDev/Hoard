@@ -1,49 +1,66 @@
 import { createRouter, createWebHistory } from "vue-router";
-import CampaignListView from "./views/CampaignListView.vue";
-import CampaignRedirectView from "./views/CampaignRedirectView.vue";
-import CharacterDirectoryView from "./views/CharacterDirectoryView.vue";
-import CharacterProfileView from "./views/CharacterProfileView.vue";
-import CompendiumView from "./views/CompendiumView.vue";
-import GmConsoleView from "./views/GmConsoleView.vue";
-import LedgerView from "./views/LedgerView.vue";
-import LoginView from "./views/LoginView.vue";
-import InviteView from "./views/InviteView.vue";
-import CharacterBuilderView from "./views/CharacterBuilderView.vue";
-import CharacterLevelUpView from "./views/CharacterLevelUpView.vue";
-import ManageCampaignView from "./views/ManageCampaignView.vue";
 import { getSession, isUnauthenticatedError } from "./api";
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/login", component: LoginView },
-    { path: "/invites/:token", component: InviteView },
-    { path: "/", component: CampaignListView },
-    { path: "/c/:id", component: CampaignRedirectView, props: true },
-    { path: "/c/:id/gm", component: GmConsoleView, props: true },
+    {
+      path: "/login",
+      component: () => import("./views/LoginView.vue"),
+    },
+    {
+      path: "/invites/:token",
+      component: () => import("./views/InviteView.vue"),
+    },
+    {
+      path: "/",
+      component: () => import("./views/CampaignListView.vue"),
+    },
+    {
+      path: "/c/:id",
+      component: () => import("./views/CampaignRedirectView.vue"),
+      props: true,
+    },
+    {
+      path: "/c/:id/gm",
+      component: () => import("./views/GmConsoleView.vue"),
+      props: true,
+    },
     {
       path: "/c/:id/characters",
-      component: CharacterDirectoryView,
+      component: () => import("./views/CharacterDirectoryView.vue"),
       props: true,
     },
     {
       path: "/c/:id/characters/:characterId",
-      component: CharacterProfileView,
+      component: () => import("./views/CharacterProfileView.vue"),
       props: true,
     },
     {
       path: "/c/:id/characters/:characterId/build",
-      component: CharacterBuilderView,
+      component: () => import("./views/CharacterBuilderView.vue"),
       props: true,
     },
     {
       path: "/c/:id/characters/:characterId/level-up",
-      component: CharacterLevelUpView,
+      component: () => import("./views/CharacterLevelUpView.vue"),
       props: true,
     },
-    { path: "/c/:id/compendium", component: CompendiumView, props: true },
-    { path: "/c/:id/ledger", component: LedgerView, props: true },
-    { path: "/c/:id/manage", component: ManageCampaignView, props: true },
+    {
+      path: "/c/:id/compendium",
+      component: () => import("./views/CompendiumView.vue"),
+      props: true,
+    },
+    {
+      path: "/c/:id/ledger",
+      component: () => import("./views/LedgerView.vue"),
+      props: true,
+    },
+    {
+      path: "/c/:id/manage",
+      component: () => import("./views/ManageCampaignView.vue"),
+      props: true,
+    },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
 });
