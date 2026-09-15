@@ -34,23 +34,6 @@ class CharacterFeature(models.Model):
         ordering = ("name", "pk")
 
 
-class CharacterSpell(models.Model):
-    character = models.ForeignKey(
-        "campaigns.Character", on_delete=models.CASCADE, related_name="spells"
-    )
-    catalogue_entry = models.ForeignKey(
-        "compendium.CompendiumEntry", null=True, blank=True, on_delete=models.SET_NULL
-    )
-    name = models.CharField(max_length=200)
-    level = models.PositiveSmallIntegerField(default=0)
-    description = models.TextField(blank=True)
-    notes = models.TextField(blank=True)
-    prepared = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ("level", "name", "pk")
-
-
 class CharacterLoadout(models.Model):
     class Slot(models.TextChoices):
         ARMOR = "armor", "Armor"

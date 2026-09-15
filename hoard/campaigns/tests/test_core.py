@@ -10,10 +10,13 @@ from hoard.campaigns.models import (
     Character,
     CharacterClassLevel,
     CharacterEffect,
-    CharacterSpell,
 )
 from hoard.campaigns.services.cah import parse_cah
-from hoard.compendium.models import CompendiumEntry
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
+)
 
 
 class CoreModelTests(TestCase):
@@ -145,9 +148,20 @@ class CoreModelTests(TestCase):
             CharacterClassLevel.objects.create(
                 character=character, level=level, class_name="Wizard"
             )
-        spell = CharacterSpell.objects.create(
-            character=character, name="Shield", level=1
+        repository = CompendiumRepository.objects.create(
+            identifier="test-spells", name="Test spells"
         )
+        source = CompendiumSource.objects.create(
+            repository=repository, identifier="5e", name="5e"
+        )
+        spell = CompendiumEntry.objects.create(
+            source=source,
+            kind=CompendiumEntry.Kind.SPELL,
+            source_identifier="shield",
+            name="Shield",
+            data={"spell": {"level": 1}},
+        )
+        character.spells.add(spell)
         character.spell_slot_current = {"1": 2, "2": 2}
         character.save(update_fields=("spell_slot_current",))
 

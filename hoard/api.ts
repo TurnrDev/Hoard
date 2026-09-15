@@ -95,6 +95,13 @@ export type SpellSlotPool = {
   current: number;
 };
 
+export type SpellcastingClass = {
+  name: string;
+  ability: string;
+  spell_attack: number;
+  spell_save_dc: number;
+};
+
 export type CharacterAbility = {
   score: number;
   raw: number;
@@ -132,6 +139,7 @@ export type CharacterSheet = {
   armor_class_calculation: Calculation;
   speed: string;
   spell_slot_pools: Record<string, SpellSlotPool>;
+  spellcasting_classes: SpellcastingClass[];
   spell_attack: number;
   spell_save_dc: number;
   initiative: Calculation;
@@ -167,10 +175,17 @@ export type CharacterSpell = {
   id: number;
   name: string;
   level: number;
+  school: string;
+  casting_time: string;
+  range: string;
+  target: string;
+  components: string;
+  materials: string;
+  duration: string;
+  concentration: boolean;
+  ritual: boolean;
+  classes: string[];
   description: string;
-  notes: string;
-  prepared: boolean;
-  catalogue_entry_id: number | null;
 };
 
 export type CharacterLoadoutItem = {
@@ -1236,6 +1251,51 @@ export function searchCompendiumEntries(
   return contextRequest<CompendiumSearchEntry[]>(contextId, "compendium.search", {
     kind,
     query,
+  });
+}
+
+export type SpellCard = {
+  name: string;
+  level: number;
+  school: string;
+  casting_time: string;
+  range: string;
+  target: string;
+  components: string;
+  materials: string;
+  duration: string;
+  concentration: boolean;
+  ritual: boolean;
+  classes: string[];
+  description: string;
+};
+
+export function createCompendiumSpell(
+  contextId: number,
+  spell: SpellCard,
+): Promise<{ id: number } & SpellCard> {
+  return contextRequest(contextId, "compendium.spells.create", { spell });
+}
+
+export function cloneCompendiumSpell(
+  contextId: number,
+  spellId: number,
+  spell: SpellCard,
+): Promise<{ id: number } & SpellCard> {
+  return contextRequest(contextId, "compendium.spells.clone", {
+    spell_id: spellId,
+    spell,
+  });
+}
+
+export function updateCompendiumSpell(
+  contextId: number,
+  spellId: number,
+  spell: SpellCard,
+): Promise<{ id: number } & SpellCard> {
+  return contextRequest(contextId, "compendium.spells.update", {
+    spell_id: spellId,
+    spell,
   });
 }
 

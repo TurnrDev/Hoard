@@ -36,7 +36,6 @@ from .sheet import (
     CharacterFeature,
     CharacterLoadout,
     CharacterNote,
-    CharacterSpell,
 )
 
 __all__ = [
@@ -59,7 +58,6 @@ __all__ = [
     "CharacterFeature",
     "CharacterLoadout",
     "CharacterNote",
-    "CharacterSpell",
     "CompendiumEntry",
     "ExperienceAccount",
     "ExperienceEntry",

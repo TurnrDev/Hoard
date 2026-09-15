@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from collections import defaultdict
 from datetime import timedelta
@@ -39,7 +40,6 @@ from .models import (
     CharacterHistory,
     CharacterLoadout,
     CharacterNote,
-    CharacterSpell,
     ExperienceTransaction,
     InventoryEntry,
     InventoryTransaction,
@@ -191,6 +191,22 @@ class SheetRecord(Schema):
     reminder: str = ""
     expires_on_rest: Literal["manual", "short", "long"] = "manual"
     modifiers: list[dict[str, object]] = []
+
+
+class SpellCard(Schema):
+    name: str = ""
+    level: int = 0
+    school: str = ""
+    casting_time: str = ""
+    range: str = ""
+    target: str = ""
+    components: str = ""
+    materials: str = ""
+    duration: str = ""
+    concentration: bool = False
+    ritual: bool = False
+    classes: list[str] = []
+    description: str = ""
 
 
 api = NinjaAPI(title="Hoard API", version="2.0.0", auth=django_auth)
@@ -360,6 +376,98 @@ def slot_pools(character: Character) -> dict[str, dict[str, int]]:
         }
         for key in keys
     }
+
+
+def spellcasting_classes(character: Character) -> list[dict[str, object]]:
+    """Return each class that supplies this character's spellcasting ability."""
+    class_entries: dict[str, CompendiumEntry] = {}
+
+    for level in character.class_levels.select_related("class_entry"):
+        if level.class_entry is not None:
+            class_entries[level.class_name.lower()] = level.class_entry
+
+    classes = []
+    for class_name, entry in class_entries.items():
+        data = entry.data if isinstance(entry.data, dict) else {}
+        ability = data.get("spellcastingAbility")
+        spell_slots = data.get("spellSlots")
+        spells = data.get("spells")
+
+        if not isinstance(ability, str) or not ability or not (spell_slots or spells):
+            continue
+
+        ability_name = ability.lower()
+        if ability_name not in ABILITIES:
+            continue
+
+        modifier = character.ability_modifier(ability_name)
+        attack = character.proficiency_bonus + modifier + effect_total(
+            character, "spell_attack"
+        )
+        save_dc = 8 + character.proficiency_bonus + modifier + effect_total(
+            character, "spell_dc"
+        )
+        classes.append(
+            {
+                "name": entry.name,
+                "ability": ability_name,
+                "spell_attack": attack,
+                "spell_save_dc": save_dc,
+            }
+        )
+
+    return classes
+
+
+def spell_card_data(data: object) -> dict[str, object]:
+    """Read canonical spell-card data from an entry or a CAH spell record."""
+    source = data if isinstance(data, dict) else {}
+    card = source.get("spell")
+    values = card if isinstance(card, dict) else source
+    aliases = {
+        "casting_time": ("casting_time", "castingTime"),
+        "range": ("range",),
+        "target": ("target",),
+        "components": ("components",),
+        "materials": ("materials", "material"),
+        "duration": ("duration",),
+        "school": ("school",),
+        "classes": ("classes",),
+        "description": ("description",),
+        "concentration": ("concentration",),
+        "ritual": ("ritual",),
+        "level": ("level",),
+    }
+    result: dict[str, object] = {}
+    for field, names in aliases.items():
+        value = next((values[name] for name in names if name in values), None)
+        if value is not None:
+            result[field] = value
+    return result
+
+
+def spell_entry_data(entry: CompendiumEntry) -> dict[str, object]:
+    card = spell_card_data(entry.data)
+    return {"name": entry.name, "description": entry.description, **card}
+
+
+def custom_spell_entry(
+    context: CampaignContext, card: SpellCard, source_identifier: str | None = None
+) -> CompendiumEntry:
+    source = _custom_source(context.campaign)
+    name = card.name.strip()
+    entry = CompendiumEntry(
+        source=source,
+        kind=CompendiumEntry.Kind.SPELL,
+        source_identifier=source_identifier or f"custom:spell:{secrets.token_urlsafe(12)}",
+        name=name,
+        description=card.description.strip(),
+        data={"spell": card.model_dump(exclude={"name", "description"})},
+        created_by=context,
+    )
+    entry.full_clean()
+    entry.save()
+    return entry
 
 
 def effect_total(character: Character, target: str) -> int:
@@ -652,6 +760,7 @@ def _sheet_data(character: Character) -> dict[str, object]:
         },
         "speed": character.speed,
         "spell_slot_pools": pools,
+        "spellcasting_classes": spellcasting_classes(character),
         "spell_attack": character.proficiency_bonus
         + character.ability_modifier("intelligence")
         + effect_total(character, "spell_attack"),
@@ -836,16 +945,8 @@ def _character_data(
             for feature in character.features.select_related("catalogue_entry").all()
         ],
         "spells": [
-            {
-                "id": spell.pk,
-                "name": spell.name,
-                "level": spell.level,
-                "description": spell.description,
-                "notes": spell.notes,
-                "prepared": spell.prepared,
-                "catalogue_entry_id": spell.catalogue_entry_id,
-            }
-            for spell in character.spells.select_related("catalogue_entry").all()
+            {"id": spell.pk, **spell_entry_data(spell)}
+            for spell in character.spells.filter(kind="spell").all()
         ],
         "loadout": [
             {
@@ -1228,16 +1329,10 @@ def spell_create(request, context_id: int, character_id: int, payload: SheetReco
     context = _context_access(request, context_id)
     character = _editable_sheet_character(context, character_id)
     entry = _enabled_entry(context.campaign, payload.catalogue_entry_id, "spell")
-    spell = CharacterSpell.objects.create(
-        character=character,
-        catalogue_entry=entry,
-        name=payload.name or (entry.name if entry else ""),
-        level=payload.level,
-        description=payload.description,
-        notes=payload.notes,
-        prepared=payload.prepared,
-    )
-    return 201, {"id": spell.pk}
+    if entry is None:
+        raise HttpError(422, "Choose a spell from the compendium.")
+    character.spells.add(entry)
+    return 201, {"id": entry.pk}
 
 
 @contexts.post("/{context_id}/characters/{character_id}/loadout/", response={201: dict})
@@ -1366,15 +1461,14 @@ def cast_spell(
     *,
     created_by: CampaignContext,
 ) -> dict[str, object]:
-    spell = get_object_or_404(CharacterSpell, pk=spell_id, character=character)
-    if spell.level and not spell.prepared:
-        raise HttpError(422, "Prepare this spell before casting it.")
-    if spell.level == 0:
+    spell = get_object_or_404(character.spells, pk=spell_id, kind="spell")
+    level = int(spell_entry_data(spell).get("level", 0))
+    if level == 0:
         if slot is not None:
             raise HttpError(422, "Cantrips do not use spell slots.")
     else:
         key = slot_key(slot) if slot is not None else None
-        if key is None or key.startswith("pact-") or int(key) < spell.level:
+        if key is None or key.startswith("pact-") or int(key) < level:
             raise HttpError(
                 422, "Choose an available slot at the spell's level or higher."
             )
@@ -1549,30 +1643,14 @@ def feature_delete(request, context_id: int, character_id: int, record_id: int):
     return 204, None
 
 
-@contexts.patch("/{context_id}/characters/{character_id}/spells/{record_id}/")
-def spell_update(
-    request, context_id: int, character_id: int, record_id: int, payload: SheetRecord
-):
-    context = _context_access(request, context_id)
-    spell = _sheet_record(context, character_id, CharacterSpell, record_id)
-    if "catalogue_entry_id" in payload.model_fields_set:
-        spell.catalogue_entry = _enabled_entry(
-            context.campaign, payload.catalogue_entry_id, "spell"
-        )
-    for field in ("name", "level", "description", "notes", "prepared"):
-        if field in payload.model_fields_set:
-            setattr(spell, field, getattr(payload, field))
-    spell.save()
-    return {"id": spell.pk}
-
-
 @contexts.delete(
     "/{context_id}/characters/{character_id}/spells/{record_id}/", response={204: None}
 )
 def spell_delete(request, context_id: int, character_id: int, record_id: int):
-    _sheet_record(
-        _context_access(request, context_id), character_id, CharacterSpell, record_id
-    ).delete()
+    context = _context_access(request, context_id)
+    character = _editable_sheet_character(context, character_id)
+    spell = get_object_or_404(character.spells, pk=record_id, kind="spell")
+    character.spells.remove(spell)
     return 204, None
 
 
@@ -1666,8 +1744,16 @@ def _import_entry_index(campaign: Campaign):
     ).only("id", "kind", "source_identifier", "name"):
         if entry.source_identifier:
             identifiers[(entry.kind, entry.source_identifier)].append(entry.pk)
-        names[(entry.kind, entry.name.casefold())].append(entry.pk)
+        casefolded_name = entry.name.casefold()
+        names[(entry.kind, casefolded_name)].append(entry.pk)
+        normalised_name = normalised_entry_name(entry.name)
+        if normalised_name != casefolded_name:
+            names[(entry.kind, normalised_name)].append(entry.pk)
     return identifiers, names
+
+
+def normalised_entry_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.casefold())
 
 
 def _match_import_entry(
@@ -1683,6 +1769,9 @@ def _match_import_entry(
         if len(matched) == 1:
             return matched[0]
     matched = names.get((kind, str(row["name"]).casefold()), [])
+    if len(matched) == 1:
+        return matched[0]
+    matched = names.get((kind, normalised_entry_name(str(row["name"]))), [])
     return matched[0] if len(matched) == 1 else None
 
 
@@ -1844,19 +1933,14 @@ def cah_commit(request, context_id: int, payload: CahCommit):
                     catalogue_entry_id=entry_id,
                 )
         if import_collection("spells"):
-            target.spells.all().delete()
+            target.spells.clear()
             for row in draft["collections"]["spells"]:
                 entry_id = _match_import_entry(
                     context.campaign, {**row, "kind": "spell"}, entry_index
                 )
-                CharacterSpell.objects.create(
-                    character=target,
-                    name=row["name"],
-                    level=row["level"],
-                    description=row["description"],
-                    notes=row["notes"],
-                    catalogue_entry_id=entry_id,
-                )
+                if entry_id is None:
+                    raise HttpError(422, f"Resolve {row['name']} in the compendium.")
+                target.spells.add(entry_id)
         if import_collection("companions"):
             target.companions.all().delete()
             for row in draft["collections"]["companions"]:

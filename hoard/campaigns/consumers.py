@@ -493,7 +493,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.features.update": self._sheet_change,
             "characters.features.delete": self._sheet_change,
             "characters.spells.create": self._sheet_change,
-            "characters.spells.update": self._sheet_change,
             "characters.spells.delete": self._sheet_change,
             "characters.loadout.create": self._sheet_change,
             "characters.loadout.update": self._sheet_change,
@@ -521,6 +520,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "compendium.items.create": self._item_create,
             "compendium.items.update": self._item_update,
             "compendium.items.delete": self._item_delete,
+            "compendium.spells.create": self.spell_compendium_create,
+            "compendium.spells.clone": self.spell_compendium_clone,
+            "compendium.spells.update": self.spell_compendium_update,
             "compendium.search": self._compendium_search,
             "compendium.sources.list": self._source_list,
             "compendium.sources.enable": self._source_enable,
@@ -2134,7 +2136,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             ("features", "update"): api.feature_update,
             ("features", "delete"): api.feature_delete,
             ("spells", "create"): api.spell_create,
-            ("spells", "update"): api.spell_update,
             ("spells", "delete"): api.spell_delete,
             ("loadout", "create"): api.loadout_create,
             ("loadout", "update"): api.loadout_update,
@@ -2642,6 +2643,63 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         item.save()
         notify_campaign_changed(context.campaign_id)
         return _item_data(item)
+
+    @database_sync_to_async
+    def spell_compendium_create(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import SpellCard, custom_spell_entry, spell_entry_data
+
+        context = self._context()
+        card = SpellCard(**self.spell_card_payload(content))
+        if not card.name.strip():
+            raise ValidationError("A spell name is required.")
+        entry = custom_spell_entry(context, card)
+        notify_campaign_changed(context.campaign_id)
+        return {"id": entry.pk, **spell_entry_data(entry)}
+
+    @database_sync_to_async
+    def spell_compendium_clone(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import SpellCard, _enabled_entry, custom_spell_entry, spell_entry_data
+
+        context = self._context()
+        entry = _enabled_entry(
+            context.campaign, self._integer(content, "spell_id"), "spell"
+        )
+        card = SpellCard(
+            **{**spell_entry_data(entry), **self.spell_card_payload(content)}
+        )
+        entry = custom_spell_entry(context, card)
+        notify_campaign_changed(context.campaign_id)
+        return {"id": entry.pk, **spell_entry_data(entry)}
+
+    @database_sync_to_async
+    def spell_compendium_update(self, content: dict[str, object]) -> dict[str, object]:
+        from .api import SpellCard, spell_entry_data
+
+        context = self._context()
+        entry = CompendiumEntry.objects.filter(
+            pk=self._integer(content, "spell_id"),
+            kind=CompendiumEntry.Kind.SPELL,
+            source__repository__campaign=context.campaign,
+        ).first()
+        if entry is None:
+            raise HttpError(403, "Only campaign-custom spells can be edited directly.")
+        card = SpellCard(**self.spell_card_payload(content))
+        if not card.name.strip():
+            raise ValidationError("A spell name is required.")
+        entry.name = card.name.strip()
+        entry.description = card.description.strip()
+        entry.data = {"spell": card.model_dump(exclude={"name", "description"})}
+        entry.full_clean()
+        entry.save()
+        notify_campaign_changed(context.campaign_id)
+        return {"id": entry.pk, **spell_entry_data(entry)}
+
+    @staticmethod
+    def spell_card_payload(content: dict[str, object]) -> dict[str, object]:
+        card = content.get("spell")
+        if not isinstance(card, dict):
+            raise ValidationError("Spell data must be an object.")
+        return card
 
     @database_sync_to_async
     def _item_update(self, content: dict[str, object]) -> dict[str, object]:

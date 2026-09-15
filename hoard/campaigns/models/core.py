@@ -264,6 +264,7 @@ class Character(models.Model):
     speed = models.CharField(max_length=100, blank=True)
     spell_slot_current = models.JSONField(default=dict, blank=True)
     spell_slot_adjustments = models.JSONField(default=dict, blank=True)
+    spells = models.ManyToManyField("compendium.CompendiumEntry", blank=True)
     has_inspiration = models.BooleanField(default=False)
     inspiration_expires_at = models.DateTimeField(blank=True, null=True)
     proficiency_bonus_adjustment = models.SmallIntegerField(

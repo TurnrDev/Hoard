@@ -280,75 +280,144 @@
           @remove="removeCondition"
         />
       </div>
+      <div
+        v-if="canEdit && !character.spells.length"
+        class="col-12"
+      >
+        <Button
+          label="Add spell"
+          icon="mdi mdi-plus"
+          @click="openSpellEditor"
+        />
+      </div>
       <div class="col-12">
-        <section class="mb-4">
-          <header>Resources</header>
-          <div>
-            <p class="mb-3">
-              Inspiration:
-              <strong>
-                {{ character.has_inspiration ? "Available" : "Not available" }}
-              </strong>
-              <template
-                v-if="character.has_inspiration && character.inspiration_expires_at"
+        <section
+          v-if="character.spells.length"
+          class="mb-4"
+          aria-labelledby="spells-heading"
+        >
+          <header class="mb-3">
+            <div class="d-flex align-items-center justify-content-between gap-3">
+              <h2
+                id="spells-heading"
+                class="h4 mb-1"
               >
-                {{ " · " }}expires
-                <RelativeTime :value="character.inspiration_expires_at" />
-              </template>
-              <span class="ms-4">
-                Spell attack:
-                <strong>{{ signed(character.sheet.spell_attack) }}</strong>
+                Spells
+              </h2>
+              <Button
+                v-if="canEdit"
+                label="Add spell"
+                icon="mdi mdi-plus"
+                size="small"
+                @click="openSpellEditor"
+              />
+            </div>
+            <div
+              v-if="character.sheet.spellcasting_classes.length"
+              class="d-flex flex-wrap gap-3 small"
+            >
+              <span
+                v-for="spellcastingClass in character.sheet.spellcasting_classes"
+                :key="spellcastingClass.name"
+              >
+                <strong>{{ spellcastingClass.name }}:</strong>
+                Spell attack {{ signed(spellcastingClass.spell_attack) }} · Spell save
+                DC
+                {{ spellcastingClass.spell_save_dc }}
               </span>
-              <span class="ms-4">
-                Spell save DC:
-                <strong>{{ character.sheet.spell_save_dc }}</strong>
-              </span>
-            </p>
-            <div class="table-responsive">
-              <table class="table table-striped">
-                <caption class="visually-hidden">Spell slot availability</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Slot</th>
-                    <th
-                      scope="col"
-                      class="text-end tabular-nums"
-                    >
-                      Current
-                    </th>
-                    <th
-                      scope="col"
-                      class="text-end tabular-nums"
-                    >
-                      Maximum
-                    </th>
-                    <th scope="col">Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(pool, level) in character.sheet.spell_slot_pools"
-                    :key="level"
+            </div>
+          </header>
+          <div class="row g-3 align-items-start">
+            <div
+              v-if="spellSlotPools.length"
+              class="col-12 col-xl-4"
+            >
+              <h3 class="h5 mb-3">Spell slots</h3>
+              <div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 row-cols-xl-9 g-2">
+                <div
+                  v-for="slot in spellSlotPools"
+                  :key="slot.level"
+                  class="col"
+                >
+                  <article class="border rounded-3 p-2 h-100 text-center">
+                    <h4 class="h6 mb-2">{{ spellSlotLabel(slot.level) }}</h4>
+                    <span class="small text-body-secondary d-block mb-0">
+                      Available
+                    </span>
+                    <strong class="fs-3 lh-1 tabular-nums">
+                      {{ slot.pool.current }} / {{ slot.pool.maximum }}
+                    </strong>
+                    <p class="small text-body-secondary mb-0 mt-2">
+                      {{ spellSlotSource(slot.pool) }}
+                    </p>
+                  </article>
+                </div>
+              </div>
+            </div>
+            <div :class="spellSlotPools.length ? 'col-12 col-xl-8' : 'col-12'">
+              <SheetDisclosure
+                title="Known spells"
+                :count="character.spells.length"
+              >
+                <ul class="list-group list-group-flush">
+                  <li
+                    v-for="spell in character.spells"
+                    :key="spell.id"
+                    class="list-group-item bg-transparent px-0 py-3"
                   >
-                    <th scope="row">
-                      {{
-                        String(level).startsWith("pact-")
-                          ? `Pact level ${String(level).slice(5)}`
-                          : `Level ${level}`
-                      }}
-                    </th>
-                    <td class="text-end tabular-nums">{{ pool.current }}</td>
-                    <td class="text-end tabular-nums">{{ pool.maximum }}</td>
-                    <td>
-                      {{
-                        pool.adjustment
-                          ? `Class ${pool.calculated}, adjustment ${signed(pool.adjustment)}`
-                          : `Class ${pool.calculated}`
-                      }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    <article class="d-flex align-items-start gap-3">
+                      <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                          <h3 class="h6 mb-0">{{ spell.name }}</h3>
+                          <span class="small text-body-secondary">
+                            {{ spell.level === 0 ? "Cantrip" : `Level ${spell.level}` }}
+                          </span>
+                        </div>
+                        <dl
+                          v-if="spellDetailItems(spell).length"
+                          class="row row-cols-1 row-cols-md-2 g-2 small mb-3"
+                        >
+                          <div
+                            v-for="detail in spellDetailItems(spell)"
+                            :key="detail.label"
+                            class="col"
+                          >
+                            <dt class="text-body-secondary">{{ detail.label }}</dt>
+                            <dd class="mb-0">{{ detail.value }}</dd>
+                          </div>
+                        </dl>
+                        <p
+                          v-if="spell.description"
+                          class="mb-2 sheet-copy"
+                        >
+                          {{ spell.description }}
+                        </p>
+                      </div>
+                      <Button
+                        v-if="canEdit"
+                        size="small"
+                        text
+                        class="flex-shrink-0"
+                        :aria-label="`Record casting ${spell.name}`"
+                        @click="openSpellCast(spell)"
+                      >
+                        Cast
+                      </Button>
+                      <Button
+                        v-if="canEdit"
+                        icon="mdi mdi-delete-outline"
+                        severity="danger"
+                        text
+                        rounded
+                        size="small"
+                        class="flex-shrink-0"
+                        :aria-label="`Remove ${spell.name}`"
+                        @click="askToRemoveSpell(spell)"
+                      />
+                    </article>
+                  </li>
+                </ul>
+              </SheetDisclosure>
             </div>
           </div>
         </section>
@@ -1055,69 +1124,6 @@
             </SheetDisclosure>
 
             <SheetDisclosure
-              title="Spells"
-              :count="character.spells.length"
-            >
-              <ul
-                v-if="character.spells.length"
-                class="list-group list-group-flush"
-              >
-                <li
-                  v-for="spell in character.spells"
-                  :key="spell.id"
-                  class="list-group-item bg-transparent px-0 py-3"
-                >
-                  <article class="d-flex align-items-start gap-3">
-                    <div class="flex-grow-1">
-                      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                        <h3 class="h6 mb-0">{{ spell.name }}</h3>
-                        <span class="small text-body-secondary">
-                          {{ spell.level === 0 ? "Cantrip" : `Level ${spell.level}` }}
-                        </span>
-                        <span
-                          v-if="spell.level > 0"
-                          class="small"
-                        >
-                          {{ spell.prepared ? "Prepared" : "Not prepared" }}
-                        </span>
-                      </div>
-                      <p
-                        v-if="spell.description"
-                        class="mb-2 sheet-copy"
-                      >
-                        {{ spell.description }}
-                      </p>
-                      <p
-                        v-if="spell.notes"
-                        class="small text-body-secondary mb-0 sheet-copy"
-                      >
-                        <strong>Notes:</strong>
-                        {{ spell.notes }}
-                      </p>
-                    </div>
-                    <Button
-                      v-if="canEdit"
-                      size="small"
-                      text
-                      class="flex-shrink-0"
-                      :disabled="spell.level > 0 && !spell.prepared"
-                      :aria-label="`Record casting ${spell.name}`"
-                      @click="openSpellCast(spell)"
-                    >
-                      Cast
-                    </Button>
-                  </article>
-                </li>
-              </ul>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No spells recorded.
-              </p>
-            </SheetDisclosure>
-
-            <SheetDisclosure
               title="Companions"
               :count="character.companions.length"
             >
@@ -1577,6 +1583,282 @@
       </section>
     </Dialog>
     <Dialog
+      v-model:visible="spellEditorOpen"
+      :style="{ width: 'min(35rem, calc(100vw - 2rem))' }"
+    >
+      <form
+        class="d-grid gap-3"
+        @submit.prevent="saveSpell"
+      >
+        <h2 class="h3 mb-0">Add spell</h2>
+        <div class="d-flex gap-2">
+          <InputText
+            v-model="spellQuery"
+            placeholder="Search the compendium"
+            fluid
+            @keyup.enter.prevent="searchSpells"
+          />
+          <Button
+            type="button"
+            label="Search"
+            :loading="spellBusy"
+            @click="searchSpells"
+          />
+        </div>
+        <div
+          v-if="spellResults.length"
+          class="list-group"
+        >
+          <button
+            v-for="result in spellResults"
+            :key="result.id"
+            type="button"
+            class="list-group-item list-group-item-action text-start"
+            @click="addCompendiumSpell(result.id)"
+          >
+            <strong>{{ result.name }}</strong>
+            <span class="small text-body-secondary ms-2">{{ result.source }}</span>
+          </button>
+        </div>
+        <p class="small text-body-secondary mb-0">
+          Choose an existing spell, or create a campaign-custom spell below.
+        </p>
+        <div>
+          <label
+            for="spell-name"
+            class="form-label"
+          >
+            Name
+          </label>
+          <InputText
+            id="spell-name"
+            v-model="spellName"
+            fluid
+            autofocus
+          />
+        </div>
+        <div>
+          <label
+            for="spell-level"
+            class="form-label"
+          >
+            Spell level
+          </label>
+          <InputNumber
+            input-id="spell-level"
+            v-model.number="spellLevel"
+            :min="0"
+            :max="9"
+            :step="1"
+            show-buttons
+            fluid
+          />
+          <div class="form-text">Use 0 for a cantrip.</div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-casting-time"
+            >
+              Casting time
+            </label>
+            <InputText
+              id="spell-casting-time"
+              v-model="spellCastingTime"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-range"
+            >
+              Range
+            </label>
+            <InputText
+              id="spell-range"
+              v-model="spellRange"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-target"
+            >
+              Target
+            </label>
+            <InputText
+              id="spell-target"
+              v-model="spellTarget"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-components"
+            >
+              Components
+            </label>
+            <InputText
+              id="spell-components"
+              v-model="spellComponents"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-materials"
+            >
+              Materials
+            </label>
+            <InputText
+              id="spell-materials"
+              v-model="spellMaterials"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-duration"
+            >
+              Duration
+            </label>
+            <InputText
+              id="spell-duration"
+              v-model="spellDuration"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-school"
+            >
+              School
+            </label>
+            <InputText
+              id="spell-school"
+              v-model="spellSchool"
+              fluid
+            />
+          </div>
+          <div class="col-12 col-md-6">
+            <label
+              class="form-label"
+              for="spell-classes"
+            >
+              Classes
+            </label>
+            <InputText
+              id="spell-classes"
+              v-model="spellClasses"
+              fluid
+            />
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-3">
+          <div class="form-check">
+            <input
+              id="spell-concentration"
+              v-model="spellConcentration"
+              class="form-check-input"
+              type="checkbox"
+            />
+            <label
+              class="form-check-label"
+              for="spell-concentration"
+            >
+              Concentration
+            </label>
+          </div>
+          <div class="form-check">
+            <input
+              id="spell-ritual"
+              v-model="spellRitual"
+              class="form-check-input"
+              type="checkbox"
+            />
+            <label
+              class="form-check-label"
+              for="spell-ritual"
+            >
+              Ritual
+            </label>
+          </div>
+        </div>
+        <div>
+          <label
+            for="spell-description"
+            class="form-label"
+          >
+            Description
+          </label>
+          <Textarea
+            id="spell-description"
+            v-model="spellDescription"
+            rows="5"
+            auto-resize
+            fluid
+          />
+        </div>
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            type="button"
+            label="Cancel"
+            severity="secondary"
+            outlined
+            :disabled="spellBusy"
+            @click="spellEditorOpen = false"
+          />
+          <Button
+            type="submit"
+            label="Add spell"
+            icon="mdi mdi-plus"
+            :loading="spellBusy"
+            :disabled="!spellName.trim()"
+          />
+        </footer>
+      </form>
+    </Dialog>
+    <Dialog
+      v-model:visible="spellRemoveOpen"
+      :style="{ width: 'min(29rem, calc(100vw - 2rem))' }"
+    >
+      <section
+        class="d-grid gap-3"
+        aria-labelledby="remove-spell-heading"
+      >
+        <h2
+          id="remove-spell-heading"
+          class="h3 mb-0"
+        >
+          Remove spell?
+        </h2>
+        <p class="mb-0">Remove {{ spellToRemove?.name }}? This cannot be undone.</p>
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            label="Cancel"
+            severity="secondary"
+            outlined
+            :disabled="spellBusy"
+            @click="closeSpellRemoval"
+          />
+          <Button
+            label="Remove spell"
+            icon="mdi mdi-delete-outline"
+            severity="danger"
+            :loading="spellBusy"
+            @click="removeSpell"
+          />
+        </footer>
+      </section>
+    </Dialog>
+    <Dialog
       v-model:visible="spellCastOpen"
       :style="{ width: 'min(29rem, calc(100vw - 2rem))' }"
     >
@@ -1912,6 +2194,7 @@ import {
   archiveCharacter,
   castCharacterSpell,
   changeCharacterSheetRecord,
+  createCompendiumSpell,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
@@ -1922,6 +2205,7 @@ import {
   removeCharacterCondition,
   removeCharacterPortrait,
   restCharacter,
+  searchCompendiumEntries,
   setCharacterCondition,
   setCharacterInspiration,
   updateCharacter,
@@ -1932,6 +2216,7 @@ import {
   type ConditionMutation,
   type Item,
   type LedgerTransaction,
+  type CompendiumSearchEntry,
 } from "@/api";
 import { exchangedCoinAmount } from "@/campaigns/coinExchange";
 import {
@@ -2076,6 +2361,25 @@ export default defineComponent({
       healthDescription: "",
       shortRestOpen: false,
       shortRestHp: 0,
+      spellEditorOpen: false,
+      spellRemoveOpen: false,
+      spellBusy: false,
+      spellToRemove: undefined as Character["spells"][number] | undefined,
+      spellName: "",
+      spellLevel: 0,
+      spellDescription: "",
+      spellQuery: "",
+      spellResults: [] as CompendiumSearchEntry[],
+      spellCastingTime: "",
+      spellRange: "",
+      spellTarget: "",
+      spellComponents: "",
+      spellDuration: "",
+      spellSchool: "",
+      spellMaterials: "",
+      spellClasses: "",
+      spellConcentration: false,
+      spellRitual: false,
       spellCastOpen: false,
       castingSpell: undefined as Character["spells"][number] | undefined,
       castingSlot: undefined as string | undefined,
@@ -2333,6 +2637,15 @@ export default defineComponent({
         this.speedFeet % 5 !== 0
       );
     },
+    spellSlotPools() {
+      if (!this.character) {
+        return [];
+      }
+
+      return Object.entries(this.character.sheet.spell_slot_pools).map(
+        ([level, pool]) => ({ level, pool }),
+      );
+    },
     castingSlots() {
       const spell = this.castingSpell;
 
@@ -2501,6 +2814,69 @@ export default defineComponent({
     signed(value: number): string {
       return value >= 0 ? `+${value}` : `${value}`;
     },
+    spellSlotLabel(level: string): string {
+      return level.startsWith("pact-")
+        ? `Pact level ${level.slice(5)}`
+        : `Level ${level}`;
+    },
+    spellSlotSource(pool: Character["sheet"]["spell_slot_pools"][string]): string {
+      if (pool.adjustment) {
+        return `Class ${pool.calculated}, adjustment ${this.signed(pool.adjustment)}`;
+      }
+
+      return `Class ${pool.calculated}`;
+    },
+    spellDetailItems(spell: Character["spells"][number]): Array<{
+      label: string;
+      value: string;
+    }> {
+      const fields: Array<{ label: string; keys: string[] }> = [
+        { label: "Casting time", keys: ["castingTime", "casting_time"] },
+        { label: "Range", keys: ["range"] },
+        { label: "Target", keys: ["target"] },
+        { label: "Components", keys: ["components"] },
+        { label: "Duration", keys: ["duration"] },
+        { label: "School", keys: ["school"] },
+        { label: "Classes", keys: ["classes"] },
+      ];
+
+      return fields.flatMap((field) => {
+        const value = this.spellDetailValue(
+          spell as unknown as Record<string, unknown>,
+          field.keys,
+        );
+
+        if (value === undefined || value === null || value === "") {
+          return [];
+        }
+
+        return [{ label: field.label, value: this.formatSpellDetail(value) }];
+      });
+    },
+    spellDetailValue(details: Record<string, unknown>, keys: string[]): unknown {
+      for (const key of keys) {
+        if (Object.hasOwn(details, key)) {
+          return details[key];
+        }
+      }
+
+      return undefined;
+    },
+    formatSpellDetail(value: unknown): string {
+      if (Array.isArray(value)) {
+        return value.map((item) => this.formatSpellDetail(item)).join(", ");
+      }
+
+      if (typeof value === "object" && value !== null) {
+        const detail = value as Record<string, unknown>;
+        const displayValue =
+          detail.name ?? detail.label ?? detail.value ?? detail.description;
+
+        return displayValue === undefined ? "—" : this.formatSpellDetail(displayValue);
+      }
+
+      return String(value);
+    },
     formatXp(value: number): string {
       return `${value.toLocaleString()} XP`;
     },
@@ -2601,6 +2977,156 @@ export default defineComponent({
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to record rest.";
+      }
+    },
+    openSpellEditor(): void {
+      this.spellName = "";
+      this.spellLevel = 0;
+      this.spellDescription = "";
+      this.spellQuery = "";
+      this.spellResults = [];
+      this.spellCastingTime = "";
+      this.spellRange = "";
+      this.spellTarget = "";
+      this.spellComponents = "";
+      this.spellMaterials = "";
+      this.spellDuration = "";
+      this.spellSchool = "";
+      this.spellClasses = "";
+      this.spellConcentration = false;
+      this.spellRitual = false;
+      this.spellEditorOpen = true;
+    },
+    async searchSpells(): Promise<void> {
+      if (this.spellBusy) {
+        return;
+      }
+
+      this.spellBusy = true;
+
+      try {
+        this.spellResults = await searchCompendiumEntries(
+          this.campaignId,
+          "spell",
+          this.spellQuery,
+        );
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to search spells.";
+      } finally {
+        this.spellBusy = false;
+      }
+    },
+    async addCompendiumSpell(entryId: number): Promise<void> {
+      if (!this.character || this.spellBusy) {
+        return;
+      }
+
+      this.spellBusy = true;
+
+      try {
+        await changeCharacterSheetRecord(
+          this.campaignId,
+          this.character.id,
+          "spells",
+          "create",
+          {
+            catalogue_entry_id: entryId,
+          },
+        );
+        this.spellEditorOpen = false;
+        this.showSuccess("Spell added.");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to add spell.";
+      } finally {
+        this.spellBusy = false;
+      }
+    },
+    async saveSpell(): Promise<void> {
+      if (!this.character || !this.spellName.trim() || this.spellBusy) {
+        return;
+      }
+
+      this.spellBusy = true;
+
+      try {
+        const entry = await createCompendiumSpell(this.campaignId, {
+          name: this.spellName.trim(),
+          level: this.spellLevel,
+          school: this.spellSchool.trim(),
+          casting_time: this.spellCastingTime.trim(),
+          range: this.spellRange.trim(),
+          target: this.spellTarget.trim(),
+          components: this.spellComponents.trim(),
+          materials: this.spellMaterials.trim(),
+          duration: this.spellDuration.trim(),
+          concentration: this.spellConcentration,
+          ritual: this.spellRitual,
+          classes: this.spellClasses
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+          description: this.spellDescription.trim(),
+        });
+        await changeCharacterSheetRecord(
+          this.campaignId,
+          this.character.id,
+          "spells",
+          "create",
+          {
+            catalogue_entry_id: entry.id,
+          },
+        );
+        this.spellEditorOpen = false;
+        this.showSuccess(`${this.spellName.trim()} added.`);
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to add spell.";
+      } finally {
+        this.spellBusy = false;
+      }
+    },
+    askToRemoveSpell(spell: Character["spells"][number]): void {
+      this.spellToRemove = spell;
+      this.spellRemoveOpen = true;
+    },
+    closeSpellRemoval(): void {
+      if (this.spellBusy) {
+        return;
+      }
+
+      this.spellRemoveOpen = false;
+      this.spellToRemove = undefined;
+    },
+    async removeSpell(): Promise<void> {
+      if (!this.character || !this.spellToRemove || this.spellBusy) {
+        return;
+      }
+
+      const spell = this.spellToRemove;
+      this.spellBusy = true;
+
+      try {
+        await changeCharacterSheetRecord(
+          this.campaignId,
+          this.character.id,
+          "spells",
+          "delete",
+          {},
+          spell.id,
+        );
+        this.spellRemoveOpen = false;
+        this.spellToRemove = undefined;
+        this.showSuccess(`${spell.name} removed.`);
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to remove spell.";
+      } finally {
+        this.spellBusy = false;
       }
     },
     openSpellCast(spell: Character["spells"][number]): void {
