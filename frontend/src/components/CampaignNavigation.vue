@@ -52,18 +52,6 @@
       <li v-if="activeContext.kind === 'gm'">
         <RouterLink
           class="d-flex align-items-center gap-3 text-decoration-none"
-          :to="`/c/${contextId}/gm`"
-        >
-          <span
-            class="mdi mdi-shield-crown-outline"
-            aria-hidden="true"
-          />
-          <span>GM desk</span>
-        </RouterLink>
-      </li>
-      <li v-if="activeContext.kind === 'gm'">
-        <RouterLink
-          class="d-flex align-items-center gap-3 text-decoration-none"
           :to="`/c/${contextId}/manage`"
         >
           <span
