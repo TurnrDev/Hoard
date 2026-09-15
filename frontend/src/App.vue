@@ -179,7 +179,6 @@ import TieredMenu from "primevue/tieredmenu";
 import Toast from "primevue/toast";
 import { defineComponent } from "vue";
 import {
-  getCampaign,
   getSession,
   isUnauthenticatedError,
   logout,
@@ -203,10 +202,11 @@ import {
   campaignRefreshRevision,
   connectCampaignRealtime,
   disconnectCampaignRealtime,
-  subscribeCampaignChanges,
+  subscribeDomainEvents,
   subscribeCampaignPresence,
   subscribeCampaignReconnect,
 } from "./realtime";
+import { useCampaignStore } from "./stores/campaign";
 import {
   applyThemePreferences,
   readThemePreferences,
@@ -237,7 +237,7 @@ export default defineComponent({
       colourMode: themePreferences.colourMode,
       palette: themePreferences.palette,
       availableContexts: [] as ActingContext[],
-      campaign: undefined as Campaign | undefined,
+      campaignStore: useCampaignStore(),
       members: [] as CampaignMember[],
       incompleteLevelUps: [] as string[],
       unsubscribeCampaignChanges: undefined as (() => void) | undefined,
@@ -252,6 +252,9 @@ export default defineComponent({
     };
   },
   computed: {
+    campaign(): Campaign | undefined {
+      return this.campaignStore.campaign;
+    },
     contextId(): number {
       return Number(this.$route.params.id);
     },
@@ -510,7 +513,7 @@ export default defineComponent({
     },
     async refreshCampaignChrome(context: ActingContext): Promise<void> {
       try {
-        const campaign = await getCampaign(context.id);
+        const campaign = await this.campaignStore.load(context.id);
         const currentCombatantId = campaign.encounter?.current_combatant_id ?? null;
         const shouldAlertCurrentPlayer =
           this.observedCurrentCombatantId !== undefined &&
@@ -523,7 +526,6 @@ export default defineComponent({
               combatant.character_id === context.character_id,
           );
 
-        this.campaign = campaign;
         this.scheduleInspirationExpiry(context, campaign);
         this.observedCurrentCombatantId = currentCombatantId;
         this.members = campaign.members;
@@ -583,14 +585,13 @@ export default defineComponent({
 
       this.inspirationExpiryTimer = window.setTimeout(() => {
         void this.refreshCampaignChrome(context);
-        campaignRefreshRevision.value += 1;
       }, delay);
     },
     handleContextChange(context: ActingContext | undefined): void {
       this.unsubscribeCampaignChanges?.();
       this.unsubscribeCampaignReconnect?.();
       this.unsubscribeCampaignPresence?.();
-      this.campaign = undefined;
+      this.campaignStore.clear();
       this.members = [];
       this.incompleteLevelUps = [];
       this.observedCurrentCombatantId = undefined;
@@ -607,9 +608,25 @@ export default defineComponent({
       connectCampaignRealtime(context.id);
       void this.refreshCampaignChrome(context);
 
-      this.unsubscribeCampaignChanges = subscribeCampaignChanges(() => {
-        void this.refreshCampaignChrome(context);
-        campaignRefreshRevision.value += 1;
+      this.unsubscribeCampaignChanges = subscribeDomainEvents((event) => {
+        if (
+          event.type === "character.health_changed" &&
+          typeof event.character_id === "number" &&
+          typeof event.current_hp === "number" &&
+          typeof event.temporary_hp === "number"
+        ) {
+          this.campaignStore.applyHealthChanged({
+            character_id: event.character_id,
+            current_hp: event.current_hp,
+            temporary_hp: event.temporary_hp,
+          });
+          return;
+        }
+
+        if (event.type === "campaign.state_changed") {
+          void this.refreshCampaignChrome(context);
+          campaignRefreshRevision.value += 1;
+        }
       });
       this.unsubscribeCampaignReconnect = subscribeCampaignReconnect(() => {
         void this.refreshCampaignChrome(context);

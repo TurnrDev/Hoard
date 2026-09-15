@@ -857,11 +857,21 @@ def combatant_data(
         combatant.character_id and combatant.character.is_player_character
     )
     show_numbers = is_player_character
-    can_read_numbers = is_game_master or show_numbers
+    can_read_actual_health = is_game_master or show_numbers
     health_percentage = None
     if current_hp is not None and max_hp:
         rounded_percentage = (current_hp * 100 + max_hp // 2) // max_hp
         health_percentage = max(0, min(100, rounded_percentage))
+
+    if can_read_actual_health:
+        displayed_current_hp = current_hp
+        displayed_max_hp = max_hp
+    elif health_percentage is not None:
+        displayed_current_hp = health_percentage
+        displayed_max_hp = 100
+    else:
+        displayed_current_hp = None
+        displayed_max_hp = None
 
     is_owner = bool(
         combatant.character_id
@@ -915,8 +925,8 @@ def combatant_data(
         "tie_votes_required": len(tied_contexts) if tie_options else 0,
         "tie_winner_id": tie_winner_id if tie_options else None,
         "tie_resolution": tie_resolution if tie_options else None,
-        "current_hp": current_hp if can_read_numbers else None,
-        "max_hp": max_hp if can_read_numbers else None,
+        "current_hp": displayed_current_hp,
+        "max_hp": displayed_max_hp,
         "health_percentage": health_percentage,
         "show_hp_numbers": show_numbers,
         "has_inspiration": bool(

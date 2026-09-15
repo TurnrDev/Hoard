@@ -1,6 +1,7 @@
 import "@mdi/font/css/materialdesignicons.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import PrimeVue from "primevue/config";
+import { createPinia } from "pinia";
 import ToastService from "primevue/toastservice";
 import { createApp } from "vue";
 import App from "./App.vue";
@@ -30,4 +31,5 @@ app.use(PrimeVue, {
 });
 
 app.use(ToastService);
+app.use(createPinia());
 app.use(router).mount("#app");

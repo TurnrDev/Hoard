@@ -10,6 +10,26 @@ def campaign_group_name(campaign_id: int) -> str:
     return f"campaign-{campaign_id}"
 
 
+def context_group_name(context_id: int) -> str:
+    """Return the private realtime group for one campaign context."""
+    return f"campaign-context-{context_id}"
+
+
+def notify_context_event(context_id: int, event: BaseModel) -> None:
+    """Publish an event visible only to one campaign context."""
+    payload = event.model_dump(mode="json")
+
+    def send() -> None:
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            async_to_sync(channel_layer.group_send)(
+                context_group_name(context_id),
+                {"type": "domain.event", "event": payload},
+            )
+
+    transaction.on_commit(send)
+
+
 def notify_campaign_event(campaign_id: int, event: BaseModel) -> None:
     """Publish a JSON-ready domain event after a successful DB commit."""
 

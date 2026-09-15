@@ -81,8 +81,10 @@ from .protocol import (
 )
 from .realtime import (
     campaign_group_name,
+    context_group_name,
     notify_campaign_changed,
     notify_campaign_event,
+    notify_context_event,
 )
 from .services import (
     CharacterHealthService,
@@ -379,9 +381,11 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             return
         self.context_id, self.campaign_id = context_data
         self.group_name = campaign_group_name(self.campaign_id)
+        self.context_group_name = context_group_name(self.context_id)
         self.request_tasks: set[asyncio.Task[None]] = set()
         self.request_slots = asyncio.Semaphore(8)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.channel_layer.group_add(self.context_group_name, self.channel_name)
         await self.accept()
         await self.record_presence()
         await self.publish_presence(True)
@@ -391,6 +395,11 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             task.cancel()
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        if hasattr(self, "context_group_name"):
+            await self.channel_layer.group_discard(
+                self.context_group_name,
+                self.channel_name,
+            )
         if hasattr(self, "context_id"):
             await self.remove_presence()
             await self.publish_presence(False)
@@ -2065,15 +2074,37 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             created_by=context,
         )
         character.refresh_from_db(fields=("current_hp", "temporary_hp"))
-        notify_campaign_event(
-            context.campaign_id,
-            CharacterHealthChangedEvent(
-                character_id=character.pk,
-                current_hp=character.current_hp,
-                temporary_hp=character.temporary_hp,
-                request_id=str(content["request_id"]),
-            ),
-        )
+        contexts = CampaignContext.objects.filter(
+            campaign_id=context.campaign_id
+        ).select_related("character")
+        for recipient in contexts:
+            can_read_actual_health = (
+                recipient.kind == CampaignContext.Kind.GM
+                or (
+                    recipient.kind == CampaignContext.Kind.PC
+                    and recipient.character.pk == character.pk
+                )
+            )
+            if can_read_actual_health:
+                current_hp = character.current_hp
+                temporary_hp = character.temporary_hp
+            else:
+                maximum_hp = character.max_hp
+                current_hp = (
+                    max(0, min(100, (character.current_hp * 100 + maximum_hp // 2) // maximum_hp))
+                    if maximum_hp
+                    else 0
+                )
+                temporary_hp = 0
+            notify_context_event(
+                recipient.pk,
+                CharacterHealthChangedEvent(
+                    character_id=character.pk,
+                    current_hp=current_hp,
+                    temporary_hp=temporary_hp,
+                    request_id=str(content["request_id"]),
+                ),
+            )
         return self._health_data(posted)
 
     @database_sync_to_async

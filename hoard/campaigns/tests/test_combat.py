@@ -255,7 +255,7 @@ class EncounterServiceTests(TestCase):
 
         self.assertEqual(order[0], quicker_entry.pk)
 
-    def test_monster_health_bar_is_visible_but_numbers_are_filtered_for_players(self) -> None:
+    def test_monster_health_is_normalized_for_players(self) -> None:
         start_encounter(self.gm)
         monster = add_encounter_combatant(
             self.gm,
@@ -279,8 +279,8 @@ class EncounterServiceTests(TestCase):
 
         self.assertEqual(gm_monster["current_hp"], 23)
         self.assertEqual(gm_monster["health_percentage"], 58)
-        self.assertIsNone(player_monster["current_hp"])
-        self.assertIsNone(player_monster["max_hp"])
+        self.assertEqual(player_monster["current_hp"], 58)
+        self.assertEqual(player_monster["max_hp"], 100)
         self.assertEqual(player_monster["health_percentage"], 58)
 
     def test_conditions_are_structured_and_exhaustion_requires_a_level(self) -> None:
