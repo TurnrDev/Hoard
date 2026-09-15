@@ -2078,12 +2078,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             campaign_id=context.campaign_id
         ).select_related("character")
         for recipient in contexts:
-            can_read_actual_health = (
-                recipient.kind == CampaignContext.Kind.GM
-                or (
-                    recipient.kind == CampaignContext.Kind.PC
-                    and recipient.character.pk == character.pk
-                )
+            can_read_actual_health = recipient.kind == CampaignContext.Kind.GM or (
+                recipient.kind == CampaignContext.Kind.PC
+                and recipient.character.pk == character.pk
             )
             if can_read_actual_health:
                 current_hp = character.current_hp
@@ -2091,7 +2088,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             else:
                 maximum_hp = character.max_hp
                 current_hp = (
-                    max(0, min(100, (character.current_hp * 100 + maximum_hp // 2) // maximum_hp))
+                    max(
+                        0,
+                        min(
+                            100,
+                            (character.current_hp * 100 + maximum_hp // 2)
+                            // maximum_hp,
+                        ),
+                    )
                     if maximum_hp
                     else 0
                 )

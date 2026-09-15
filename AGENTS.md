@@ -1,7 +1,7 @@
 # Hoard contributor guidance
 
 - After modifying first-party Python code, run Ruff against `hoard` only.
-- After modifying frontend code, run `npm run fix` from `frontend`, then verify with frontend build when appropriate.
+- After modifying frontend code, run `npm run fix` from the repository root, then verify with the frontend build when appropriate.
 - Never format, lint-fix, bulk-rewrite, or otherwise modify `vendor/`.
 - Do not use leading-underscore “private” methods or functions in Python; Python
   has no private methods and the convention makes the code harder to read.

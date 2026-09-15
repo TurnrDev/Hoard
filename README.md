@@ -10,7 +10,8 @@ A D&D 5e tool for our campaign with specific tools for our homebrew rules. You w
 
 - `hoard/` contains the Django project configuration and application packages.
 - `hoard/campaigns/` contains the campaign application, imported as `hoard.campaigns`.
-- `frontend/` is the Vue/Vite frontend. Django serves its production build.
+- `hoard/` also contains the Vue/Vite SPA, with client files organised alongside
+  the Django application that owns them. Django serves its production build.
 
 Run Django management commands from the repository root:
 
@@ -27,17 +28,16 @@ repository imports without blocking Django or the WebSocket server:
 uv run celery -A hoard worker --loglevel=INFO
 ```
 
-In a third terminal, run the frontend development server:
+In a third terminal, run the client development server from the repository root:
 
 ```sh
-cd frontend
 npm install
 npm run dev
 ```
 
 Open the application at `http://localhost:8000`: `django-vite` renders the SPA
 HTML, while Vite supplies development modules and hot reload from port 5173. For a
-production build, run `npm run build` in `frontend/`, then `uv run python manage.py
+production build, run `npm run build`, then `uv run python manage.py
 collectstatic --noinput`. Run Django with `DJANGO_DEBUG=false` to make django-vite
 load the compiled manifest rather than the development server.
 

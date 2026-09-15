@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
-FRONTEND_DIST_DIR: Path = BASE_DIR / "frontend" / "dist"
+VITE_DIST_DIR: Path = BASE_DIR / "hoard" / "dist"
 
 
 # Quick-start development settings - unsuitable for production
@@ -174,7 +174,7 @@ USE_TZ: bool = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL: str = "static/"
-STATICFILES_DIRS: list[Path] = [FRONTEND_DIST_DIR]
+STATICFILES_DIRS: list[Path] = [VITE_DIST_DIR]
 STATIC_ROOT: Path = BASE_DIR / "staticfiles"
 MEDIA_URL: str = "media/"
 MEDIA_ROOT: Path = BASE_DIR / "media"
@@ -183,7 +183,7 @@ DJANGO_VITE: dict[str, dict[str, object]] = {
     "default": {
         "dev_mode": DEBUG,
         "dev_server_port": 5173,
-        "manifest_path": FRONTEND_DIST_DIR / ".vite" / "manifest.json",
+        "manifest_path": VITE_DIST_DIR / ".vite" / "manifest.json",
     }
 }
 

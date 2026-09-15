@@ -22,8 +22,8 @@ from django.urls import path, re_path
 from django.urls.resolvers import URLPattern
 
 from hoard.campaigns.api import api
-from hoard.campaigns.frontend import frontend
 from hoard.campaigns.views import cah_upload, character_portrait_upload
+from hoard.spa import spa
 
 urlpatterns: list[URLPattern] = [
     path("admin/", admin.site.urls),
@@ -33,7 +33,7 @@ urlpatterns: list[URLPattern] = [
         character_portrait_upload,
     ),
     path("api/", api.urls),
-    re_path(r"^(?!api/|admin/|media/).*$", frontend),
+    re_path(r"^(?!api/|admin/|media/).*$", spa),
 ]
 
 if settings.DEBUG:
