@@ -75,7 +75,6 @@ def start_encounter(context: CampaignContext) -> Encounter:
                 character=character,
                 name=character.name,
                 initiative=0,
-                show_hp_bar=True,
                 show_hp_numbers=True,
             )
             for character in player_characters
@@ -98,8 +97,6 @@ def add_character_combatant(
     context: CampaignContext,
     character_id: int,
     initiative: int,
-    show_hp_bar: bool = False,
-    show_hp_numbers: bool = False,
 ) -> EncounterCombatant:
     """Add an existing campaign character to the active encounter."""
     require_game_master(context)
@@ -118,8 +115,7 @@ def add_character_combatant(
         character=character,
         name=character.name,
         initiative=initiative,
-        show_hp_bar=character.is_player_character or show_hp_bar,
-        show_hp_numbers=character.is_player_character or show_hp_numbers,
+        show_hp_numbers=character.is_player_character,
     )
 
     return combatant
@@ -133,8 +129,6 @@ def add_encounter_combatant(
     initiative: int,
     current_hp: int | None,
     max_hp: int | None,
-    show_hp_bar: bool,
-    show_hp_numbers: bool,
 ) -> EncounterCombatant:
     """Add a Compendium-backed or encounter-only combatant."""
     require_game_master(context)
@@ -160,8 +154,7 @@ def add_encounter_combatant(
         initiative=initiative,
         current_hp=current_hp,
         max_hp=max_hp,
-        show_hp_bar=show_hp_bar,
-        show_hp_numbers=show_hp_numbers,
+        show_hp_numbers=False,
     )
 
 
@@ -190,7 +183,7 @@ def update_combatant(
     combatant_id: int,
     fields: dict[str, object],
 ) -> EncounterCombatant:
-    """Update initiative, generic health, or player-facing health visibility."""
+    """Update an encounter-only combatant's identity, health, or initiative."""
     require_game_master(context)
     combatant = encounter_combatant(context, combatant_id)
     allowed = {
@@ -198,8 +191,6 @@ def update_combatant(
         "initiative",
         "current_hp",
         "max_hp",
-        "show_hp_bar",
-        "show_hp_numbers",
     }
     updates = {key: value for key, value in fields.items() if key in allowed}
 
@@ -207,17 +198,6 @@ def update_combatant(
         raise ValidationError(
             "Linked character identity and health must be changed on the character sheet."
         )
-    if (
-        combatant.character_id
-        and combatant.character.is_player_character
-        and {
-            "show_hp_bar",
-            "show_hp_numbers",
-        }
-        & updates.keys()
-    ):
-        raise ValidationError("Player character health is always visible in combat.")
-
     for field, value in updates.items():
         setattr(combatant, field, value)
     if updates:
@@ -386,7 +366,6 @@ def roll_player_initiative(
             character=character,
             name=character.name,
             initiative=0,
-            show_hp_bar=True,
             show_hp_numbers=True,
         )
 
@@ -877,12 +856,10 @@ def combatant_data(
     is_player_character = bool(
         combatant.character_id and combatant.character.is_player_character
     )
-    show_numbers = is_player_character or combatant.show_hp_numbers
-    show_bar = is_player_character or combatant.show_hp_bar
+    show_numbers = is_player_character
     can_read_numbers = is_game_master or show_numbers
-    can_read_bar = is_game_master or show_bar
     health_percentage = None
-    if can_read_bar and current_hp is not None and max_hp:
+    if current_hp is not None and max_hp:
         rounded_percentage = (current_hp * 100 + max_hp // 2) // max_hp
         health_percentage = max(0, min(100, rounded_percentage))
 
@@ -941,7 +918,6 @@ def combatant_data(
         "current_hp": current_hp if can_read_numbers else None,
         "max_hp": max_hp if can_read_numbers else None,
         "health_percentage": health_percentage,
-        "show_hp_bar": show_bar,
         "show_hp_numbers": show_numbers,
         "has_inspiration": bool(
             combatant.character_id and combatant.character.inspiration_available

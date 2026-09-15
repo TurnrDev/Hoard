@@ -267,7 +267,6 @@ export type EncounterCombatant = {
   current_hp: number | null;
   max_hp: number | null;
   health_percentage: number | null;
-  show_hp_bar: boolean;
   show_hp_numbers: boolean;
   has_inspiration: boolean;
   conditions: ActiveCondition[];
@@ -294,8 +293,6 @@ export type EncounterCombatantInput = {
   initiative: number;
   current_hp?: number;
   max_hp?: number;
-  show_hp_bar: boolean;
-  show_hp_numbers: boolean;
 };
 
 export type ConditionMutation = {
@@ -1142,15 +1139,7 @@ export function updateEncounterCombatant(
   contextId: number,
   combatantId: number,
   fields: Partial<
-    Pick<
-      EncounterCombatant,
-      | "name"
-      | "initiative"
-      | "current_hp"
-      | "max_hp"
-      | "show_hp_bar"
-      | "show_hp_numbers"
-    >
+    Pick<EncounterCombatant, "name" | "initiative" | "current_hp" | "max_hp">
   >,
 ): Promise<void> {
   return contextRequest<void>(contextId, "campaign.encounter.combatants.update", {
@@ -1208,10 +1197,6 @@ export function addCharacterToEncounter(
   contextId: number,
   characterId: number,
   initiative: number,
-  visibility?: {
-    show_hp_bar: boolean;
-    show_hp_numbers: boolean;
-  },
 ): Promise<void> {
   return contextRequest<void>(
     contextId,
@@ -1219,7 +1204,6 @@ export function addCharacterToEncounter(
     {
       character_id: characterId,
       initiative,
-      ...visibility,
     },
   );
 }

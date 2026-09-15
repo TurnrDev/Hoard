@@ -890,8 +890,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             context,
             command.character_id,
             command.initiative,
-            command.show_hp_bar,
-            command.show_hp_numbers,
         )
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 

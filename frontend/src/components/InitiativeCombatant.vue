@@ -62,10 +62,7 @@ export default defineComponent({
       );
     },
     showHealthBar(): boolean {
-      return Boolean(
-        (this.canViewHiddenHealth || this.combatant.show_hp_bar) &&
-        this.combatant.health_percentage !== null,
-      );
+      return this.combatant.health_percentage !== null;
     },
     showHealthNumbers(): boolean {
       return Boolean(

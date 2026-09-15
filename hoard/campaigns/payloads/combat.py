@@ -85,8 +85,6 @@ class EncounterCharacterAddCommand(BaseModel):
 
     character_id: int = Field(gt=0)
     initiative: int = Field(default=0, ge=-100, le=100)
-    show_hp_bar: bool = False
-    show_hp_numbers: bool = False
 
 
 class EncounterCombatantAddCommand(BaseModel):
@@ -97,8 +95,6 @@ class EncounterCombatantAddCommand(BaseModel):
     initiative: int = Field(default=0, ge=-100, le=100)
     current_hp: int | None = Field(default=None, ge=0)
     max_hp: int | None = Field(default=None, ge=1)
-    show_hp_bar: bool = False
-    show_hp_numbers: bool = False
 
     @model_validator(mode="after")
     def require_complete_health(self) -> EncounterCombatantAddCommand:
@@ -118,8 +114,6 @@ class EncounterCombatantUpdateCommand(EncounterCombatantIdentifierCommand):
     initiative: int | None = Field(default=None, ge=-100, le=100)
     current_hp: int | None = Field(default=None, ge=0)
     max_hp: int | None = Field(default=None, ge=1)
-    show_hp_bar: bool | None = None
-    show_hp_numbers: bool | None = None
 
 
 class EncounterCombatantReorderCommand(BaseModel):

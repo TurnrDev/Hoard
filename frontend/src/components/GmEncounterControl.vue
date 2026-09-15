@@ -92,7 +92,8 @@
             <tr>
               <th scope="col">Combatant</th>
               <th scope="col">Initiative</th>
-              <th scope="col">Player HP</th>
+              <th scope="col">HP</th>
+              <th scope="col">Status</th>
               <th
                 scope="col"
                 class="text-end"
@@ -153,17 +154,36 @@
                 />
               </td>
               <td>
+                <template v-if="hasTrackedHealth(combatant)">
+                  <span class="d-block small tabular-nums mb-1">
+                    {{ combatant.current_hp }} / {{ combatant.max_hp }} HP
+                  </span>
+                  <ProgressBar
+                    :value="combatant.health_percentage ?? 0"
+                    :show-value="false"
+                    :aria-label="`${combatant.name} health: ${combatant.current_hp} of ${combatant.max_hp}`"
+                  />
+                </template>
                 <span
-                  v-if="combatant.is_player_character"
+                  v-else
                   class="small text-body-secondary"
                 >
-                  HP always visible
+                  Not tracked
                 </span>
-                <CombatantVisibilityControls
-                  v-else
-                  :combatant="combatant"
-                  @update-visibility="updateVisibility"
+              </td>
+              <td>
+                <ConditionIndicators
+                  v-if="combatant.conditions.length"
+                  :combatant-name="combatant.name"
+                  :conditions="combatant.conditions"
+                  expanded
                 />
+                <span
+                  v-else
+                  class="small text-body-secondary"
+                >
+                  No active effects
+                </span>
               </td>
               <td>
                 <div class="d-flex justify-content-end gap-2">
@@ -259,7 +279,7 @@
         <fieldset>
           <legend class="h5">Add an initiative entry</legend>
           <p class="small text-body-secondary">
-            Add another turn for a character, or add a creature or generic combatant.
+            Add another turn for a character, or enter a custom combatant name.
           </p>
 
           <div class="d-grid gap-3">
@@ -282,61 +302,11 @@
                 placeholder="Choose a character"
               />
               <div class="form-text">
-                Leave this blank to add a Compendium creature or generic NPC.
+                Leave this blank to add a custom combatant below.
               </div>
             </div>
 
             <template v-if="characterId === null">
-              <div>
-                <label
-                  class="form-label fw-semibold"
-                  for="creature-search"
-                >
-                  Find a Compendium creature
-                </label>
-                <div
-                  class="encounter-creature-search d-flex flex-column flex-sm-row gap-2"
-                >
-                  <div class="flex-grow-1">
-                    <InputText
-                      id="creature-search"
-                      v-model="creatureQuery"
-                      class="w-100"
-                      placeholder="Creature name"
-                      @keydown.enter.prevent="searchCreatures"
-                    />
-                  </div>
-                  <div>
-                    <Button
-                      class="w-100"
-                      label="Search"
-                      icon="mdi mdi-magnify"
-                      severity="secondary"
-                      :loading="searching"
-                      @click="searchCreatures"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div v-if="creatureOptions.length">
-                <label
-                  class="form-label fw-semibold"
-                  for="encounter-creature"
-                >
-                  Compendium creature
-                </label>
-                <Select
-                  id="encounter-creature"
-                  v-model="creatureEntryId"
-                  class="w-100"
-                  :options="creatureOptions"
-                  option-label="label"
-                  option-value="value"
-                  show-clear
-                  filter
-                  placeholder="Use a result, or enter a generic name below"
-                />
-              </div>
               <div>
                 <label
                   class="form-label fw-semibold"
@@ -349,11 +319,8 @@
                   v-model="combatantName"
                   class="w-100"
                   maxlength="200"
-                  placeholder="For example: Goblin 2"
+                  placeholder="For example: Goblin 2 or The Black Knight"
                 />
-                <div class="form-text">
-                  Optional when a Compendium creature is selected.
-                </div>
               </div>
             </template>
 
@@ -404,42 +371,6 @@
                 />
               </div>
             </div>
-
-            <fieldset v-if="showVisibilityOptions">
-              <legend class="form-label fw-semibold fs-6">Player HP visibility</legend>
-              <div class="d-flex gap-2">
-                <Button
-                  type="button"
-                  icon="mdi mdi-heart-pulse"
-                  rounded
-                  :outlined="!showHpBar"
-                  :severity="showHpBar ? 'success' : 'secondary'"
-                  :disabled="healthVisibilityDisabled"
-                  :aria-pressed="showHpBar"
-                  :aria-label="`${showHpBar ? 'Hide' : 'Show'} HP bar to players`"
-                  :title="`${showHpBar ? 'Hide' : 'Show'} HP bar to players`"
-                  @click="showHpBar = !showHpBar"
-                />
-                <Button
-                  type="button"
-                  icon="mdi mdi-numeric"
-                  rounded
-                  :outlined="!showHpNumbers"
-                  :severity="showHpNumbers ? 'success' : 'secondary'"
-                  :disabled="healthVisibilityDisabled"
-                  :aria-pressed="showHpNumbers"
-                  :aria-label="`${showHpNumbers ? 'Hide' : 'Show'} HP numbers to players`"
-                  :title="`${showHpNumbers ? 'Hide' : 'Show'} HP numbers to players`"
-                  @click="showHpNumbers = !showHpNumbers"
-                />
-              </div>
-              <p
-                v-if="healthVisibilityDisabled"
-                class="form-text mb-0"
-              >
-                Enter maximum HP to enable player-facing health.
-              </p>
-            </fieldset>
           </div>
 
           <div class="d-flex justify-content-end mt-3">
@@ -594,6 +525,7 @@ import Dialog from "primevue/dialog";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
+import ProgressBar from "primevue/progressbar";
 import Select from "primevue/select";
 import { defineComponent, type PropType } from "vue";
 import {
@@ -604,29 +536,28 @@ import {
   removeCombatantCondition,
   removeEncounterCombatant,
   reorderEncounterCombatants,
-  searchCompendiumEntries,
   setCombatantCondition,
   setCurrentEncounterCombatant,
   startEncounter,
   updateEncounterCombatant,
   type Campaign,
   type Character,
-  type CompendiumSearchEntry,
   type ConditionMutation,
   type EncounterCombatant,
 } from "../api";
-import CombatantVisibilityControls from "./CombatantVisibilityControls.vue";
+import ConditionIndicators from "./ConditionIndicators.vue";
 import ConditionManager from "./ConditionManager.vue";
 
 export default defineComponent({
   components: {
     Button,
-    CombatantVisibilityControls,
+    ConditionIndicators,
     ConditionManager,
     Dialog,
     InputNumber,
     InputText,
     Message,
+    ProgressBar,
     Select,
   },
   props: {
@@ -638,7 +569,6 @@ export default defineComponent({
   data() {
     return {
       busy: false,
-      searching: false,
       error: "",
       endDialogOpen: false,
       initiativeDialogOpen: false,
@@ -651,14 +581,9 @@ export default defineComponent({
       healthNote: "",
       draggedCombatantId: null as number | null,
       characterId: null as number | null,
-      creatureEntryId: null as number | null,
-      creatureQuery: "",
-      creatures: [] as CompendiumSearchEntry[],
       combatantName: "",
       newInitiative: 0,
       maximumHp: null as number | null,
-      showHpBar: false,
-      showHpNumbers: false,
     };
   },
   computed: {
@@ -673,33 +598,12 @@ export default defineComponent({
         .map((character) => ({ label: character.name, value: character.id }))
         .sort((left, right) => left.label.localeCompare(right.label));
     },
-    selectedCharacter(): Character | undefined {
-      return this.characters.find((character) => character.id === this.characterId);
-    },
-    creatureOptions(): Array<{ label: string; value: number }> {
-      return this.creatures.map((creature) => ({
-        label: `${creature.name} · ${creature.source}`,
-        value: creature.id,
-      }));
-    },
     participantInvalid(): boolean {
       if (this.characterId !== null) {
         return false;
       }
 
-      return this.creatureEntryId === null && !this.combatantName.trim();
-    },
-    showVisibilityOptions(): boolean {
-      if (this.characterId === null) {
-        return true;
-      }
-
-      return Boolean(
-        this.selectedCharacter && !this.selectedCharacter.is_player_character,
-      );
-    },
-    healthVisibilityDisabled(): boolean {
-      return this.characterId === null && this.maximumHp === null;
+      return !this.combatantName.trim();
     },
     healthDialogTitle(): string {
       const action = this.healthMode === "damage" ? "Deal damage to" : "Heal";
@@ -713,12 +617,9 @@ export default defineComponent({
     },
     resetParticipant(): void {
       this.characterId = null;
-      this.creatureEntryId = null;
       this.combatantName = "";
       this.newInitiative = 0;
       this.maximumHp = null;
-      this.showHpBar = false;
-      this.showHpNumbers = false;
     },
     async startCombat(): Promise<void> {
       this.busy = true;
@@ -951,25 +852,6 @@ export default defineComponent({
         this.busy = false;
       }
     },
-    async updateVisibility(update: {
-      combatantId: number;
-      show_hp_bar?: boolean;
-      show_hp_numbers?: boolean;
-    }): Promise<void> {
-      const { combatantId, ...visibility } = update;
-
-      this.busy = true;
-      this.error = "";
-
-      try {
-        await updateEncounterCombatant(this.contextId, combatantId, visibility);
-        this.$emit("completed", "Player-facing health visibility updated.");
-      } catch (exception) {
-        this.reportError(exception, "Unable to update health visibility.");
-      } finally {
-        this.busy = false;
-      }
-    },
     async removeCombatant(combatant: EncounterCombatant): Promise<void> {
       this.busy = true;
       this.error = "";
@@ -983,22 +865,6 @@ export default defineComponent({
         this.busy = false;
       }
     },
-    async searchCreatures(): Promise<void> {
-      this.searching = true;
-      this.error = "";
-
-      try {
-        this.creatures = await searchCompendiumEntries(
-          this.contextId,
-          "monster",
-          this.creatureQuery.trim(),
-        );
-      } catch (exception) {
-        this.reportError(exception, "Unable to search the Compendium.");
-      } finally {
-        this.searching = false;
-      }
-    },
     async addParticipant(): Promise<void> {
       if (this.participantInvalid) {
         return;
@@ -1009,31 +875,18 @@ export default defineComponent({
 
       try {
         if (this.characterId !== null) {
-          const visibility = this.selectedCharacter?.is_player_character
-            ? undefined
-            : {
-                show_hp_bar: this.showHpBar,
-                show_hp_numbers: this.showHpNumbers,
-              };
-
           await addCharacterToEncounter(
             this.contextId,
             this.characterId,
             this.newInitiative,
-            visibility,
           );
         } else {
           await addEncounterCombatant(this.contextId, {
             name: this.combatantName.trim(),
-            ...(this.creatureEntryId === null
-              ? {}
-              : { creature_entry_id: this.creatureEntryId }),
             initiative: this.newInitiative,
             ...(this.maximumHp === null
               ? {}
               : { current_hp: this.maximumHp, max_hp: this.maximumHp }),
-            show_hp_bar: this.maximumHp !== null && this.showHpBar,
-            show_hp_numbers: this.maximumHp !== null && this.showHpNumbers,
           });
         }
 
@@ -1062,11 +915,6 @@ export default defineComponent({
 
 .initiative-drag-handle {
   cursor: grab;
-}
-
-.encounter-creature-search,
-.encounter-creature-search > div {
-  min-width: 0;
 }
 
 .encounter-participant-form :deep(.p-inputnumber-input) {

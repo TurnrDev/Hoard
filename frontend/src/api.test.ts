@@ -149,8 +149,7 @@ describe("API client", () => {
       duration: "Until the combatant stands",
     });
     await updateEncounterCombatant(8, 31, {
-      show_hp_bar: true,
-      show_hp_numbers: false,
+      initiative: 12,
     });
 
     expect(campaignRequest).toHaveBeenNthCalledWith(1, "characters.conditions.set", {
@@ -179,26 +178,20 @@ describe("API client", () => {
       "campaign.encounter.combatants.update",
       {
         combatant_id: 31,
-        show_hp_bar: true,
-        show_hp_numbers: false,
+        initiative: 12,
       },
     );
   });
 
   it("manages the encounter lifecycle over the context socket", async () => {
     await startEncounter(8);
-    await addCharacterToEncounter(8, 2, 18, {
-      show_hp_bar: true,
-      show_hp_numbers: false,
-    });
+    await addCharacterToEncounter(8, 2, 18);
     await addEncounterCombatant(8, {
       name: "Goblin 2",
       creature_entry_id: 44,
       initiative: 12,
       current_hp: 7,
       max_hp: 7,
-      show_hp_bar: true,
-      show_hp_numbers: false,
     });
     await reorderEncounterCombatants(8, [31, 30]);
     await setCurrentEncounterCombatant(8, 30);
@@ -212,8 +205,6 @@ describe("API client", () => {
       {
         character_id: 2,
         initiative: 18,
-        show_hp_bar: true,
-        show_hp_numbers: false,
       },
     );
     expect(campaignRequest).toHaveBeenNthCalledWith(
@@ -225,8 +216,6 @@ describe("API client", () => {
         initiative: 12,
         current_hp: 7,
         max_hp: 7,
-        show_hp_bar: true,
-        show_hp_numbers: false,
       },
     );
     expect(campaignRequest).toHaveBeenNthCalledWith(

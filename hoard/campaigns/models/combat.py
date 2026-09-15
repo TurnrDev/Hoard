@@ -107,7 +107,6 @@ class EncounterCombatant(models.Model):
     initiative_modifier = models.SmallIntegerField(default=0)
     current_hp = models.IntegerField(null=True, blank=True)
     max_hp = models.PositiveIntegerField(null=True, blank=True)
-    show_hp_bar = models.BooleanField(default=False)
     show_hp_numbers = models.BooleanField(default=False)
 
     class Meta:

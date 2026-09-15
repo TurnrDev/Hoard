@@ -57,7 +57,6 @@ class EncounterServiceTests(TestCase):
 
         second_position = add_character_combatant(self.gm, self.hero.pk, 8)
         self.assertEqual(second_position.character, self.hero)
-        self.assertTrue(second_position.show_hp_bar)
         self.assertTrue(second_position.show_hp_numbers)
         self.assertEqual(encounter.combatants.filter(character=self.hero).count(), 2)
 
@@ -79,10 +78,7 @@ class EncounterServiceTests(TestCase):
             self.gm,
             non_player_character.pk,
             6,
-            show_hp_bar=True,
-            show_hp_numbers=False,
         )
-        self.assertTrue(guide_position.show_hp_bar)
         self.assertFalse(guide_position.show_hp_numbers)
 
         reordered = reorder_combatants(
@@ -259,7 +255,7 @@ class EncounterServiceTests(TestCase):
 
         self.assertEqual(order[0], quicker_entry.pk)
 
-    def test_hidden_monster_health_is_filtered_for_players(self) -> None:
+    def test_monster_health_bar_is_visible_but_numbers_are_filtered_for_players(self) -> None:
         start_encounter(self.gm)
         monster = add_encounter_combatant(
             self.gm,
@@ -268,8 +264,6 @@ class EncounterServiceTests(TestCase):
             initiative=14,
             current_hp=23,
             max_hp=40,
-            show_hp_bar=False,
-            show_hp_numbers=False,
         )
 
         gm_monster = next(
@@ -287,7 +281,7 @@ class EncounterServiceTests(TestCase):
         self.assertEqual(gm_monster["health_percentage"], 58)
         self.assertIsNone(player_monster["current_hp"])
         self.assertIsNone(player_monster["max_hp"])
-        self.assertIsNone(player_monster["health_percentage"])
+        self.assertEqual(player_monster["health_percentage"], 58)
 
     def test_conditions_are_structured_and_exhaustion_requires_a_level(self) -> None:
         encounter = start_encounter(self.gm)
