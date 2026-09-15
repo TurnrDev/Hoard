@@ -16,6 +16,7 @@
   --bs-tertiary-bg-rgb: 228, 218, 196;
   --bs-link-color: #744c15;
   --bs-link-hover-color: #4e3214;
+  --hoard-table-striped-ink: #3e4032;
 }
 
 .hoard-dark {
@@ -40,6 +41,7 @@
   --bs-tertiary-bg-rgb: 25, 28, 23;
   --bs-link-color: #f2c85c;
   --bs-link-hover-color: #f9df91;
+  --hoard-table-striped-ink: #f0ece3;
 }
 
 [data-hoard-palette="colourblind"] {
@@ -61,6 +63,11 @@
   --bs-tertiary-color-rgb: 133, 130, 124;
   --bs-link-color: #89c4ff;
   --bs-link-hover-color: #b9dcff;
+  --hoard-table-striped-ink: #e0dbd1;
+}
+
+.table-striped {
+  --bs-table-striped-color: var(--hoard-table-striped-ink);
 }
 
 html,
