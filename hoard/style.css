@@ -179,16 +179,29 @@ select:focus-visible {
   min-width: 0;
 }
 
-.campaign-navigation a {
+.campaign-navigation__item {
   padding: 0.65rem 0.75rem;
   border-radius: var(--bs-border-radius);
   color: var(--bs-body-color);
 }
 
-.campaign-navigation a:hover,
-.campaign-navigation a.router-link-active {
+.campaign-navigation a.campaign-navigation__item:hover,
+.campaign-navigation a.campaign-navigation__item.router-link-active {
   background: color-mix(in srgb, var(--hoard-accent) 16%, transparent);
   color: var(--bs-body-color);
+}
+
+.campaign-navigation__item--disabled {
+  color: var(--bs-secondary-color);
+  cursor: not-allowed;
+}
+
+.campaign-navigation__coming-soon {
+  width: fit-content;
+  margin-left: 2rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
 }
 
 .proficiency-bonus {

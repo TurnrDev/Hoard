@@ -50,8 +50,8 @@ The release branch does not retain commented-out implementation code.
   Nginx static-path pattern as built assets.
 - Simplify the GM dashboard to calendar, party money, shared XP, coin
   awards/transfers, roster, invites, and ledger actions.
-- Keep Compendium in the sidebar as a “Coming soon” destination; remove all
-  compendium data access and management.
+- Keep Compendium in the sidebar as a disabled item with a “Coming soon” tag;
+  remove its page, route, data access, and management.
 - Remove character-import controls and routes. Import remains part of character
   editing when it returns in a later release; do not show a standalone notice.
 - Preserve the original profile-card layout for deferred capabilities, replacing

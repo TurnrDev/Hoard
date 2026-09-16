@@ -37,11 +37,6 @@ const router = createRouter({
       props: true,
     },
     {
-      path: "/c/:id/compendium",
-      component: () => import("@/compendium/pages/CompendiumView.vue"),
-      props: true,
-    },
-    {
       path: "/c/:id/ledger",
       component: () => import("@/campaigns/pages/LedgerView.vue"),
       props: true,

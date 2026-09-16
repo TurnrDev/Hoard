@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import packageLock from "../package-lock.json?raw";
 import packageMetadata from "../package.json?raw";
 import pythonMetadata from "../pyproject.toml?raw";
+import navigation from "./campaigns/components/CampaignNavigation.vue?raw";
 import profile from "./campaigns/pages/CharacterProfileView.vue?raw";
-import compendium from "./compendium/pages/CompendiumView.vue?raw";
 import router from "./router.ts?raw";
 
 describe("initial release UI scope", () => {
@@ -34,9 +34,12 @@ describe("initial release UI scope", () => {
     expect(profile).not.toContain('v-model="draft.kind"');
   });
 
-  it("shows Compendium as coming soon", () => {
-    expect(compendium).toContain("The Compendium is coming soon.");
-    expect(compendium).toContain("<Skeleton");
+  it("keeps Compendium as a disabled coming-soon navigation item", () => {
+    expect(navigation).toContain("Compendium");
+    expect(navigation).toContain('aria-disabled="true"');
+    expect(navigation).toContain("Coming soon");
+    expect(router).not.toContain("CompendiumView");
+    expect(router).not.toMatch(/\/c\/:id\/compendium/);
   });
 
   it("does not expose builder or level-up routes", () => {

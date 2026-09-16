@@ -162,31 +162,6 @@
         <div class="d-grid gap-4">
           <section
             class="border rounded-3 p-3 p-md-4"
-            aria-labelledby="campaign-tools-heading"
-          >
-            <header>
-              <h2
-                id="campaign-tools-heading"
-                class="h3"
-              >
-                Campaign tools
-              </h2>
-            </header>
-            <div>
-              <p class="text-body-secondary">
-                Compendium management is coming soon. The destination remains visible as
-                a preview of the planned campaign tools.
-              </p>
-              <Button
-                :as="'router-link'"
-                :to="`/c/${campaignId}/compendium`"
-                icon="mdi mdi-book-open-variant"
-                label="Open compendium"
-              />
-            </div>
-          </section>
-          <section
-            class="border rounded-3 p-3 p-md-4"
             aria-labelledby="characters-heading"
           >
             <header>
