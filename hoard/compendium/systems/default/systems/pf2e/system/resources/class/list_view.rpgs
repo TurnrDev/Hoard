@@ -1,2 +1,0 @@
-view class_search_item() =
-  listItem(id = "class_search_item", title = name);

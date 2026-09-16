@@ -1,6 +1,0 @@
-view deity_list() =
-  listItem(
-    id = "deity_list",
-    title = name,
-    subtitle = display_secondary,
-  );

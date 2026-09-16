@@ -1,2 +1,0 @@
-view damage_dice_display() =
-  text(id = "damage_dice_display", text = display_description, style = "text");

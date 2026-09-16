@@ -1,2 +1,0 @@
-view weight_display() =
-  text(id = "weight_display", text = description, style = "text");

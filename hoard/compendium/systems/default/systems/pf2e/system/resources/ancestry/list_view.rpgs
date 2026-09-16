@@ -1,2 +1,0 @@
-view ancestry_list() =
-  listItem(id = "ancestry_list", title = name);
