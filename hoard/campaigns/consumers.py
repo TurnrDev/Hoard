@@ -31,6 +31,7 @@ from .payloads import (
     CampaignMemberData,
     CampaignMembershipChangedEvent,
     CampaignPresenceChangedEvent,
+    CharacterHealthChangedEvent,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
 )
@@ -160,6 +161,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.update": self._character_update,
             "characters.portrait.remove": self._character_portrait_remove,
             "characters.archive": self._character_archive,
+            "characters.health.post": self._character_health_adjust,
+            "characters.rest": self._character_rest,
             "transactions.list": self._transaction_list,
             "money.transfers.create": self._money_transfer_create,
             "money.exchanges.create": self._money_exchange_create,
@@ -294,6 +297,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.update",
             "characters.portrait.remove",
             "characters.archive",
+            "characters.health.post",
+            "characters.rest",
         }:
             response = CommandAcknowledgementEnvelope(
                 request_id=envelope.request_id
@@ -346,6 +351,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import (
             character_data,
             context_data,
+            encounter_data,
             party_money,
             visible_characters,
         )
@@ -367,6 +373,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 mode="json"
             ),
             "party_money": party_money(campaign),
+            "encounter": encounter_data(campaign),
             "members": [
                 {
                     "id": candidate.pk,
@@ -708,6 +715,68 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             ),
         )
         return character_data(character, context)
+
+    @database_sync_to_async
+    def _character_health_adjust(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import CharacterHealthCommand
+        from .services.health import adjust_health
+
+        context = self._context()
+        command = CharacterHealthCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        amount = (
+            -command.current_hp_delta
+            if command.reason == "damage"
+            else command.current_hp_delta
+            if command.reason == "healing"
+            else command.temporary_hp_delta
+        )
+        updated = adjust_health(
+            character,
+            reason=command.reason,
+            amount=amount,
+            current_hp=command.current_hp,
+            temporary_hp=command.temporary_hp,
+            description=command.description,
+            created_by=context,
+        )
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterHealthChangedEvent(
+                character_id=updated.pk,
+                max_hp=updated.max_hp,
+                current_hp=updated.current_hp,
+                temporary_hp=updated.temporary_hp,
+                request_id=str(content["request_id"]),
+            ),
+        )
+
+    @database_sync_to_async
+    def _character_rest(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import CharacterRestCommand
+        from .services.health import take_rest
+
+        context = self._context()
+        command = CharacterRestCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        updated = take_rest(
+            character,
+            kind=command.kind,
+            regained_hp=command.regained_hp,
+            created_by=context,
+        )
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterHealthChangedEvent(
+                character_id=updated.pk,
+                max_hp=updated.max_hp,
+                current_hp=updated.current_hp,
+                temporary_hp=updated.temporary_hp,
+                request_id=str(content["request_id"]),
+            ),
+        )
 
     @database_sync_to_async
     def _transaction_list(self, content: dict[str, object]) -> dict[str, object]:

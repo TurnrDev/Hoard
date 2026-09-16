@@ -6,6 +6,30 @@ from django.db import models
 from .audit import CampaignDatedEvent
 
 
+class HealthTransaction(CampaignDatedEvent):
+    class Reason(models.TextChoices):
+        DAMAGE = "damage", "Damage"
+        HEALING = "healing", "Healing"
+        TEMPORARY = "temporary", "Temporary HP"
+        CORRECTION = "correction", "Correction"
+        SHORT_REST = "short_rest", "Short rest"
+        LONG_REST = "long_rest", "Long rest"
+
+    character = models.ForeignKey(
+        "campaigns.Character", on_delete=models.PROTECT, related_name="health_history"
+    )
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    current_hp_before = models.PositiveIntegerField()
+    current_hp_after = models.PositiveIntegerField()
+    temporary_hp_before = models.PositiveIntegerField()
+    temporary_hp_after = models.PositiveIntegerField()
+    description = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Health Change"
+        verbose_name_plural = "Health Changes"
+
+
 class MembershipEvent(CampaignDatedEvent):
     class Reason(models.TextChoices):
         DEACTIVATED = "deactivated", "Deactivated"

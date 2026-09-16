@@ -122,6 +122,8 @@ COMMAND_OPERATIONS = frozenset(
         "characters.update",
         "characters.portrait.remove",
         "characters.archive",
+        "characters.health.post",
+        "characters.rest",
         "money.transfers.create",
         "money.exchanges.create",
         "experience.shared_awards.create",
@@ -138,7 +140,9 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         CalendarAdjustmentCommand,
         CampaignCalendarData,
         CharacterCreateCommand,
+        CharacterHealthCommand,
         CharacterIdentifierCommand,
+        CharacterRestCommand,
         CharacterUpdateCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
@@ -181,6 +185,16 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         name="characters.update",
         kind=OperationKind.COMMAND,
         payload_model=CharacterUpdateCommand,
+    )
+    definitions["characters.health.post"] = OperationDefinition(
+        name="characters.health.post",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterHealthCommand,
+    )
+    definitions["characters.rest"] = OperationDefinition(
+        name="characters.rest",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterRestCommand,
     )
     definitions["characters.portrait.remove"] = OperationDefinition(
         name="characters.portrait.remove",

@@ -32,7 +32,7 @@
           v-if="expanded"
           class="ms-1 fw-bold"
         >
-          Party
+          {{ inCombat ? "Initiative" : "Party" }}
         </span>
       </header>
 
@@ -58,9 +58,24 @@
           class="party-rail__separator-line"
           aria-hidden="true"
         />
+        <span v-if="expanded && inCombat">Combatants</span>
+        <span
+          v-if="expanded && inCombat"
+          class="party-rail__separator-line"
+          aria-hidden="true"
+        />
       </div>
 
+      <InitiativeTracker
+        v-if="inCombat"
+        :combatants="campaign.encounter?.combatants ?? []"
+        :active-context="activeContext"
+        :expanded="expanded"
+        :can-view-hidden-health="activeContext.kind === 'gm'"
+        :current-combatant-id="campaign.encounter?.current_combatant_id ?? null"
+      />
       <PartyRoster
+        v-else
         :characters="campaign.characters"
         :members="members"
         :active-context="activeContext"
@@ -81,12 +96,14 @@ import Button from "primevue/button";
 import type { Campaign, CampaignMember } from "@/api";
 import type { ActingContext } from "@/campaigns/context";
 import GameMasterPresence from "./GameMasterPresence.vue";
+import InitiativeTracker from "./InitiativeTracker.vue";
 import PartyRoster from "./PartyRoster.vue";
 import PartySummary from "./PartySummary.vue";
 
 export default defineComponent({
   components: {
     GameMasterPresence,
+    InitiativeTracker,
     PartyRoster,
     PartySummary,
     Button,
@@ -99,6 +116,9 @@ export default defineComponent({
   },
   emits: ["toggle"],
   computed: {
+    inCombat(): boolean {
+      return this.campaign.encounter !== null;
+    },
     gameMasters(): CampaignMember[] {
       return this.members.filter((member) => member.is_game_master && member.is_active);
     },

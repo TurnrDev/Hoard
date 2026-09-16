@@ -109,7 +109,8 @@ class ContextSocketTests(TransactionTestCase):
         self.assertEqual(player_data["context_id"], player_context.pk)
         self.assertIn("portrait_url", player_data)
         self.assertIn("money", player_data)
-        self.assertNotIn("encounter", response["data"])
+        self.assertIsNone(response["data"]["encounter"])
+        self.assertIn("sheet", player_data)
         self.assertNotIn("incomplete_level_ups", response["data"])
 
     def test_context_socket_correlates_requests(self) -> None:

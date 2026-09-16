@@ -12,6 +12,65 @@ export type User = {
   username: string;
 };
 
+export type Calculation = {
+  value: number;
+  base: number;
+  formula?: string;
+  numeric_formula?: string;
+  components: Array<{
+    label: string;
+    value: number;
+    formula?: string;
+    source?: string;
+  }>;
+};
+
+export type CharacterSheet = {
+  level: number;
+  rolled_hit_points: number;
+  hp_ability: string;
+  hp_adjustment: number;
+  initiative_adjustment: number;
+  proficiency_bonus_adjustment: number;
+  max_hp: number;
+  hp_calculation: Calculation;
+  current_hp: number;
+  temporary_hp: number;
+  initiative: Calculation;
+  proficiency_bonus: number;
+  proficiency_bonus_calculation: Calculation;
+  jack_of_all_trades: boolean;
+  remarkable_athlete: boolean;
+  abilities: Record<
+    string,
+    {
+      score: number;
+      raw: number;
+      ancestry_bonus: number;
+      background_bonus: number;
+      score_adjustment: number;
+      modifier: number;
+      check_bonus: number;
+      check_formula: Calculation;
+      formula: Calculation;
+    }
+  >;
+  saves: Record<
+    string,
+    { proficiency: string; adjustment: number; bonus: number; formula: Calculation }
+  >;
+  skills: Record<
+    string,
+    {
+      ability: string;
+      proficiency: string;
+      adjustment: number;
+      bonus: number;
+      formula: Calculation;
+    }
+  >;
+};
+
 export type CampaignSummary = {
   id: number;
   name: string;
@@ -56,7 +115,29 @@ export type Character = {
   race: string;
   class: string;
   experience: number;
+  sheet: CharacterSheet;
   money: Record<string, number | string>;
+};
+
+export type EncounterCombatant = {
+  id: number;
+  character_id: number | null;
+  name: string;
+  portrait_url: string | null;
+  initiative: number;
+  initiative_roll: number | null;
+  initiative_modifier: number;
+  position: number;
+  current_hp: number | null;
+  max_hp: number | null;
+  health_percentage: number | null;
+  show_hp_numbers: boolean;
+};
+
+export type Encounter = {
+  id: number;
+  current_combatant_id: number | null;
+  combatants: EncounterCombatant[];
 };
 
 export type CampaignInvitation = {
@@ -78,6 +159,7 @@ export type Campaign = CampaignSummary & {
   members: CampaignMember[];
   characters: Character[];
   invitations: CampaignInvitation[];
+  encounter: Encounter | null;
 };
 
 export type LedgerEntry = {
@@ -349,6 +431,34 @@ export function updateCharacter(
   return contextRequest<void>(contextId, "characters.update", {
     character_id: characterId,
     fields: { ...fields, character_class: characterClass },
+  });
+}
+
+export function postHealth(
+  contextId: number,
+  payload: {
+    character_id: number;
+    reason: "damage" | "healing" | "temporary" | "correction";
+    current_hp_delta?: number;
+    temporary_hp_delta?: number;
+    current_hp?: number;
+    temporary_hp?: number;
+    description?: string;
+  },
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.health.post", payload);
+}
+
+export function takeRest(
+  contextId: number,
+  characterId: number,
+  kind: "short" | "long",
+  regainedHp = 0,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.rest", {
+    character_id: characterId,
+    kind,
+    regained_hp: regainedHp,
   });
 }
 

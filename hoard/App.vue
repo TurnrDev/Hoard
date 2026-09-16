@@ -671,7 +671,10 @@ export default defineComponent({
       void this.refreshCampaignChrome(context);
 
       this.unsubscribeCampaignChanges = subscribeDomainEvents((event) => {
-        if (event.type === "campaign.state_changed") {
+        if (
+          event.type === "campaign.state_changed" ||
+          event.type === "character.health_changed"
+        ) {
           void this.refreshCampaignChrome(context);
           campaignRefreshRevision.value += 1;
         }

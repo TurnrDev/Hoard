@@ -66,7 +66,6 @@ class WebSocketProtocolTests(SimpleTestCase):
             "compendium.",
             "characters.builder.",
             "characters.conditions.",
-            "characters.health.",
             "characters.imports.",
             "characters.level_up.",
             "characters.notes.",
@@ -85,6 +84,7 @@ class WebSocketProtocolTests(SimpleTestCase):
         }
 
         self.assertEqual(exposed, set())
-        self.assertNotIn("characters.rest", operations)
+        self.assertIn("characters.health.post", operations)
+        self.assertIn("characters.rest", operations)
         self.assertNotIn("campaign.level.approve", operations)
         self.assertNotIn("campaign.level.status", operations)

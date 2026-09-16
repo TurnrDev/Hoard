@@ -30,7 +30,33 @@ class CharacterLifecycleService:
         fields: dict[str, object],
     ) -> Character:
         """Update the supported minimal profile fields."""
-        allowed = {"name", "race", "character_class", "kind", "is_active"}
+        allowed = {
+            "name",
+            "race",
+            "character_class",
+            "kind",
+            "is_active",
+            "rolled_hit_points",
+            "hp_ability",
+            "hp_adjustment",
+            "initiative_adjustment",
+            "proficiency_bonus_adjustment",
+            "ability_bonuses",
+            "background_ability_bonuses",
+            "ability_score_adjustments",
+            "skill_proficiencies",
+            "skill_adjustments",
+            "save_proficiencies",
+            "save_adjustments",
+            "jack_of_all_trades",
+            "remarkable_athlete",
+            "strength",
+            "dexterity",
+            "constitution",
+            "intelligence",
+            "wisdom",
+            "charisma",
+        }
         unknown = set(fields) - allowed
         if unknown:
             unsupported = ", ".join(sorted(unknown))

@@ -7,6 +7,7 @@ from hoard.campaigns.models import (
     CampaignContext,
     Character,
     ExperienceTransaction,
+    HealthTransaction,
     MembershipEvent,
     MoneyTransaction,
 )
@@ -101,7 +102,10 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
                 "kind": "pc",
             },
         )
-        self.assertNotIn("sheet", result["data"])
+        self.assertEqual(result["data"]["sheet"]["max_hp"], 1)
+        self.assertEqual(result["data"]["sheet"]["initiative"]["value"], 0)
+        self.assertEqual(result["data"]["sheet"]["proficiency_bonus"], 2)
+        self.assertEqual(result["data"]["sheet"]["abilities"]["strength"]["score"], 10)
         self.assertNotIn("inventory", result["data"])
         self.assertNotIn("conditions", result["data"])
 
@@ -131,6 +135,78 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(response["type"], "command.error")
         self.other_character.refresh_from_db()
         self.assertEqual(self.other_character.name, "Other hero")
+
+    def test_owner_can_update_calculated_statistics_but_half_is_not_a_state(
+        self,
+    ) -> None:
+        accepted = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.update",
+            character_id=self.character.pk,
+            fields={
+                "strength": 12,
+                "ability_bonuses": {"strength": 2},
+                "background_ability_bonuses": {"strength": 1},
+                "ability_score_adjustments": {"strength": -1},
+                "skill_proficiencies": {"athletics": "expertise"},
+                "save_proficiencies": {"strength": "proficient"},
+                "jack_of_all_trades": True,
+                "remarkable_athlete": True,
+            },
+        )
+
+        self.assertEqual(accepted["type"], "command.ack")
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.ability_score("strength"), 14)
+        self.assertEqual(self.character.skill_bonus("athletics", "strength"), 6)
+
+        rejected = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.update",
+            character_id=self.character.pk,
+            fields={"skill_proficiencies": {"athletics": "half"}},
+        )
+
+        self.assertEqual(rejected["type"], "command.error")
+
+    def test_health_commands_are_authorised_and_audited(self) -> None:
+        self.character.rolled_hit_points = 12
+        self.character.current_hp = 10
+        self.character.temporary_hp = 3
+        self.character.save(
+            update_fields=("rolled_hit_points", "current_hp", "temporary_hp")
+        )
+
+        denied = self.socket_request(
+            self.other_user,
+            self.other_pc.pk,
+            "characters.health.post",
+            character_id=self.character.pk,
+            reason="damage",
+            current_hp_delta=-4,
+        )
+        self.assertEqual(denied["type"], "command.error")
+
+        accepted = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.health.post",
+            character_id=self.character.pk,
+            reason="damage",
+            current_hp_delta=-4,
+        )
+        self.assertEqual(accepted["type"], "command.ack")
+
+        self.character.refresh_from_db()
+        self.assertEqual(
+            (self.character.current_hp, self.character.temporary_hp), (9, 0)
+        )
+        self.assertEqual(
+            HealthTransaction.objects.get(character=self.character).created_by,
+            self.pc,
+        )
 
     def test_only_game_master_can_create_an_npc(self) -> None:
         denied = self.socket_request(
