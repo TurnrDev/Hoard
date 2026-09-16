@@ -208,6 +208,12 @@ class Character(models.Model):
         on_delete=models.SET_NULL,
         related_name="character",
     )
+
+    class Kind(models.TextChoices):
+        PC = "pc", "Player character"
+        NPC = "npc", "Non-player character"
+
+    kind = models.CharField(max_length=3, choices=Kind.choices, default=Kind.PC)
     is_active = models.BooleanField("Is Active", default=False)
     is_archived = models.BooleanField("Is Archived", default=False)
     is_build_complete = models.BooleanField("Is Build Complete", default=True)
@@ -300,6 +306,8 @@ class Character(models.Model):
             )
         if self.context_id and self.context.kind != CampaignContext.Kind.PC:
             raise ValidationError({"context": "Only a PC context may own a character."})
+        if self.kind == self.Kind.NPC and self.context_id:
+            raise ValidationError({"context": "NPCs cannot belong to a player context."})
 
     def save(self, *args, **kwargs) -> None:
         self.clean()
@@ -307,7 +315,7 @@ class Character(models.Model):
 
     @property
     def is_player_character(self) -> bool:
-        return self.context_id is not None
+        return self.kind == self.Kind.PC
 
     @property
     def inspiration_available(self) -> bool:

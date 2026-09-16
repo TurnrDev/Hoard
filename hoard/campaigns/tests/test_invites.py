@@ -19,7 +19,7 @@ class InvitationTests(TestCase):
             kind=CampaignContext.Kind.GM,
         )
 
-    def test_accepting_invite_creates_inactive_draft_and_is_single_use(self) -> None:
+    def test_accepting_invite_creates_an_inactive_pc_and_is_single_use(self) -> None:
         invitation, token = create_invitation(self.gm, "delivery@example.com")
         player = get_user_model().objects.create_user(username="invited")
 
@@ -27,8 +27,9 @@ class InvitationTests(TestCase):
 
         character = context.character
         self.assertFalse(character.is_active)
-        self.assertFalse(character.is_build_complete)
-        self.assertTrue(character.health_history.filter(reason="baseline").exists())
+        self.assertEqual(character.name, "invited")
+        self.assertEqual(character.race, "")
+        self.assertEqual(character.character_class, "")
         invitation.refresh_from_db()
         self.assertEqual(invitation.accepted_by, player)
         with self.assertRaises(ValidationError):

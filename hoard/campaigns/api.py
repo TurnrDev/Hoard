@@ -775,6 +775,7 @@ def _character_data(
         "context_id": character.context_id,
         "name": character.name,
         "portrait_url": character.portrait.url if character.portrait else None,
+        "kind": character.kind,
         "is_player_character": character.is_player_character,
         "is_active": character.is_active,
         "is_archived": character.is_archived,
@@ -1096,7 +1097,10 @@ def character_create(request, context_id: int, payload: CharacterCreate):
     if is_npc:
         _gm(context)
         character = Character.objects.create(
-            campaign=context.campaign, is_active=True, **values
+            campaign=context.campaign,
+            kind=Character.Kind.NPC,
+            is_active=True,
+            **values,
         )
         notify_campaign_changed(context.campaign_id)
         return 201, _character_data(character, context)
@@ -1116,6 +1120,7 @@ def character_create(request, context_id: int, payload: CharacterCreate):
         character = Character.objects.create(
             campaign=context.campaign,
             context=pc_context,
+            kind=Character.Kind.PC,
             is_active=False,
             **values,
         )

@@ -13,11 +13,8 @@ from ..models import (
     CampaignContext,
     CampaignInvitation,
     Character,
-    CharacterHistory,
     InvitationEvent,
 )
-from .health import create_health_baseline
-from .history import record_character_history
 
 
 def token_digest(token: str) -> str:
@@ -72,9 +69,10 @@ def accept_invitation(token: str, user) -> CampaignContext:
         context = CampaignContext.objects.create(
             campaign=invitation.campaign, user=user, kind=CampaignContext.Kind.PC
         )
-        character = Character.objects.create(
+        Character.objects.create(
             campaign=invitation.campaign,
             context=context,
+            kind=Character.Kind.PC,
             name=user.get_username(),
             race="",
             character_class="",
@@ -85,15 +83,6 @@ def accept_invitation(token: str, user) -> CampaignContext:
             wisdom=10,
             charisma=10,
             is_active=False,
-            is_build_complete=False,
-        )
-        create_health_baseline(character, created_by=context)
-        record_character_history(
-            character,
-            reason=CharacterHistory.Reason.CREATE,
-            before=None,
-            created_by=context,
-            description="Created from campaign invitation",
         )
         invitation.accepted_at = timezone.now()
         invitation.accepted_by = user

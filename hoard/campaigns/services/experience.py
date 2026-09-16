@@ -70,7 +70,12 @@ def award_shared_experience(
         campaign = Campaign.objects.select_for_update().get(pk=campaign.pk)
         recipients = list(
             Character.objects.select_for_update()
-            .filter(campaign=campaign, is_active=True, context__isnull=False)
+            .filter(
+                campaign=campaign,
+                kind=Character.Kind.PC,
+                is_active=True,
+                context__isnull=False,
+            )
             .order_by("pk")
         )
         if not recipients:

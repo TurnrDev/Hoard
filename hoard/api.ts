@@ -308,6 +308,7 @@ export type Character = {
   context_id: number | null;
   name: string;
   portrait_url: string | null;
+  kind: "pc" | "npc";
   is_player_character: boolean;
   is_active: boolean;
   is_archived: boolean;

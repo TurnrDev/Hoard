@@ -65,6 +65,7 @@ def make_character(
     return Character.objects.create(
         campaign=campaign,
         context=membership,
+        kind=Character.Kind.PC if membership else Character.Kind.NPC,
         name=name,
         race="Human",
         character_class="Fighter",

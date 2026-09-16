@@ -29,6 +29,7 @@ class CharacterLifecycleService:
         values = {key: value for key, value in fields.items() if key in allowed}
         character = Character.objects.create(
             campaign=context.campaign,
+            kind=Character.Kind.NPC,
             is_active=True,
             is_build_complete=True,
             **values,
