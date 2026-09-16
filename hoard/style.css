@@ -309,6 +309,18 @@ select:focus-visible {
   padding-inline: 0.5rem;
 }
 
+.campaign-navigation-drawer__wordmark {
+  color: var(--hoard-brand-gold);
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+}
+
+.campaign-navigation-drawer__version {
+  font-size: 0.7em;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
 .proficiency-bonus {
   color: var(--hoard-gold);
   font-weight: 700;
@@ -571,6 +583,23 @@ select:focus-visible {
 }
 
 @media (max-width: 991.98px) {
+  .campaign-navigation-drawer {
+    width: min(17rem, calc(100vw - 3rem)) !important;
+  }
+
+  .campaign-navigation-drawer .p-drawer-header {
+    min-height: 4.5rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .campaign-navigation-drawer .p-drawer-content {
+    padding: 0.5rem;
+  }
+
+  .campaign-navigation-drawer .campaign-navigation__item {
+    min-height: 2.75rem;
+  }
+
   .campaign-shell--with-context,
   .campaign-shell--contextless {
     display: block;

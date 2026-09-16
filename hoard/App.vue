@@ -205,10 +205,20 @@
 
     <Drawer
       v-model:visible="navigationOpen"
-      class="bg-body-tertiary"
-      header="Campaign navigation"
+      class="campaign-navigation-drawer bg-body-tertiary"
       position="left"
     >
+      <template #header>
+        <RouterLink
+          v-if="activeContext"
+          class="campaign-navigation-drawer__wordmark fw-bold text-decoration-none text-nowrap"
+          :to="contextPath(activeContext)"
+          @click="navigationOpen = false"
+        >
+          HOARD
+          <span class="campaign-navigation-drawer__version">v{{ version }}</span>
+        </RouterLink>
+      </template>
       <CampaignNavigation
         v-if="activeContext"
         :context-id="contextId"
