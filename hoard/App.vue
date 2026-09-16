@@ -62,6 +62,7 @@
           :to="activeContext ? contextPath(activeContext) : '/'"
         >
           HOARD
+          <span class="campaign-header__version">v{{ version }}</span>
         </RouterLink>
       </div>
 
@@ -236,6 +237,7 @@ export default defineComponent({
     const themePreferences = readThemePreferences();
 
     return {
+      version: __HOARD_VERSION__,
       navigationOpen: false,
       partyRailExpanded: false,
       busy: false,
