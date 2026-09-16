@@ -84,6 +84,9 @@ Create the external network and local production environment file once:
 ```sh
 docker network create web
 cp .env.example .env
+sudo install -d -o 1000 -g 1000 -m 0755 \
+  /data/appdata/hoard/media \
+  /data/appdata/hoard/static
 ```
 
 Set a long random `DJANGO_SECRET_KEY` and a strong `POSTGRES_PASSWORD` in `.env`,
@@ -95,7 +98,8 @@ docker compose up -d --build
 
 Compose loads `.env` automatically. Database names and users can be changed with
 `POSTGRES_DB` and `POSTGRES_USER`. Persistent production data is stored below
-`/data/appdata/hoard`.
+`/data/appdata/hoard`. The application image runs as UID/GID `1000`, so its media
+and static directories must be writable by that account before the first start.
 
 To inspect status and logs:
 
