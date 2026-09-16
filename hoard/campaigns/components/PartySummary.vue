@@ -46,11 +46,15 @@
         <strong class="tabular-nums">{{ compactWealth }} ¤</strong>
       </div>
       <p
-        class="party-summary__mobile d-lg-none overflow-auto text-nowrap border-top mb-0 pt-2 text-center small tabular-nums"
+        class="party-summary__mobile d-lg-none d-flex align-items-center justify-content-center gap-1 overflow-auto text-nowrap border-top mb-0 pt-2 small tabular-nums"
       >
+        <span>{{ formatCampaignDate(campaign.calendar) }}</span>
+        <span aria-hidden="true">·</span>
         <strong>Party</strong>
-        · {{ campaign.shared_experience.toLocaleString() }} XP ·
-        {{ formatGoldValue(campaign.party_money.gold_value ?? 0) }} ¤
+        <span aria-hidden="true">·</span>
+        <span>{{ campaign.shared_experience.toLocaleString() }} XP</span>
+        <span aria-hidden="true">·</span>
+        <span>{{ formatGoldValue(campaign.party_money.gold_value ?? 0) }} ¤</span>
       </p>
     </template>
   </section>
@@ -59,6 +63,7 @@
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
 import type { Campaign } from "@/api";
+import { formatCampaignDate } from "@/campaigns/calendar";
 import { formatCoinPouch } from "@/campaigns/display";
 import { formatCompactMoneyValue, formatGoldValue } from "@/campaigns/money";
 
@@ -82,6 +87,7 @@ export default defineComponent({
     },
   },
   methods: {
+    formatCampaignDate,
     formatCoinPouch,
     formatGoldValue,
   },

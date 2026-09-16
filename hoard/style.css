@@ -569,7 +569,20 @@ select:focus-visible {
   }
 
   .campaign-header {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+    gap: 0;
+  }
+
+  .campaign-header__brand {
+    display: contents !important;
+  }
+
+  .campaign-header__wordmark {
+    justify-self: center;
+  }
+
+  .campaign-header__account {
+    justify-self: end;
   }
 
   .campaign-header__campaign {
