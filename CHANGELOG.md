@@ -9,4 +9,42 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Initial minimal campaign release.
+- Shared campaign XP for active player characters, including level progress,
+  remainder handling, reversals, and immutable ledger entries.
+- Personal and campaign coin accounts with grants, spending, transfers, exact-value
+  exchanges, reversals, and denomination-aware display.
+- Campaign calendar management with in-world dates captured on audit and ledger
+  events.
+- Editable player-character and NPC profiles with portrait uploads, free-text race
+  and class, personal money, and recent activity.
+- Campaign membership, shareable invitations, roster management, and GM controls.
+- Authenticated WebSocket queries, commands, events, and live campaign refreshes.
+- Responsive desktop side rails, mobile campaign navigation, party switching, theme
+  controls, and release-version display.
+- Docker Compose development and production deployments using Daphne, Celery,
+  PostgreSQL, Redis, Vite, and Nginx.
+- A no-cache release manifest that prompts connected clients to refresh after a new
+  version is deployed.
+
+### Changed
+
+- Reduced the character model to the profile data required by the initial release.
+- Preserved the original character-sheet presentation as individually blocked
+  **Coming soon** previews with skeleton values and explanatory copy.
+- Merged campaign audit history and ledger infrastructure around the same immutable
+  event model.
+- Made shared XP the campaign default and excluded NPCs from XP distribution.
+- Simplified campaign management and the GM dashboard around calendar, money, XP,
+  roster, invitations, and ledger workflows.
+- Made uploaded media publicly available through Nginx alongside static assets.
+- Consolidated runtime configuration in the root `.env` file.
+
+### Removed
+
+- Compendium pages, routes, data access, build tasks, and repository dependencies;
+  navigation retains a disabled **Coming soon** entry.
+- Character import, builder, and level-up routes from the initial release UI.
+- Deferred inventory, combat, health, rest, progression, and full character-sheet
+  APIs and persistence.
+- Support for upgrading pre-release databases; `0.1.0` starts from a clean initial
+  migration.

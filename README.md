@@ -3,6 +3,43 @@
 Hoard is a small campaign companion for shared XP, coin ledgers, calendar tracking,
 character profiles, invitations, and campaign administration.
 
+## Screenshots
+
+### Desktop
+
+![Hoard game-master dashboard on desktop](docs/images/hoard-desktop.png)
+
+### Mobile
+
+<p align="center">
+  <img
+    src="docs/images/hoard-mobile.png"
+    alt="Hoard character profile on mobile"
+    width="420"
+  >
+</p>
+
+## Current release
+
+Hoard `0.1.0` focuses on the shared campaign tools that are ready for regular use:
+
+- shared XP for active player characters, including level progress and immutable
+  ledger history;
+- personal and campaign coin accounts with grants, spending, transfers, exact-value
+  exchanges, and reversals;
+- a campaign calendar whose date is recorded against ledger and audit events;
+- player-character and NPC profiles with portraits, free-text race and class, and
+  profile editing;
+- campaign membership, shareable invitations, roster management, and GM controls;
+- a responsive campaign shell with live WebSocket updates and desktop/mobile party
+  navigation.
+
+Character profiles retain the full sheet layout as a preview of planned features.
+Unavailable statistics, abilities, skills, inventory, equipment, and character-detail
+sections are clearly marked **Coming soon** and use skeleton values rather than
+placeholder character data. The Compendium is likewise visible in navigation but is
+not part of this release.
+
 ## Development
 
 Docker Compose is the supported full-stack development workflow. It starts Daphne,
@@ -38,8 +75,8 @@ database and all local uploads.
 ## Production
 
 Production runs Daphne, Celery, PostgreSQL, Redis, and Nginx. Nginx serves static
-assets and uploaded media directly and proxies HTTP and WebSocket traffic. Only Nginx joins the external
-Traefik `web` network.
+assets and uploaded media directly and proxies HTTP and WebSocket traffic. Only
+Nginx joins the external Traefik `web` network.
 
 Create the external network and local production environment file once:
 
