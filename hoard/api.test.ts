@@ -1,23 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { campaignRequest, ensureCampaignRealtime } from "./realtime";
 import {
-  addCharacterToEncounter,
-  addEncounterCombatant,
-  changeCharacterSheetRecord,
-  createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
-  endEncounter,
+  createSharedXpAward,
   initialiseCsrf,
   login,
-  removeCharacterCondition,
-  removeEncounterCombatant,
-  reorderEncounterCombatants,
-  setCurrentEncounterCombatant,
-  setCharacterCondition,
-  setCombatantCondition,
-  startEncounter,
-  updateEncounterCombatant,
+  reverseTransaction,
+  updateCharacter,
+  type LedgerTransaction,
 } from "./api";
 
 const { httpRequest } = vi.hoisted(() => ({ httpRequest: vi.fn() }));
@@ -32,6 +23,8 @@ vi.mock("axios", () => ({
 vi.mock("./realtime", () => ({
   campaignRequest: vi.fn().mockResolvedValue({ id: 4, ledger: "test" }),
   ensureCampaignRealtime: vi.fn().mockResolvedValue(undefined),
+  inviteRequest: vi.fn(),
+  userRequest: vi.fn(),
 }));
 
 describe("API client", () => {
@@ -58,24 +51,7 @@ describe("API client", () => {
     );
   });
 
-  it("sends inventory moves over the acting context socket", async () => {
-    await createInventoryTransaction(8, {
-      from_character_id: 2,
-      to_character_id: null,
-      item_id: 3,
-      quantity: 1,
-    });
-
-    expect(ensureCampaignRealtime).toHaveBeenCalledWith(8);
-    expect(campaignRequest).toHaveBeenCalledWith("inventory.transactions.create", {
-      from_character_id: 2,
-      to_character_id: null,
-      item_id: 3,
-      quantity: 1,
-    });
-  });
-
-  it("sends money transfers and exchanges over the context socket", async () => {
+  it("sends money transfers and exchanges over the acting context socket", async () => {
     await createMoneyTransfer(8, {
       from_character_id: 2,
       to_character_id: null,
@@ -87,6 +63,7 @@ describe("API client", () => {
       received: { sp: 10 },
     });
 
+    expect(ensureCampaignRealtime).toHaveBeenCalledWith(8);
     expect(campaignRequest).toHaveBeenNthCalledWith(1, "money.transfers.create", {
       from_character_id: 2,
       to_character_id: null,
@@ -99,146 +76,42 @@ describe("API client", () => {
     });
   });
 
-  it("creates, updates, and removes character notes over the context socket", async () => {
-    await changeCharacterSheetRecord(8, 2, "notes", "create", {
-      body: "Visit the old mill.",
+  it("sends shared XP awards and ledger reversals over the socket", async () => {
+    await createSharedXpAward(8, {
+      amount: 250,
+      description: "Milestone",
     });
-    await changeCharacterSheetRecord(
-      8,
-      2,
-      "notes",
-      "update",
-      {
-        body: "Avoid the old mill.",
-      },
-      17,
-    );
-    await changeCharacterSheetRecord(8, 2, "notes", "delete", {}, 17);
+    await reverseTransaction(8, {
+      id: 41,
+      ledger: "experience",
+    } as LedgerTransaction);
 
-    expect(campaignRequest).toHaveBeenNthCalledWith(1, "characters.notes.create", {
-      character_id: 2,
-      fields: {
-        body: "Visit the old mill.",
+    expect(campaignRequest).toHaveBeenNthCalledWith(
+      1,
+      "experience.shared_awards.create",
+      {
+        amount: 250,
+        description: "Milestone",
       },
-    });
-    expect(campaignRequest).toHaveBeenNthCalledWith(2, "characters.notes.update", {
-      character_id: 2,
-      fields: {
-        body: "Avoid the old mill.",
-      },
-      record_id: 17,
-    });
-    expect(campaignRequest).toHaveBeenNthCalledWith(3, "characters.notes.delete", {
-      character_id: 2,
-      fields: {},
-      record_id: 17,
+    );
+    expect(campaignRequest).toHaveBeenNthCalledWith(2, "transactions.reverse", {
+      ledger: "experience",
+      transaction_id: 41,
     });
   });
 
-  it("sends condition and combatant changes over the context socket", async () => {
-    await setCharacterCondition(8, 2, {
-      identifier: "exhaustion",
-      exhaustion_level: 2,
-      source: "Hunger",
-      duration: "Until properly fed",
-    });
-    await removeCharacterCondition(8, 2, 17);
-    await setCombatantCondition(8, 31, {
-      identifier: "prone",
-      source: "Trip attack",
-      duration: "Until the combatant stands",
-    });
-    await updateEncounterCombatant(8, 31, {
-      initiative: 12,
+  it("maps the display class field to the character command payload", async () => {
+    await updateCharacter(8, 2, {
+      name: "Wren",
+      class: "Wizard",
     });
 
-    expect(campaignRequest).toHaveBeenNthCalledWith(1, "characters.conditions.set", {
+    expect(campaignRequest).toHaveBeenCalledWith("characters.update", {
       character_id: 2,
-      identifier: "exhaustion",
-      exhaustion_level: 2,
-      source: "Hunger",
-      duration: "Until properly fed",
+      fields: {
+        name: "Wren",
+        character_class: "Wizard",
+      },
     });
-    expect(campaignRequest).toHaveBeenNthCalledWith(2, "characters.conditions.remove", {
-      character_id: 2,
-      condition_id: 17,
-    });
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      3,
-      "campaign.encounter.conditions.set",
-      {
-        combatant_id: 31,
-        identifier: "prone",
-        source: "Trip attack",
-        duration: "Until the combatant stands",
-      },
-    );
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      4,
-      "campaign.encounter.combatants.update",
-      {
-        combatant_id: 31,
-        initiative: 12,
-      },
-    );
-  });
-
-  it("manages the encounter lifecycle over the context socket", async () => {
-    await startEncounter(8);
-    await addCharacterToEncounter(8, 2, 18);
-    await addEncounterCombatant(8, {
-      name: "Goblin 2",
-      creature_entry_id: 44,
-      initiative: 12,
-      current_hp: 7,
-      max_hp: 7,
-    });
-    await reorderEncounterCombatants(8, [31, 30]);
-    await setCurrentEncounterCombatant(8, 30);
-    await removeEncounterCombatant(8, 31);
-    await endEncounter(8);
-
-    expect(campaignRequest).toHaveBeenNthCalledWith(1, "campaign.encounter.start", {});
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      2,
-      "campaign.encounter.combatants.add_character",
-      {
-        character_id: 2,
-        initiative: 18,
-      },
-    );
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      3,
-      "campaign.encounter.combatants.add",
-      {
-        name: "Goblin 2",
-        creature_entry_id: 44,
-        initiative: 12,
-        current_hp: 7,
-        max_hp: 7,
-      },
-    );
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      4,
-      "campaign.encounter.combatants.reorder",
-      {
-        combatant_ids: [31, 30],
-      },
-    );
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      5,
-      "campaign.encounter.current.set",
-      {
-        combatant_id: 30,
-      },
-    );
-    expect(campaignRequest).toHaveBeenNthCalledWith(
-      6,
-      "campaign.encounter.combatants.remove",
-      {
-        combatant_id: 31,
-      },
-    );
-    expect(campaignRequest).toHaveBeenNthCalledWith(7, "campaign.encounter.end", {});
   });
 });

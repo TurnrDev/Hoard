@@ -134,9 +134,9 @@
                 <div class="d-flex gap-1">
                   <Button
                     v-if="invitation.status === 'pending'"
-                    icon="mdi mdi-email-sync-outline"
+                    icon="mdi mdi-link-variant-plus"
                     text
-                    :aria-label="`Resend invitation to ${invitation.email || 'shareable link'}`"
+                    :aria-label="`Refresh invitation link for ${invitation.email || 'shareable invitation'}`"
                     @click="resend(invitation)"
                   />
                   <Button
@@ -174,7 +174,8 @@
             </header>
             <div>
               <p class="text-body-secondary">
-                Manage the campaign’s equipment in the dedicated compendium.
+                Compendium management is coming soon. The destination remains visible as
+                a preview of the planned campaign tools.
               </p>
               <Button
                 :as="'router-link'"
@@ -259,20 +260,14 @@
                   <div>
                     <strong>{{ character.name }}</strong>
                     <span class="d-block small text-body-secondary">
-                      {{
-                        character.is_archived
-                          ? "Archived"
-                          : character.is_active
-                            ? "Active"
-                            : "Inactive"
-                      }}
+                      {{ character.is_active ? "Active" : "Inactive" }}
                     </span>
                   </div>
                   <Button
-                    v-if="!character.is_archived"
-                    icon="mdi mdi-archive"
+                    v-if="character.is_active"
+                    icon="mdi mdi-account-off-outline"
                     text
-                    :aria-label="`Archive ${character.name}`"
+                    :aria-label="`Deactivate ${character.name}`"
                     @click="archive(character)"
                   />
                 </li>
@@ -384,12 +379,6 @@ export default defineComponent({
           name: this.characterName.trim(),
           race: this.characterRace,
           character_class: this.characterClass,
-          strength: 10,
-          dexterity: 10,
-          constitution: 10,
-          intelligence: 10,
-          wisdom: 10,
-          charisma: 10,
           is_npc: true,
         });
         this.characterName = "";
@@ -443,10 +432,12 @@ export default defineComponent({
         const updated = await resendInvitation(this.campaignId, invitation.id);
         this.invitationLink = updated.link ?? "";
         await this.load();
-        this.showSuccess("Invitation resent.");
+        this.showSuccess("Invitation link refreshed.");
       } catch (exception) {
         this.error =
-          exception instanceof Error ? exception.message : "Unable to resend.";
+          exception instanceof Error
+            ? exception.message
+            : "Unable to refresh invitation link.";
       }
     },
     async revoke(invitation: CampaignInvitation): Promise<void> {

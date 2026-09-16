@@ -46,17 +46,17 @@ The release branch does not retain commented-out implementation code.
 - Replace the full character sheet with a simple editable profile showing
   portrait, name, race, class, PC/NPC type, personal coin pouch, group XP, and
   campaign level.
-- Retain portrait upload and private authenticated portrait serving.
+- Retain authenticated portrait upload. Serve media publicly through the same
+  Nginx static-path pattern as built assets.
 - Simplify the GM dashboard to calendar, party money, shared XP, coin
   awards/transfers, roster, invites, and ledger actions.
 - Keep Compendium in the sidebar as a “Coming soon” destination; remove all
   compendium data access and management.
-- Remove character-import controls and routes; show “Character import — coming
-  soon.”
-- Render deferred profile capabilities—detailed sheet, health, abilities,
-  equipment, spells, rests, combat, and level-up—as labelled, non-interactive
-  “Coming soon” panels using PrimeVue Skeleton placeholders. Their text conveys
-  the state independently of colour or skeletons.
+- Remove character-import controls and routes. Import remains part of character
+  editing when it returns in a later release; do not show a standalone notice.
+- Preserve the original profile-card layout for deferred capabilities, replacing
+  their values with PrimeVue Skeleton placeholders. Put one persistent PrimeVue
+  Message near the top and block the entire preview with one BlockUI.
 - Remove builder and level-up routes rather than leaving unreachable functional
   pages.
 
@@ -70,12 +70,12 @@ The release branch does not retain commented-out implementation code.
 - Add `Dockerfile`, `compose.dev.yml`, and `compose.prod.yml`:
   development uses source mounts, Vite live reload, Daphne, PostgreSQL, Redis,
   and persistent local volumes; production uses Daphne, Celery, PostgreSQL,
-  Redis, and Nginx. Nginx serves static files and proxies authenticated media,
-  HTTP, and WebSocket requests to Daphne.
+  Redis, and Nginx. Nginx serves static and media files directly and proxies HTTP
+  and WebSocket requests to Daphne.
 - Production uses an internal named network for app/worker/database/Redis and
   the external `web` network for Nginx/Traefik, including Traefik labels.
-- Use environment variables for non-sensitive configuration and Docker secrets
-  for Django and database secrets.
+- Load production configuration, including Django and database secrets, from the
+  root `.env` file through Compose.
 - Remove compendium compilation and registry initialisation from the image and
   entrypoint.
 - Document Docker as the supported full-stack developer workflow and update
@@ -101,8 +101,8 @@ The release branch does not retain commented-out implementation code.
   their UI is visibly “Coming soon.”
 - Run Ruff for `hoard`, `npm run fix`, the frontend build, clean migration
   checks, and the focused backend test suite.
-- Verify development and production Compose builds, static delivery,
-  authenticated portrait delivery, WebSocket proxying, and production
+- Verify development and production Compose builds, static and media delivery,
+  WebSocket proxying, and production
   network/Traefik configuration.
 
 ## Assumptions

@@ -35,6 +35,7 @@ import {
   connectCampaignRealtime,
   disconnectCampaignRealtime,
   pendingCommandCount,
+  subscribeCampaignCalendar,
   subscribeDomainEvents,
 } from "./realtime";
 
@@ -62,7 +63,9 @@ describe("campaign realtime transport", () => {
     });
     vi.stubGlobal("WebSocket", { OPEN: 1, CLOSED: 3 });
     const listener = vi.fn();
+    const calendarListener = vi.fn();
     const unsubscribe = subscribeDomainEvents(listener);
+    const unsubscribeCalendar = subscribeCampaignCalendar(calendarListener);
     connectCampaignRealtime(7);
     const socket = activeSocket();
 
@@ -76,14 +79,26 @@ describe("campaign realtime transport", () => {
     });
     socket.deliver({
       type: "campaign.calendar_changed",
-      calendar: { year: 82 },
+      calendar: {
+        era_abbreviation: "PD",
+        era_name: "Powder Dynasty",
+        year: 82,
+        day: 1,
+      },
     });
 
     await expect(result).resolves.toEqual({ year: 82 });
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ type: "campaign.calendar_changed" }),
     );
+    expect(calendarListener).toHaveBeenCalledWith({
+      era_abbreviation: "PD",
+      era_name: "Powder Dynasty",
+      year: 82,
+      day: 1,
+    });
     unsubscribe();
+    unsubscribeCalendar();
   });
 
   it("tracks a pending command until its acknowledgement arrives", async () => {

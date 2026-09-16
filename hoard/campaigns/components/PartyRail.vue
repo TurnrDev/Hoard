@@ -32,7 +32,7 @@
           v-if="expanded"
           class="ms-1 fw-bold"
         >
-          {{ inCombat ? "Initiative" : "Party" }}
+          Party
         </span>
       </header>
 
@@ -58,26 +58,9 @@
           class="party-rail__separator-line"
           aria-hidden="true"
         />
-        <span v-if="expanded && inCombat">Combatants</span>
-        <span
-          v-if="expanded && inCombat"
-          class="party-rail__separator-line"
-          aria-hidden="true"
-        />
       </div>
 
-      <InitiativeTracker
-        v-if="inCombat"
-        :combatants="combatants"
-        :characters="campaign.characters"
-        :members="members"
-        :active-context="activeContext"
-        :expanded="expanded"
-        :can-view-hidden-health="canViewHiddenHealth"
-        :current-combatant-id="campaign.encounter?.current_combatant_id ?? null"
-      />
       <PartyRoster
-        v-else
         :characters="campaign.characters"
         :members="members"
         :active-context="activeContext"
@@ -98,15 +81,12 @@ import Button from "primevue/button";
 import type { Campaign, CampaignMember } from "@/api";
 import type { ActingContext } from "@/campaigns/context";
 import GameMasterPresence from "./GameMasterPresence.vue";
-import InitiativeTracker from "./InitiativeTracker.vue";
 import PartyRoster from "./PartyRoster.vue";
 import PartySummary from "./PartySummary.vue";
-import type { PartyRailCombatant } from "./partyRailTypes";
 
 export default defineComponent({
   components: {
     GameMasterPresence,
-    InitiativeTracker,
     PartyRoster,
     PartySummary,
     Button,
@@ -116,19 +96,11 @@ export default defineComponent({
     members: { type: Array as PropType<CampaignMember[]>, required: true },
     activeContext: { type: Object as PropType<ActingContext>, required: true },
     expanded: { type: Boolean, default: false },
-    inCombat: { type: Boolean, default: false },
-    combatants: {
-      type: Array as PropType<PartyRailCombatant[]>,
-      default: () => [],
-    },
   },
   emits: ["toggle"],
   computed: {
     gameMasters(): CampaignMember[] {
       return this.members.filter((member) => member.is_game_master && member.is_active);
-    },
-    canViewHiddenHealth(): boolean {
-      return this.activeContext.kind === "gm";
     },
   },
 });

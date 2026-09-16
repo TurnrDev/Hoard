@@ -5,7 +5,11 @@ from django.core.exceptions import ValidationError
 from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
 
-from hoard.campaigns.models import Campaign, CampaignContext
+from hoard.campaigns.models import (
+    Campaign,
+    CampaignContext,
+    InvitationEvent,
+)
 from hoard.campaigns.services import accept_invitation, create_invitation
 
 
@@ -32,6 +36,16 @@ class InvitationTests(TestCase):
         self.assertEqual(character.character_class, "")
         invitation.refresh_from_db()
         self.assertEqual(invitation.accepted_by, player)
+        self.assertEqual(
+            list(
+                invitation.events.order_by("occurred_at", "pk").values_list(
+                    "reason", flat=True
+                )
+            ),
+            [InvitationEvent.Reason.CREATED, InvitationEvent.Reason.ACCEPTED],
+        )
+        self.assertEqual(invitation.events.first().created_by, self.gm)
+        self.assertEqual(invitation.events.last().created_by, context)
         with self.assertRaises(ValidationError):
             accept_invitation(
                 token, get_user_model().objects.create_user(username="late")

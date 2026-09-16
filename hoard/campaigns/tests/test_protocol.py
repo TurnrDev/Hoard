@@ -7,6 +7,7 @@ from hoard.campaigns.protocol import (
     OperationKind,
     error_type,
     is_uuid7,
+    operation_definitions,
     operation_kind,
     result_type,
 )
@@ -57,3 +58,33 @@ class WebSocketProtocolTests(SimpleTestCase):
                 "day": 12,
             },
         )
+
+    def test_deferred_operations_are_not_registered(self) -> None:
+        operations = operation_definitions()
+        deferred_prefixes = (
+            "campaign.encounter.",
+            "compendium.",
+            "characters.builder.",
+            "characters.conditions.",
+            "characters.health.",
+            "characters.imports.",
+            "characters.level_up.",
+            "characters.notes.",
+            "characters.features.",
+            "characters.spells.",
+            "characters.loadout.",
+            "characters.effects.",
+            "characters.companions.",
+            "inventory.",
+        )
+
+        exposed = {
+            operation
+            for operation in operations
+            if operation.startswith(deferred_prefixes)
+        }
+
+        self.assertEqual(exposed, set())
+        self.assertNotIn("characters.rest", operations)
+        self.assertNotIn("campaign.level.approve", operations)
+        self.assertNotIn("campaign.level.status", operations)

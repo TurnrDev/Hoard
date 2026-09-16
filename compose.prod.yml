@@ -1,0 +1,94 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hoard}
+      POSTGRES_USER: ${POSTGRES_USER:-hoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hoard} -d ${POSTGRES_DB:-hoard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+    volumes:
+      - prod_db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8-alpine
+    networks:
+      - internal
+    volumes:
+      - prod_redis_data:/data
+
+  app:
+    build: .
+    command: app
+    environment: &app-environment
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: ${HOARD_HOST:?Set HOARD_HOST}
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${HOARD_HOST:?Set HOARD_HOST}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-hoard}
+      POSTGRES_USER: ${POSTGRES_USER:-hoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/2
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - internal
+    volumes:
+      - prod_media:/app/media
+      - prod_static:/app/staticfiles
+
+  worker:
+    build: .
+    command: worker
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - internal
+    volumes:
+      - prod_media:/app/media
+
+  nginx:
+    image: nginx:1.29-alpine
+    depends_on:
+      - app
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: web
+      traefik.http.routers.hoard.entrypoints: websecure
+      traefik.http.routers.hoard.rule: Host(`${HOARD_HOST:?Set HOARD_HOST}`)
+      traefik.http.routers.hoard.tls: "true"
+      traefik.http.services.hoard.loadbalancer.server.port: "80"
+    networks:
+      - internal
+      - web
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - prod_media:/srv/media:ro
+      - prod_static:/srv/static:ro
+
+networks:
+  internal:
+  web:
+    external: true
+
+volumes:
+  prod_db_data:
+  prod_media:
+  prod_redis_data:
+  prod_static:

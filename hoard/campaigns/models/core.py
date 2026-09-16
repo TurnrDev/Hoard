@@ -9,14 +9,11 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Sum
-from django.utils import timezone
 
 if TYPE_CHECKING:
     from hoard.campaigns.models.experience import ExperienceAccount
-    from hoard.campaigns.models.inventory import InventoryAccount, InventoryTransaction
     from hoard.campaigns.models.money import MoneyAccount, MoneyTransaction
     from hoard.campaigns.services.actions import CoinAmounts
-    from hoard.compendium.models import CompendiumEntry
 
 
 XP_LEVEL_THRESHOLDS = (
@@ -55,9 +52,6 @@ class Campaign(models.Model):
     calendar_day = models.PositiveSmallIntegerField("Calendar Day", default=137)
     shared_experience = models.PositiveIntegerField("Shared Experience", default=0)
     level = models.PositiveSmallIntegerField("Campaign Level", default=1)
-    compendium_sources = models.ManyToManyField(
-        "compendium.CompendiumSource", blank=True, related_name="enabled_campaigns"
-    )
 
     def adjust_calendar_day(self, amount: int) -> None:
         """Move the campaign calendar by a single non-zero number of days."""
@@ -73,12 +67,6 @@ class Campaign(models.Model):
             self.calendar_day = 365
         else:
             self.calendar_day += amount
-
-    def inventory_system_account(self) -> InventoryAccount:
-        from ..services.ledger import system_account
-        from .inventory import InventoryAccount
-
-        return system_account(InventoryAccount, self)
 
     def money_system_account(self) -> MoneyAccount:
         from ..services.ledger import system_account
@@ -215,88 +203,10 @@ class Character(models.Model):
 
     kind = models.CharField(max_length=3, choices=Kind.choices, default=Kind.PC)
     is_active = models.BooleanField("Is Active", default=False)
-    is_archived = models.BooleanField("Is Archived", default=False)
-    is_build_complete = models.BooleanField("Is Build Complete", default=True)
-    archived_at = models.DateTimeField("Archived At", null=True, blank=True)
     name = models.CharField("Character Name", max_length=200)
     portrait = models.FileField(upload_to="character-portraits/", blank=True)
     race = models.CharField(max_length=100, blank=True)
     character_class = models.CharField("Class", max_length=100, blank=True)
-    background = models.CharField(max_length=100, blank=True)
-    race_entry = models.ForeignKey(
-        "compendium.CompendiumEntry",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="race_characters",
-    )
-    background_entry = models.ForeignKey(
-        "compendium.CompendiumEntry",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="background_characters",
-    )
-    subrace_identifier = models.CharField(max_length=200, blank=True)
-    subrace_name = models.CharField(max_length=200, blank=True)
-    alignment = models.CharField(max_length=100, blank=True)
-    personality_traits = models.TextField("Personality Traits", blank=True)
-    ideals = models.TextField(blank=True)
-    bonds = models.TextField(blank=True)
-    flaws = models.TextField(blank=True)
-    about = models.TextField(blank=True)
-    languages = models.JSONField(default=list, blank=True)
-    equipment_proficiencies = models.JSONField(
-        "Equipment Proficiencies", default=dict, blank=True
-    )
-    ability_bonuses = models.JSONField("Ability Bonuses", default=dict, blank=True)
-    ability_score_adjustments = models.JSONField(
-        "Ability Score Adjustments", default=dict, blank=True
-    )
-    strength = models.PositiveSmallIntegerField("Strength")
-    dexterity = models.PositiveSmallIntegerField("Dexterity")
-    constitution = models.PositiveSmallIntegerField("Constitution")
-    intelligence = models.PositiveSmallIntegerField("Intelligence")
-    wisdom = models.PositiveSmallIntegerField("Wisdom")
-    charisma = models.PositiveSmallIntegerField("Charisma")
-    base_hp = models.PositiveSmallIntegerField("Base HP", default=1)
-    hp_ability = models.CharField("HP Ability", max_length=20, default="constitution")
-    hp_adjustment = models.SmallIntegerField("HP Adjustment", default=0)
-    current_hp = models.IntegerField("Current HP", default=1)
-    temporary_hp = models.IntegerField("Temporary HP", default=0)
-    base_ac = models.PositiveSmallIntegerField("Base AC", default=10)
-    ac_adjustment = models.SmallIntegerField("AC Adjustment", default=0)
-    speed = models.CharField(max_length=100, blank=True)
-    spell_slot_current = models.JSONField(default=dict, blank=True)
-    spell_slot_adjustments = models.JSONField(default=dict, blank=True)
-    has_inspiration = models.BooleanField(default=False)
-    inspiration_expires_at = models.DateTimeField(blank=True, null=True)
-    proficiency_bonus_adjustment = models.SmallIntegerField(
-        "Proficiency Bonus Adjustment", default=0
-    )
-    strength_modifier_adjustment = models.SmallIntegerField(default=0)
-    dexterity_modifier_adjustment = models.SmallIntegerField(default=0)
-    constitution_modifier_adjustment = models.SmallIntegerField(default=0)
-    intelligence_modifier_adjustment = models.SmallIntegerField(default=0)
-    wisdom_modifier_adjustment = models.SmallIntegerField(default=0)
-    charisma_modifier_adjustment = models.SmallIntegerField(default=0)
-    strength_save_proficient = models.BooleanField(default=False)
-    dexterity_save_proficient = models.BooleanField(default=False)
-    constitution_save_proficient = models.BooleanField(default=False)
-    intelligence_save_proficient = models.BooleanField(default=False)
-    wisdom_save_proficient = models.BooleanField(default=False)
-    charisma_save_proficient = models.BooleanField(default=False)
-    strength_save_adjustment = models.SmallIntegerField(default=0)
-    dexterity_save_adjustment = models.SmallIntegerField(default=0)
-    constitution_save_adjustment = models.SmallIntegerField(default=0)
-    intelligence_save_adjustment = models.SmallIntegerField(default=0)
-    wisdom_save_adjustment = models.SmallIntegerField(default=0)
-    charisma_save_adjustment = models.SmallIntegerField(default=0)
-    skill_proficiencies = models.JSONField(default=dict, blank=True)
-    npc_level = models.PositiveSmallIntegerField(default=1)
-
-    class Meta:
-        constraints = []
 
     def clean(self) -> None:
         super().clean()
@@ -317,18 +227,6 @@ class Character(models.Model):
     def is_player_character(self) -> bool:
         return self.kind == self.Kind.PC
 
-    @property
-    def inspiration_available(self) -> bool:
-        return bool(
-            self.has_inspiration
-            and self.inspiration_expires_at
-            and self.inspiration_expires_at > timezone.now()
-        )
-
-    @property
-    def proficiency_bonus(self) -> int:
-        return 2 + (self.level - 1) // 4 + self.proficiency_bonus_adjustment
-
     @staticmethod
     def level_for_experience(experience: int) -> int:
         return max(
@@ -339,46 +237,7 @@ class Character(models.Model):
 
     @property
     def level(self) -> int:
-        return self.campaign.level if self.is_player_character else self.npc_level
-
-    @property
-    def max_hp(self) -> int:
-        return max(
-            1,
-            self.base_hp
-            + self.ability_modifier(self.hp_ability) * self.level
-            + self.hp_adjustment,
-        )
-
-    def ability_score(self, ability: str) -> int:
-        return (
-            getattr(self, ability)
-            + int(self.ability_bonuses.get(ability, 0))
-            + int(self.ability_score_adjustments.get(ability, 0))
-        )
-
-    def ability_modifier(self, ability: str) -> int:
-        return (self.ability_score(ability) - 10) // 2 + getattr(
-            self, f"{ability}_modifier_adjustment"
-        )
-
-    def saving_throw(self, ability: str) -> int:
-        return (
-            self.ability_modifier(ability)
-            + getattr(self, f"{ability}_save_adjustment")
-            + (
-                self.proficiency_bonus
-                if getattr(self, f"{ability}_save_proficient")
-                else 0
-            )
-        )
-
-    def skill_bonus(self, skill: str, ability: str) -> int:
-        proficiency = self.skill_proficiencies.get(skill, "none")
-        multiplier = {"none": 0, "half": 0.5, "proficient": 1, "expertise": 2}.get(
-            proficiency, 0
-        )
-        return self.ability_modifier(ability) + int(self.proficiency_bonus * multiplier)
+        return self.campaign.level
 
     @property
     def experience(self) -> int:
@@ -410,51 +269,10 @@ class Character(models.Model):
             platinum=totals[MoneyEntry.Denomination.PLATINUM],
         )
 
-    @property
-    def inventory(self) -> dict[CompendiumEntry, int]:
-        from hoard.compendium.models import CompendiumEntry
-
-        from .inventory import InventoryEntry
-
-        rows = (
-            InventoryEntry.objects.filter(account__character=self)
-            .values("item_id")
-            .annotate(total=Sum("amount"))
-            .filter(total__gt=0)
-        )
-        items = CompendiumEntry.objects.in_bulk([row["item_id"] for row in rows])
-        return {items[row["item_id"]]: row["total"] for row in rows}
-
     def activate(self) -> Character:
         from ..services.experience import activate_character
 
         return activate_character(self)
-
-    def grant_loot(
-        self, item: CompendiumEntry, quantity: int, description: str = ""
-    ) -> InventoryTransaction:
-        from ..services.actions import grant_loot
-
-        return grant_loot(
-            recipient=self, item=item, quantity=quantity, description=description
-        )
-
-    def transfer_item(
-        self,
-        recipient: Character,
-        item: CompendiumEntry,
-        quantity: int,
-        description: str = "",
-    ) -> InventoryTransaction:
-        from ..services.actions import transfer_item
-
-        return transfer_item(
-            source=self,
-            recipient=recipient,
-            item=item,
-            quantity=quantity,
-            description=description,
-        )
 
     def grant_coins(
         self, coins: CoinAmounts, description: str = ""
@@ -478,12 +296,6 @@ class Character(models.Model):
         return exchange_coins(
             character=self, given=given, received=received, description=description
         )
-
-    def inventory_account(self) -> InventoryAccount:
-        from ..services.ledger import character_account
-        from .inventory import InventoryAccount
-
-        return character_account(InventoryAccount, self)
 
     def money_account(self) -> MoneyAccount:
         from ..services.ledger import character_account

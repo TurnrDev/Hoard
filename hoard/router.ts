@@ -37,16 +37,6 @@ const router = createRouter({
       props: true,
     },
     {
-      path: "/c/:id/characters/:characterId/build",
-      component: () => import("@/campaigns/pages/CharacterBuilderView.vue"),
-      props: true,
-    },
-    {
-      path: "/c/:id/characters/:characterId/level-up",
-      component: () => import("@/campaigns/pages/CharacterLevelUpView.vue"),
-      props: true,
-    },
-    {
       path: "/c/:id/compendium",
       component: () => import("@/compendium/pages/CompendiumView.vue"),
       props: true,

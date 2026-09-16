@@ -22,13 +22,6 @@
     </div>
   </div>
 
-  <InitiativeRollDialog
-    v-if="activeContext?.kind === 'pc' && pendingInitiativeCombatant"
-    :context-id="activeContext.id"
-    :combatant="pendingInitiativeCombatant"
-    :bonus-roll="pendingInitiativeIsBonus"
-  />
-
   <main
     v-if="isPublicRoute"
     class="min-vh-100"
@@ -145,8 +138,6 @@
           :members="members"
           :active-context="activeContext"
           :expanded="partyRailExpanded"
-          :in-combat="campaign.encounter !== null"
-          :combatants="campaign.encounter?.combatants ?? []"
           @toggle="partyRailExpanded = !partyRailExpanded"
         />
       </section>
@@ -155,15 +146,6 @@
         id="main-content"
         class="campaign-main container-fluid bg-body py-4 py-lg-5"
       >
-        <Message
-          v-if="incompleteLevelUps.length"
-          class="mb-4"
-          severity="warn"
-        >
-          <strong>Level-up incomplete.</strong>
-          {{ incompleteLevelUps.join(", ") }} still need to finish the approved group
-          level-up.
-        </Message>
         <router-view @contexts-changed="loadContexts" />
       </main>
     </div>
@@ -174,7 +156,6 @@
 import Button from "primevue/button";
 import Drawer from "primevue/drawer";
 import type { MenuItem } from "primevue/menuitem";
-import Message from "primevue/message";
 import ProgressSpinner from "primevue/progressspinner";
 import TieredMenu from "primevue/tieredmenu";
 import Toast from "primevue/toast";
@@ -186,7 +167,6 @@ import {
   type Campaign,
   type CampaignMember,
   type Character,
-  type EncounterCombatant,
 } from "./api";
 import { formatCampaignDate } from "@/campaigns/calendar";
 import {
@@ -196,7 +176,6 @@ import {
 } from "./connection";
 import CampaignNavigation from "@/campaigns/components/CampaignNavigation.vue";
 import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
-import InitiativeRollDialog from "@/campaigns/components/InitiativeRollDialog.vue";
 import PartyRail from "@/campaigns/components/PartyRail.vue";
 import {
   contextPath,
@@ -208,6 +187,7 @@ import {
   campaignRefreshRevision,
   connectCampaignRealtime,
   disconnectCampaignRealtime,
+  subscribeCampaignCalendar,
   subscribeDomainEvents,
   subscribeCampaignPresence,
   subscribeCampaignReconnect,
@@ -218,15 +198,12 @@ import {
   readThemePreferences,
   type ThemePreferences,
 } from "./theme";
-import { alertCurrentTurn } from "@/campaigns/turnAlert";
 
 export default defineComponent({
   components: {
     CampaignNavigation,
     CharacterAvatar,
     Drawer,
-    InitiativeRollDialog,
-    Message,
     PartyRail,
     ProgressSpinner,
     Button,
@@ -246,15 +223,15 @@ export default defineComponent({
       availableContexts: [] as ActingContext[],
       campaignStore: useCampaignStore(),
       members: [] as CampaignMember[],
-      incompleteLevelUps: [] as string[],
       unsubscribeCampaignChanges: undefined as (() => void) | undefined,
+      unsubscribeCampaignCalendar: undefined as (() => void) | undefined,
       unsubscribeCampaignReconnect: undefined as (() => void) | undefined,
       unsubscribeCampaignPresence: undefined as (() => void) | undefined,
       presenceSweepTimer: undefined as number | undefined,
       reconnectTimer: undefined as number | undefined,
-      inspirationExpiryTimer: undefined as number | undefined,
+      releaseCheckTimer: undefined as number | undefined,
+      releasePrompted: false,
       reconnectCheckBusy: false,
-      observedCurrentCombatantId: undefined as number | null | undefined,
       phoneViewport: false,
     };
   },
@@ -284,31 +261,6 @@ export default defineComponent({
 
       return this.campaign?.characters.find(
         (character) => character.id === this.activeContext?.character_id,
-      );
-    },
-    pendingInitiativeCombatant(): EncounterCombatant | undefined {
-      if (this.activeContext?.kind !== "pc") {
-        return undefined;
-      }
-
-      return this.campaign?.encounter?.combatants.find(
-        (combatant) =>
-          combatant.character_id === this.activeContext?.character_id &&
-          combatant.can_roll_initiative,
-      );
-    },
-    pendingInitiativeIsBonus(): boolean {
-      if (!this.pendingInitiativeCombatant) {
-        return false;
-      }
-
-      return Boolean(
-        this.campaign?.encounter?.combatants.some(
-          (combatant) =>
-            combatant.character_id === this.pendingInitiativeCombatant?.character_id &&
-            combatant.id !== this.pendingInitiativeCombatant.id &&
-            combatant.initiative_roll === 20,
-        ),
       );
     },
     contextLabel(): string {
@@ -420,6 +372,8 @@ export default defineComponent({
     window.addEventListener("online", this.handleBrowserOnline);
     this.presenceSweepTimer = window.setInterval(this.expireStalePresence, 10_000);
     this.reconnectTimer = window.setInterval(this.checkReconnection, 2_000);
+    this.releaseCheckTimer = window.setInterval(this.checkReleaseVersion, 60_000);
+    void this.checkReleaseVersion();
     void this.loadContexts();
   },
   beforeUnmount(): void {
@@ -427,6 +381,7 @@ export default defineComponent({
     window.removeEventListener("offline", this.handleBrowserOffline);
     window.removeEventListener("online", this.handleBrowserOnline);
     this.unsubscribeCampaignChanges?.();
+    this.unsubscribeCampaignCalendar?.();
     this.unsubscribeCampaignReconnect?.();
     this.unsubscribeCampaignPresence?.();
     if (this.presenceSweepTimer !== undefined) {
@@ -435,8 +390,8 @@ export default defineComponent({
     if (this.reconnectTimer !== undefined) {
       window.clearInterval(this.reconnectTimer);
     }
-    if (this.inspirationExpiryTimer !== undefined) {
-      window.clearTimeout(this.inspirationExpiryTimer);
+    if (this.releaseCheckTimer !== undefined) {
+      window.clearInterval(this.releaseCheckTimer);
     }
     disconnectCampaignRealtime();
   },
@@ -503,6 +458,34 @@ export default defineComponent({
         this.reconnectCheckBusy = false;
       }
     },
+    async checkReleaseVersion(): Promise<void> {
+      if (this.releasePrompted) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/release-manifest.json", { cache: "no-store" });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const manifest = (await response.json()) as { version?: unknown };
+
+        if (typeof manifest.version === "string" && manifest.version !== this.version) {
+          this.releasePrompted = true;
+          const refresh = window.confirm(
+            "A new Hoard release is available. Refresh now to update?",
+          );
+
+          if (refresh) {
+            window.location.reload();
+          }
+        }
+      } catch {
+        // A failed version check should not interrupt the active campaign.
+      }
+    },
     async selectContext(context: ActingContext): Promise<void> {
       rememberContext(context);
       await this.$router.push(contextPath(context));
@@ -521,40 +504,7 @@ export default defineComponent({
     async refreshCampaignChrome(context: ActingContext): Promise<void> {
       try {
         const campaign = await this.campaignStore.load(context.id);
-        const currentCombatantId = campaign.encounter?.current_combatant_id ?? null;
-        const shouldAlertCurrentPlayer =
-          this.observedCurrentCombatantId !== undefined &&
-          currentCombatantId !== null &&
-          currentCombatantId !== this.observedCurrentCombatantId &&
-          context.kind === "pc" &&
-          campaign.encounter?.combatants.some(
-            (combatant) =>
-              combatant.id === currentCombatantId &&
-              combatant.character_id === context.character_id,
-          );
-
-        this.scheduleInspirationExpiry(context, campaign);
-        this.observedCurrentCombatantId = currentCombatantId;
         this.members = campaign.members;
-        this.incompleteLevelUps = campaign.incomplete_level_ups.map(
-          (levelUp) => levelUp.character_name,
-        );
-
-        if (shouldAlertCurrentPlayer) {
-          alertCurrentTurn();
-          const currentCombatant = campaign.encounter?.combatants.find(
-            (combatant) => combatant.id === currentCombatantId,
-          );
-
-          this.$toast.add({
-            severity: "info",
-            summary: "Your turn",
-            detail: currentCombatant
-              ? `${currentCombatant.name} is up.`
-              : "Your initiative is current.",
-            life: 5_000,
-          });
-        }
       } catch {
         // Keep the last rendered campaign visible behind the reconnecting screen.
       }
@@ -569,43 +519,13 @@ export default defineComponent({
           Date.parse(member.last_seen_at) >= cutoff,
       }));
     },
-    scheduleInspirationExpiry(context: ActingContext, campaign: Campaign): void {
-      if (this.inspirationExpiryTimer !== undefined) {
-        window.clearTimeout(this.inspirationExpiryTimer);
-        this.inspirationExpiryTimer = undefined;
-      }
-
-      const expiryTimes = campaign.characters
-        .filter(
-          (character) =>
-            character.has_inspiration && character.inspiration_expires_at !== null,
-        )
-        .map((character) => Date.parse(character.inspiration_expires_at as string))
-        .filter((expiry) => Number.isFinite(expiry));
-
-      if (expiryTimes.length === 0) {
-        return;
-      }
-
-      const nextExpiry = Math.min(...expiryTimes);
-      const delay = Math.max(0, nextExpiry - Date.now() + 100);
-
-      this.inspirationExpiryTimer = window.setTimeout(() => {
-        void this.refreshCampaignChrome(context);
-      }, delay);
-    },
     handleContextChange(context: ActingContext | undefined): void {
       this.unsubscribeCampaignChanges?.();
+      this.unsubscribeCampaignCalendar?.();
       this.unsubscribeCampaignReconnect?.();
       this.unsubscribeCampaignPresence?.();
       this.campaignStore.clear();
       this.members = [];
-      this.incompleteLevelUps = [];
-      this.observedCurrentCombatantId = undefined;
-      if (this.inspirationExpiryTimer !== undefined) {
-        window.clearTimeout(this.inspirationExpiryTimer);
-        this.inspirationExpiryTimer = undefined;
-      }
 
       if (!context) {
         disconnectCampaignRealtime();
@@ -616,24 +536,17 @@ export default defineComponent({
       void this.refreshCampaignChrome(context);
 
       this.unsubscribeCampaignChanges = subscribeDomainEvents((event) => {
-        if (
-          event.type === "character.health_changed" &&
-          typeof event.character_id === "number" &&
-          typeof event.current_hp === "number" &&
-          typeof event.temporary_hp === "number"
-        ) {
-          this.campaignStore.applyHealthChanged({
-            character_id: event.character_id,
-            current_hp: event.current_hp,
-            temporary_hp: event.temporary_hp,
-          });
-          return;
-        }
-
         if (event.type === "campaign.state_changed") {
           void this.refreshCampaignChrome(context);
           campaignRefreshRevision.value += 1;
         }
+      });
+      this.unsubscribeCampaignCalendar = subscribeCampaignCalendar((calendar) => {
+        if (this.campaignStore.campaign) {
+          this.campaignStore.campaign.calendar = calendar;
+        }
+
+        campaignRefreshRevision.value += 1;
       });
       this.unsubscribeCampaignReconnect = subscribeCampaignReconnect(() => {
         void this.refreshCampaignChrome(context);

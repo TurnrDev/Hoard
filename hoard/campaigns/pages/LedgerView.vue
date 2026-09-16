@@ -192,26 +192,6 @@ export default defineComponent({
     },
 
     amount(transaction: LedgerTransaction): string {
-      if (transaction.ledger === "health") {
-        return [
-          transaction.current_hp_delta
-            ? `${transaction.current_hp_delta > 0 ? "+" : ""}${transaction.current_hp_delta} HP`
-            : "",
-          transaction.temporary_hp_delta
-            ? `${transaction.temporary_hp_delta > 0 ? "+" : ""}${transaction.temporary_hp_delta} temp HP`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-      }
-      if (transaction.ledger === "character") {
-        return `${Object.keys(transaction.changes ?? {}).length} field changes`;
-      }
-      if (transaction.ledger === "condition") {
-        return transaction.condition
-          ? displayIdentifier(transaction.condition)
-          : "Condition";
-      }
       if (transaction.ledger.startsWith("audit.")) {
         return `${Object.keys(transaction.changes ?? {}).length} recorded changes`;
       }
@@ -219,7 +199,7 @@ export default defineComponent({
         .filter((entry) => entry.amount > 0)
         .map(
           (entry) =>
-            `${entry.amount} ${entry.item_name ?? (entry.denomination ? displayCoin(entry.denomination) : "XP")}`,
+            `${entry.amount} ${entry.denomination ? displayCoin(entry.denomination) : "XP"}`,
         )
         .join(" · ");
     },
@@ -229,10 +209,6 @@ export default defineComponent({
         {
           experience: "mdi-star-four-points",
           money: "mdi-cash-multiple",
-          inventory: "mdi-package-variant",
-          health: "mdi-heart-pulse",
-          character: "mdi-account-edit-outline",
-          condition: "mdi-account-alert-outline",
         }[transaction.ledger] ?? "mdi-book-open-variant"
       );
     },
@@ -240,7 +216,7 @@ export default defineComponent({
     canReverse(transaction: LedgerTransaction): boolean {
       return Boolean(
         this.campaign?.is_game_master &&
-        ["inventory", "money", "experience"].includes(transaction.ledger) &&
+        ["money", "experience"].includes(transaction.ledger) &&
         !transaction.is_reversed &&
         !transaction.reversal_of_id,
       );

@@ -30,21 +30,12 @@ export type DomainEvent = {
   request_id?: string;
   [key: string]: unknown;
 };
-export type RepositoryImportEvent = {
-  type:
-    | "repository.import.started"
-    | "repository.import.progress"
-    | "repository.import.finished"
-    | "repository.import.error";
-  job_id?: string;
-  detail?: string;
-  stage?: string;
-  message?: string;
-  current?: number | null;
-  total?: number | null;
-  heartbeat?: boolean;
+export type CampaignCalendarEventData = {
+  era_abbreviation: string;
+  era_name: string;
+  year: number;
+  day: number;
 };
-const repositoryImportListeners = new Set<(event: RepositoryImportEvent) => void>();
 const domainEventListeners = new Set<(event: DomainEvent) => void>();
 const reconnectListeners = new Set<() => void>();
 const queryOperations = new Set([
@@ -52,22 +43,9 @@ const queryOperations = new Set([
   "campaign.calendar.get",
   "campaign.members.list",
   "campaign.invites.list",
-  "campaign.level.status",
   "characters.list",
   "characters.get",
-  "characters.builder.definition",
-  "characters.builder.entry.get",
-  "characters.builder.get",
-  "characters.level_up.definition",
-  "characters.level_up.class.get",
-  "characters.level_up.preview",
-  "characters.level_up.feats",
-  "characters.imports.cah.preview",
   "transactions.list",
-  "compendium.items.list",
-  "compendium.search",
-  "compendium.sources.list",
-  "compendium.repositories.list",
 ]);
 const pendingRequests = new Map<
   string,
@@ -154,11 +132,6 @@ function open(): void {
       return;
     }
     domainEventListeners.forEach((listener) => listener(message as DomainEvent));
-    if (message.type?.startsWith("repository.import.")) {
-      repositoryImportListeners.forEach((listener) =>
-        listener(message as RepositoryImportEvent),
-      );
-    }
   };
   socket.onclose = () => {
     stopPresenceHeartbeat();
@@ -232,11 +205,6 @@ export async function campaignRequest<T>(
   });
 }
 
-export const campaignImportRequest = <T>(
-  type: string,
-  payload: Record<string, unknown> = {},
-) => campaignRequest<T>(type, payload);
-
 async function oneShotRequest<T>(
   path: string,
   type: string,
@@ -307,16 +275,6 @@ export const inviteRequest = <T>(
   payload: Record<string, unknown> = {},
 ) => oneShotRequest<T>(`/ws/invites/${encodeURIComponent(token)}/`, type, payload);
 
-export async function startRepositoryImport(payload: {
-  repositoryId: string;
-  ref?: string;
-}): Promise<void> {
-  await campaignRequest("compendium.repositories.import", {
-    repository_id: payload.repositoryId,
-    ref: payload.ref ?? "",
-  });
-}
-
 async function readySocket(): Promise<ReconnectingWebSocket> {
   const deadline = Date.now() + SOCKET_CONNECT_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -341,13 +299,6 @@ function rejectPendingRequests(detail: string): void {
     pending.reject(new Error(detail));
   }
   pendingRequests.clear();
-}
-
-export function subscribeRepositoryImport(
-  listener: (event: RepositoryImportEvent) => void,
-): () => void {
-  repositoryImportListeners.add(listener);
-  return () => repositoryImportListeners.delete(listener);
 }
 
 export function subscribeCampaignChanges(listener: () => void): () => void {
@@ -376,6 +327,38 @@ export function subscribeCampaignPresence(
         context_id: event.context_id,
         connected: event.connected,
         last_seen_at: event.last_seen_at,
+      });
+    }
+  });
+}
+
+export function subscribeCampaignCalendar(
+  listener: (calendar: CampaignCalendarEventData) => void,
+): () => void {
+  return subscribeDomainEvents((event) => {
+    if (event.type !== "campaign.calendar_changed") {
+      return;
+    }
+
+    const calendar = event.calendar;
+
+    if (
+      typeof calendar === "object" &&
+      calendar !== null &&
+      "era_abbreviation" in calendar &&
+      typeof calendar.era_abbreviation === "string" &&
+      "era_name" in calendar &&
+      typeof calendar.era_name === "string" &&
+      "year" in calendar &&
+      typeof calendar.year === "number" &&
+      "day" in calendar &&
+      typeof calendar.day === "number"
+    ) {
+      listener({
+        era_abbreviation: calendar.era_abbreviation,
+        era_name: calendar.era_name,
+        year: calendar.year,
+        day: calendar.day,
       });
     }
   });

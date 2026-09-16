@@ -55,3 +55,24 @@ class SharedExperienceTests(TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual(character.experience, 0)
         self.assertEqual(self.campaign.shared_experience, 0)
+
+    def test_award_entries_balance_against_one_system_account(self) -> None:
+        first = make_character(self.campaign, "First")
+        second = make_character(self.campaign, "Second")
+        first.activate()
+        second.activate()
+
+        self.campaign.award_shared_experience(9)
+        award = ExperienceTransaction.objects.get(
+            reason=ExperienceTransaction.Reason.SHARED_AWARD
+        )
+
+        self.assertEqual(sum(entry.amount for entry in award.entries.all()), 0)
+        self.assertEqual(
+            award.entries.filter(account__is_system=True).count(),
+            1,
+        )
+        self.assertEqual(award.requested_amount, 9)
+        self.assertEqual(award.discarded_amount, 1)
+        self.assertEqual(first.experience, 4)
+        self.assertEqual(second.experience, 4)

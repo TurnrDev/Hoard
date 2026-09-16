@@ -1,0 +1,11 @@
+.git
+.env
+.pytest_cache
+.ruff_cache
+.venv
+hoard/dist
+media
+node_modules
+staticfiles
+*.pyc
+__pycache__
