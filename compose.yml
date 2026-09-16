@@ -72,7 +72,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-hoard}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - /data/appdata/hoard/db-data:/var/lib/postgresql/data
+      - /data/appdata/hoard/db-data:/var/lib/postgresql
     networks:
       - hoard
     healthcheck:
