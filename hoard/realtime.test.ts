@@ -119,4 +119,27 @@ describe("campaign realtime transport", () => {
     await expect(result).resolves.toBeUndefined();
     expect(pendingCommandCount.value).toBe(0);
   });
+
+  it("renders structured request errors as readable messages", async () => {
+    vi.stubGlobal("window", {
+      location: { protocol: "http:", host: "example.test" },
+      setTimeout,
+    });
+    vi.stubGlobal("WebSocket", { OPEN: 1, CLOSED: 3 });
+    connectCampaignRealtime(7);
+    const socket = activeSocket();
+
+    const result = campaignRequest<void>("campaign.calendar.get");
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    const sent = JSON.parse(socket.send.mock.calls[0][0]) as Record<string, unknown>;
+    socket.deliver({
+      type: "query.error",
+      request_id: sent.request_id,
+      detail: ["You already have a player context in this campaign."],
+    });
+
+    await expect(result).rejects.toThrow(
+      "You already have a player context in this campaign.",
+    );
+  });
 });

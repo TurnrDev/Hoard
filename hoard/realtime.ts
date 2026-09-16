@@ -61,18 +61,37 @@ function socketUrl(path: string): string {
   return `${protocol}//${window.location.host}${path}`;
 }
 
+function displayErrorDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail.map((value) => displayErrorDetail(value)).filter(Boolean);
+
+    return messages.join(" ");
+  }
+
+  if (detail && typeof detail === "object") {
+    const messages = Object.entries(detail).flatMap(([field, value]) => {
+      const message = displayErrorDetail(value);
+
+      return message ? [`${field}: ${message}`] : [];
+    });
+
+    return messages.join(" ");
+  }
+
+  return "";
+}
+
 function requestError(message: {
   type?: string;
   detail?: unknown;
   code?: unknown;
   field_errors?: unknown;
 }): Error {
-  const detail =
-    typeof message.detail === "string"
-      ? message.detail
-      : message.detail === undefined
-        ? "Campaign request failed."
-        : JSON.stringify(message.detail);
+  const detail = displayErrorDetail(message.detail) || "Campaign request failed.";
   if (message.type === "command.error") {
     return new CommandError(
       detail,
