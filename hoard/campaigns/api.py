@@ -51,7 +51,7 @@ class SharedXpAwardCreate(Schema):
     description: str = ""
 
 
-api = NinjaAPI(title="Hoard API", version="0.1.0", auth=django_auth)
+api = NinjaAPI(title="Hoard API", version="0.1.1", auth=django_auth)
 
 
 def unprocessable(error: DjangoValidationError) -> HttpError:

@@ -13,7 +13,7 @@ describe("initial release UI scope", () => {
     const frontendVersion = JSON.parse(packageMetadata).version;
     const lockVersion = JSON.parse(packageLock).version;
 
-    expect(pythonVersion).toBe("0.1.0");
+    expect(pythonVersion).toBe("0.1.1");
     expect(frontendVersion).toBe(pythonVersion);
     expect(lockVersion).toBe(pythonVersion);
   });
