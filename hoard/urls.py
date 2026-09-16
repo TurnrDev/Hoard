@@ -22,7 +22,11 @@ from django.urls import path, re_path
 from django.urls.resolvers import URLPattern
 
 from hoard.campaigns.api import api
-from hoard.campaigns.views import cah_upload, character_portrait_upload
+from hoard.campaigns.views import (
+    cah_upload,
+    character_portrait,
+    character_portrait_upload,
+)
 from hoard.spa import spa
 
 urlpatterns: list[URLPattern] = [
@@ -32,8 +36,16 @@ urlpatterns: list[URLPattern] = [
         "api/uploads/character-portraits/<int:context_id>/<int:character_id>/",
         character_portrait_upload,
     ),
+    path(
+        "media/character-portraits/<path:filename>",
+        character_portrait,
+        name="character-portrait",
+    ),
     path("api/", api.urls),
-    re_path(r"^(?!api/|admin/|media/).*$", spa),
+    # Static assets are served by WhiteNoise in production. Keep them out of
+    # the SPA fallback so a missing asset is a real 404 rather than index.html
+    # returned with a misleading 200 response.
+    re_path(r"^(?!api/|admin/|media/|static/).*$", spa),
 ]
 
 if settings.DEBUG:

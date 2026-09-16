@@ -39,6 +39,15 @@ class CharacterUpdateCommand(CharacterIdentifierCommand):
     fields: dict[str, object]
 
 
+class CharacterNativeEventCommand(CharacterIdentifierCommand):
+    """Validated native mechanic event emitted by a rendered system control."""
+
+    event_name: str = Field(min_length=1, max_length=300)
+    payload: dict[str, object] = Field(default_factory=dict)
+    view_values: dict[str, object] = Field(default_factory=dict)
+    stat_updates: dict[str, object] = Field(default_factory=dict)
+
+
 class CharacterHealthCommand(BaseModel):
     """Validated input for recording a character health change."""
 

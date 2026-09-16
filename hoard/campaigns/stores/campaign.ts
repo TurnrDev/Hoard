@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { getCampaign, type Campaign } from "@/api";
+import { getCampaign, type Campaign, type CampaignCalendar } from "@/api";
 
 export const useCampaignStore = defineStore("campaign", {
   state: () => ({
@@ -18,6 +18,13 @@ export const useCampaignStore = defineStore("campaign", {
     clear(): void {
       this.contextId = undefined;
       this.campaign = undefined;
+    },
+    applyCalendarChanged(calendar: CampaignCalendar): void {
+      if (!this.campaign) {
+        return;
+      }
+
+      this.campaign.calendar = calendar;
     },
     applyHealthChanged(event: {
       character_id: number;

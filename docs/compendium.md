@@ -16,19 +16,37 @@ Campaign GMs manage changes and removal; imported entries remain read-only.
 
 ## RPG Companion community directory
 
-Download the upstream archive and import it:
+Compile and import Hoard's embedded default fork, then refresh the community
+registry:
 
 ```sh
 uv run python manage.py update_compendium_registries
 ```
 
-The command fetches the canonical community directory, synchronises its
-repository records, and imports the `5e` and `5e2024` sources from the
-`default` repository. It is idempotent: running it again updates
-entries by source identifier and adds newly available entries.
+The command synchronises the canonical community directory when it is
+available, then compiles and imports `5e` and `5e2024` from the upstream-history
+fork in `hoard/compendium/systems/default`. It uses the official compiler under
+`hoard/compendium/native/tools` on Linux x86-64. Set
+`RPG_COMPANION_COMPILER=/path/to/refresh_system_builder` to use the compiler
+installed by the RPGScript VS Code extension on another platform.
 
-Use `--source /path/to/checkout` to import a deliberate checkout for that
-same `default` repository instead of downloading its Git archive.
+Compiled packages are reproducible build artifacts in
+`hoard/compendium/systems/compiled` and are intentionally ignored by Git. The
+production Docker image creates them while building. The import command compiles
+to a temporary directory, so local imports cannot leave stale executable
+definitions behind. It remains usable offline when the default repository has
+already been seeded. It is idempotent: running it again updates entries by
+native source identifier, removes stale imported entries, and adds newly
+available entries.
+
+The Debian image sets `HOARD_USE_COMPILED_SYSTEMS=true` and runs
+`update_compendium_registries --no-registry --if-missing` after migrations.
+Consequently, a fresh deployment seeds its build-time packages without network
+access, while an existing database starts without recompiling or reimporting.
+
+Use `--source /path/to/checkout` to compile and import a deliberate checkout for that
+same `default` repository. Use `--remote` to deliberately download and import
+the registry's current default release instead of the bundled fork.
 
 ## Enable sources for a campaign
 

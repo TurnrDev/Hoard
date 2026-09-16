@@ -13,13 +13,35 @@ A D&D 5e tool for our campaign with specific tools for our homebrew rules. You w
 - `hoard/` also contains the Vue/Vite SPA, with client files organised alongside
   the Django application that owns them. Django serves its production build.
 
-Run Django management commands from the repository root:
+## Development
+
+Docker Compose is the preferred development environment because it matches the
+Debian production image and includes PostgreSQL, Redis, Daphne, Celery, frontend
+assets, and the native RPGScript compiler. Start the complete stack from the
+repository root:
+
+```sh
+DJANGO_SECRET_KEY='local-development-secret' docker compose up --build
+```
+
+Open the application at `http://localhost:8000`. Source changes require an image
+rebuild; use the host-side workflow below when you want Vite hot reload.
+
+For host-side development, first start only the backing services and then run
+Django:
 
 ```sh
 docker compose up -d db redis
 uv run python manage.py migrate
 uv run python manage.py runserver --noreload
 ```
+
+The complete stack starts Daphne, Celery, PostgreSQL, and Redis, applies
+migrations before the web process, and serves the compiled frontend. The image
+includes the official MIT-licensed RPGScript compiler on Linux x86-64, so the
+embedded system fork is rebuilt without VS Code. On another architecture,
+install the official RPGScript extension and set `RPG_COMPANION_COMPILER` to its
+`refresh_system_builder` executable in a custom image.
 
 In a second backend terminal, start the Celery worker. It handles Compendium
 repository imports without blocking Django or the WebSocket server:
@@ -70,8 +92,9 @@ uv run celery -A hoard worker --loglevel=INFO
 ```
 
 If the tools are not installed locally, enter the repository's declarative
-development environment once with `nix-shell`. It provides Python, `uv`, Node,
-npm, Git, and Docker Compose; the commands above remain the normal workflow.
+development environment with `nix-shell`. It provides the versions used by the
+container build—Python 3.14, `uv`, Node 24, npm, Git, Docker 29, and Docker
+Compose—and prints the preferred startup command.
 
 The Compose database is available at `localhost:5432` with the development
 database name, user, and password all set to `hoard`. Override the
@@ -82,7 +105,9 @@ database name, user, and password all set to `hoard`. Override the
 
 Campaign-domain commands use authenticated WebSockets; HTTP is retained only for
 Django session/CSRF operations and raw `.cah` upload bytes. See [the API
-guide](docs/api.md) and the [Compendium guide](docs/compendium.md). Synchronise the community repository
+guide](docs/api.md), the [Compendium guide](docs/compendium.md), and the
+[RPG Companion compatibility architecture](docs/rpg-companion-compatibility.md).
+Synchronise the community repository
 directory and install its `default` repository with:
 
 ```sh

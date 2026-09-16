@@ -13,7 +13,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
 from django.db import transaction as db_transaction
 from django.db.models import Prefetch, Q, Sum
-from django.db.models.fields.json import KeyTextTransform
 from django.http import JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware, get_token
 from django.shortcuts import get_object_or_404
@@ -28,6 +27,10 @@ from hoard.compendium.models import (
     CompendiumEntry,
     CompendiumRepository,
     CompendiumSource,
+)
+from hoard.compendium.native.runtime import (
+    decorate_event_name,
+    native_resource_identifier,
 )
 
 from .models import (
@@ -46,13 +49,22 @@ from .models import (
     MoneyEntry,
     MoneyTransaction,
 )
+from .models.audit import format_campaign_date
 from .payloads import CampaignCalendarData
 from .realtime import notify_campaign_changed
-from .services import exchange_coins, reverse_transaction
+from .services import CharacterLifecycleService, exchange_coins, reverse_transaction
 from .services.cah import ABILITIES, SKILL_NAMES, parse_cah
 from .services.calendar import CampaignCalendarService
 from .services.combat import condition_list_data
 from .services.ledger import post_inventory_transaction, post_money_transaction
+from .services.native import (
+    HOARD_RENDERED_SHEET_SECTIONS,
+    execute_character_event,
+    execute_projection_update,
+    native_class_detail_values,
+    native_class_details,
+    native_sheet_view,
+)
 
 INSPIRATION_DURATION = timedelta(hours=24)
 
@@ -163,6 +175,8 @@ class CahCommit(Schema):
     character_id: int | None = None
     inventory: list[dict[str, object]] = []
     collections: dict[str, bool] = {}
+    class_resolutions: dict[str, int] = {}
+    spell_resolutions: dict[str, int] = {}
 
 
 class SheetRecord(Schema):
@@ -195,7 +209,7 @@ class SheetRecord(Schema):
 
 class SpellCard(Schema):
     name: str = ""
-    level: int = 0
+    level: Annotated[int, Field(ge=0, le=9)] = 0
     school: str = ""
     casting_time: str = ""
     range: str = ""
@@ -325,7 +339,22 @@ def slot_map(value: object) -> dict[str, int]:
 
 def class_slot_maxima(character: Character) -> dict[str, int]:
     """Apply the 2014 multiclass caster table; Pact Magic is intentionally separate."""
-    classes = [row.class_name.lower() for row in character.class_levels.all()]
+    classes = []
+    for detail in native_class_detail_values(character.native_state):
+        stats = detail["stats"]
+        class_value = stats.get("class")
+        resource = class_value.get("value") if isinstance(class_value, dict) else None
+        resource_stats = resource.get("stats") if isinstance(resource, dict) else None
+        name_value = resource_stats.get("name") if isinstance(resource_stats, dict) else None
+        class_level_value = stats.get("class_level")
+        name = name_value.get("value") if isinstance(name_value, dict) else ""
+        class_level = (
+            class_level_value.get("value")
+            if isinstance(class_level_value, dict)
+            else 0
+        )
+        if isinstance(name, str) and isinstance(class_level, int):
+            classes.extend([name.casefold()] * max(0, class_level))
     if not classes:
         return {}
     full = {"bard", "cleric", "druid", "sorcerer", "wizard"}
@@ -382,9 +411,20 @@ def spellcasting_classes(character: Character) -> list[dict[str, object]]:
     """Return each class that supplies this character's spellcasting ability."""
     class_entries: dict[str, CompendiumEntry] = {}
 
-    for level in character.class_levels.select_related("class_entry"):
-        if level.class_entry is not None:
-            class_entries[level.class_name.lower()] = level.class_entry
+    for detail in native_class_detail_values(character.native_state):
+        class_value = detail["stats"].get("class")
+        resource = class_value.get("value") if isinstance(class_value, dict) else None
+        entry_id = (
+            resource.get("$hoard_entry_id") if isinstance(resource, dict) else None
+        )
+        if not isinstance(entry_id, int):
+            continue
+        entry = character.native_resources.filter(
+            pk=entry_id,
+            kind=CompendiumEntry.Kind.CLASS,
+        ).first()
+        if entry is not None:
+            class_entries[entry.name.casefold()] = entry
 
     classes = []
     for class_name, entry in class_entries.items():
@@ -401,11 +441,16 @@ def spellcasting_classes(character: Character) -> list[dict[str, object]]:
             continue
 
         modifier = character.ability_modifier(ability_name)
-        attack = character.proficiency_bonus + modifier + effect_total(
-            character, "spell_attack"
+        attack = (
+            character.proficiency_bonus
+            + modifier
+            + effect_total(character, "spell_attack")
         )
-        save_dc = 8 + character.proficiency_bonus + modifier + effect_total(
-            character, "spell_dc"
+        save_dc = (
+            8
+            + character.proficiency_bonus
+            + modifier
+            + effect_total(character, "spell_dc")
         )
         classes.append(
             {
@@ -423,7 +468,20 @@ def spell_card_data(data: object) -> dict[str, object]:
     """Read canonical spell-card data from an entry or a CAH spell record."""
     source = data if isinstance(data, dict) else {}
     card = source.get("spell")
-    values = card if isinstance(card, dict) else source
+    stats = source.get("stats")
+    values = (
+        card if isinstance(card, dict) else stats if isinstance(stats, dict) else source
+    )
+
+    def value(*names: str):
+        for name in names:
+            candidate = values.get(name)
+            if isinstance(candidate, dict) and "value" in candidate:
+                return candidate["value"]
+            if candidate is not None:
+                return candidate
+        return None
+
     aliases = {
         "casting_time": ("casting_time", "castingTime"),
         "range": ("range",),
@@ -440,15 +498,63 @@ def spell_card_data(data: object) -> dict[str, object]:
     }
     result: dict[str, object] = {}
     for field, names in aliases.items():
-        value = next((values[name] for name in names if name in values), None)
-        if value is not None:
-            result[field] = value
+        field_value = value(*names)
+        if field_value is not None:
+            result[field] = field_value
+
+    level = result.get("level")
+    if isinstance(level, str):
+        match = re.search(r"(\d+)$", level)
+        result["level"] = int(match.group(1)) if match else 0
+    school = result.get("school")
+    if isinstance(school, str) and school.startswith("spell_school_"):
+        result["school"] = (
+            school.removeprefix("spell_school_").replace("_", " ").title()
+        )
+    if not result.get("components"):
+        component_names = [
+            label
+            for label, field in (("V", "verbal"), ("S", "somatic"), ("M", "material"))
+            if value(field) is True
+        ]
+        result["components"] = ", ".join(component_names)
+    if value("material") is True and not result.get("materials"):
+        result["materials"] = value("components") or ""
+    duration = result.get("duration")
+    if isinstance(duration, str) and duration.casefold().startswith("concentration"):
+        result["concentration"] = True
+    higher_level = value("higher_level_description")
+    if isinstance(higher_level, str) and higher_level:
+        description = str(result.get("description", ""))
+        result["description"] = (
+            f"{description}\n\nAt Higher Levels: {higher_level}".strip()
+        )
     return result
 
 
 def spell_entry_data(entry: CompendiumEntry) -> dict[str, object]:
-    card = spell_card_data(entry.data)
-    return {"name": entry.name, "description": entry.description, **card}
+    card = {
+        "level": 0,
+        "school": "",
+        "casting_time": "",
+        "range": "",
+        "target": "",
+        "components": "",
+        "materials": "",
+        "duration": "",
+        "concentration": False,
+        "ritual": False,
+        "classes": [],
+        **spell_card_data(entry.data),
+    }
+    return {
+        "name": entry.name,
+        "description": entry.description,
+        **card,
+        "source": entry.source.name,
+        "source_identifier": entry.source_identifier,
+        "is_custom": entry.source.repository.campaign_id is not None,
+    }
 
 
 def custom_spell_entry(
@@ -456,18 +562,49 @@ def custom_spell_entry(
 ) -> CompendiumEntry:
     source = _custom_source(context.campaign)
     name = card.name.strip()
+    identifier = source_identifier or f"custom:spell:{secrets.token_urlsafe(12)}"
+    native_data = spell_card_resource_data(card, identifier)
     entry = CompendiumEntry(
         source=source,
         kind=CompendiumEntry.Kind.SPELL,
-        source_identifier=source_identifier or f"custom:spell:{secrets.token_urlsafe(12)}",
+        source_identifier=identifier,
         name=name,
         description=card.description.strip(),
-        data={"spell": card.model_dump(exclude={"name", "description"})},
+        data=native_data,
         created_by=context,
     )
     entry.full_clean()
     entry.save()
     return entry
+
+
+def spell_card_resource_data(
+    card: SpellCard,
+    identifier: str,
+) -> dict[str, object]:
+    """Encode a spell card as a native RPG Companion resource instance."""
+    components = {part.strip().upper() for part in card.components.split(",")}
+    native_stats = {
+        "id": {"value": identifier},
+        "name": {"value": card.name.strip()},
+        "level": {"value": f"spell_level_{card.level}"},
+        "school": {
+            "value": f"spell_school_{card.school.strip().lower().replace(' ', '_')}"
+        },
+        "ritual": {"value": card.ritual},
+        "casting_time": {"value": card.casting_time},
+        "range": {"value": card.range},
+        "target": {"value": card.target},
+        "duration": {"value": card.duration},
+        "verbal": {"value": "V" in components},
+        "somatic": {"value": "S" in components},
+        "material": {"value": "M" in components or bool(card.materials)},
+        "components": {"value": card.materials},
+        "description": {"value": card.description.strip()},
+        "classes": {"value": card.classes},
+        "concentration": {"value": card.concentration},
+    }
+    return {"resource_id": "spell", "stats": native_stats}
 
 
 def effect_total(character: Character, target: str) -> int:
@@ -551,7 +688,11 @@ def _visible_characters(context: CampaignContext):
         else context.campaign.characters.filter(query | Q(context__user=context.user))
     )
 
-    return characters.prefetch_related("conditions")
+    return characters.select_related(
+        "context",
+        "native_system_source",
+        "campaign__native_system_source",
+    ).prefetch_related("conditions")
 
 
 def _context_data(context: CampaignContext) -> dict[str, object]:
@@ -881,6 +1022,12 @@ def _character_data(
 
     return {
         "id": character.pk,
+        "native_system_id": character.native_system_id,
+        "native_system_version": character.native_system_version,
+        "native_sheet": native_sheet_view(
+            character,
+            excluded_section_ids=HOARD_RENDERED_SHEET_SECTIONS,
+        ),
         "context_id": character.context_id,
         "name": character.name,
         "portrait_url": character.portrait.url if character.portrait else None,
@@ -905,6 +1052,8 @@ def _character_data(
         "languages": character.languages,
         "equipment_proficiencies": character.equipment_proficiencies,
         "has_inspiration": character.inspiration_available,
+        "is_dead": character.is_dead,
+        "death": character_death_data(character),
         "inspiration_expires_at": (
             character.inspiration_expires_at.isoformat()
             if character.inspiration_available
@@ -912,9 +1061,7 @@ def _character_data(
         ),
         "conditions": condition_list_data(list(character.conditions.all())),
         "is_build_complete": character.is_build_complete,
-        "level_up_complete": not character.level_progress.filter(
-            level=character.level, is_complete=False
-        ).exists(),
+        "level_up_complete": character.level >= character.campaign.level,
         "sheet": _sheet_data(character),
         "strength": character.ability_score("strength"),
         "dexterity": character.ability_score("dexterity"),
@@ -925,9 +1072,35 @@ def _character_data(
         "experience": character.experience,
         "money": _money_data(character),
         "inventory": [
-            {"item_id": item.pk, "name": item.name, "quantity": quantity}
+            {
+                "item_id": item.pk,
+                "name": item.name,
+                "quantity": quantity,
+                "item": inventory_item_data(item),
+                "is_attuned": character_resource_value(
+                    character, item.pk, "is_attuned", False
+                ),
+            }
             for item, quantity in character.inventory.items()
         ],
+        "death_saves": {
+            "successes": [
+                bool(
+                    character.native_state.get(
+                        f"death_saving_throws_success_{index}", False
+                    )
+                )
+                for index in range(1, 4)
+            ],
+            "failures": [
+                bool(
+                    character.native_state.get(
+                        f"death_saving_throws_failure_{index}", False
+                    )
+                )
+                for index in range(1, 4)
+            ],
+        },
         "notes": (
             [{"id": note.pk, "body": note.body} for note in character.notes.all()]
             if notes_are_visible
@@ -946,7 +1119,9 @@ def _character_data(
         ],
         "spells": [
             {"id": spell.pk, **spell_entry_data(spell)}
-            for spell in character.spells.filter(kind="spell").all()
+            for spell in character.spells.filter(kind="spell")
+            .select_related("source__repository")
+            .all()
         ],
         "loadout": [
             {
@@ -992,6 +1167,36 @@ def _character_data(
     }
 
 
+def character_death_data(character: Character) -> dict[str, object] | None:
+    """Return the current death marker and its campaign-time notice window."""
+    if (
+        character.died_campaign_year is None
+        or character.died_campaign_day is None
+        or not character.died_campaign_era
+    ):
+        return None
+    death_ordinal = (
+        character.died_campaign_year - 1
+    ) * 365 + character.died_campaign_day
+    campaign_ordinal = (
+        character.campaign.calendar_year - 1
+    ) * 365 + character.campaign.calendar_day
+    return {
+        "campaign_era": character.died_campaign_era,
+        "campaign_year": character.died_campaign_year,
+        "campaign_day": character.died_campaign_day,
+        "campaign_date": format_campaign_date(
+            character.died_campaign_era,
+            character.died_campaign_year,
+            character.died_campaign_day,
+        ),
+        "notice_visible": character.is_dead,
+        "revival_notice_visible": (
+            character.is_dead and campaign_ordinal - death_ordinal < 10
+        ),
+    }
+
+
 def _party_money(campaign: Campaign) -> dict[str, int | str]:
     totals = {key: 0 for key in ("cp", "sp", "ep", "gp", "pp")}
     rows = (
@@ -1030,7 +1235,7 @@ def _item_data(item: CompendiumEntry) -> dict[str, object]:
         "equipment": {
             "category": item.kind if item.kind in {"item", "weapon", "armor"} else None,
             "source_book": item.source_book or None,
-            "item_type": getattr(item, "compendium_item_type", None),
+            "item_type": item.item_type or None,
             "cost_amount": (
                 str(item.cost_amount) if item.cost_amount is not None else None
             ),
@@ -1047,6 +1252,27 @@ def _item_data(item: CompendiumEntry) -> dict[str, object]:
     }
 
 
+def inventory_item_data(item: CompendiumEntry) -> dict[str, object]:
+    """Serialize one held item without requiring a campaign-wide catalogue load."""
+    return _item_data(item)
+
+
+def character_resource_value(
+    character: Character,
+    entry_id: int,
+    stat: str,
+    default: object = None,
+) -> object:
+    """Read character-specific state for one linked compendium resource."""
+    resource_state = character.native_state.get("$hoard_resource_state", {})
+    if not isinstance(resource_state, dict):
+        return default
+    entry_state = resource_state.get(str(entry_id), {})
+    if not isinstance(entry_state, dict):
+        return default
+    return entry_state.get(stat, default)
+
+
 def _items(campaign: Campaign):
     return (
         CompendiumEntry.objects.filter(
@@ -1054,8 +1280,12 @@ def _items(campaign: Campaign):
             kind__in=("item", "weapon", "armor"),
         )
         .select_related("source", "source__repository")
-        .annotate(compendium_item_type=KeyTextTransform("item_type", "data"))
-        .defer("data", "source__data", "source__repository__data")
+        .defer(
+            "data",
+            "source__data",
+            "source__system_definition",
+            "source__repository__data",
+        )
     )
 
 
@@ -1102,9 +1332,13 @@ def csrf(request):
     return JsonResponse({"csrfToken": get_token(request)})
 
 
-@api.get("/auth/session/")
+@api.get("/auth/session/", auth=None)
 def session(request):
-    return {"id": request.auth.pk, "username": request.auth.get_username()}
+    if not request.user.is_authenticated:
+        logout(request)
+        raise HttpError(401, "Authentication required.")
+
+    return {"id": request.user.pk, "username": request.user.get_username()}
 
 
 @api.post("/auth/session/", auth=None)
@@ -1249,12 +1483,9 @@ def character_update(
         unknown = set(skills) - set(SKILL_NAMES)
         if unknown:
             raise HttpError(422, f"Unknown skills: {', '.join(sorted(unknown))}.")
-        character.skill_proficiencies = skills
-    for name, value in updates.items():
-        setattr(character, name, value)
+        updates["skill_proficiencies"] = skills
     try:
-        character.full_clean()
-        character.save()
+        character = CharacterLifecycleService().update(context, character, updates)
     except DjangoValidationError as error:
         raise _unprocessable(error) from error
     notify_campaign_changed(context.campaign_id)
@@ -1331,7 +1562,15 @@ def spell_create(request, context_id: int, character_id: int, payload: SheetReco
     entry = _enabled_entry(context.campaign, payload.catalogue_entry_id, "spell")
     if entry is None:
         raise HttpError(422, "Choose a spell from the compendium.")
-    character.spells.add(entry)
+    identifier = native_resource_identifier(entry.data) or entry.source_identifier
+    with db_transaction.atomic():
+        character.spells.add(entry)
+        execute_character_event(
+            character,
+            decorate_event_name("rpg_onCreate", identifier),
+            {"resource_id": identifier, "kind": entry.kind},
+            created_by=context,
+        )
     return 201, {"id": entry.pk}
 
 
@@ -1476,10 +1715,18 @@ def cast_spell(
         pool = pools.get(key)
         if not pool or pool["current"] < 1:
             raise HttpError(422, "That spell slot is not available.")
-        current = {name: value["current"] for name, value in pools.items()}
-        current[key] -= 1
-        character.spell_slot_current = current
-        character.save(update_fields=("spell_slot_current",))
+    identifier = native_resource_identifier(spell.data) or spell.source_identifier
+    view_values = {}
+    if level > 0 and key is not None:
+        view_values["spell_display_cast_composite_ticker"] = int(key)
+    native_result = execute_character_event(
+        character,
+        decorate_event_name("castSpell", identifier),
+        {"spell_id": spell.pk, "slot": slot},
+        created_by=created_by,
+        view_values=view_values,
+    )
+    character = native_result.character
     CharacterHistory.objects.create(
         campaign=character.campaign,
         character=character,
@@ -1498,24 +1745,48 @@ def take_rest(
     *,
     created_by: CampaignContext,
 ) -> dict[str, object]:
+    if character.current_hp == 0 or character.is_dead:
+        raise HttpError(422, "Stabilize this character before taking a rest.")
+
+    effects: list[dict[str, object]] = []
     if kind == "short":
         if current_hp is None or not 0 <= current_hp <= character.max_hp:
             raise HttpError(422, "Enter current HP after spending Hit Dice.")
-        character.current_hp = current_hp
-        pools = slot_pools(character)
-        character.spell_slot_current = {
-            key: pool["maximum"] if key.startswith("pact-") else pool["current"]
-            for key, pool in pools.items()
-        }
+        effects.append(
+            {
+                "type": "setStat",
+                "stat": "current_hp",
+                "new_value": {"type": "constant", "value": current_hp},
+                "aggregation_type": "set",
+            }
+        )
         expiry = CharacterEffect.RestExpiry.SHORT
     else:
-        character.current_hp = character.max_hp
-        character.temporary_hp = 0
-        character.spell_slot_current = {
-            key: pool["maximum"] for key, pool in slot_pools(character).items()
-        }
+        effects.extend(
+            [
+                {
+                    "type": "setStat",
+                    "stat": "current_hp",
+                    "new_value": {"type": "constant", "value": character.max_hp},
+                    "aggregation_type": "set",
+                },
+                {
+                    "type": "setStat",
+                    "stat": "hoard_temporary_hp",
+                    "new_value": {"type": "constant", "value": 0},
+                    "aggregation_type": "set",
+                },
+            ]
+        )
         expiry = CharacterEffect.RestExpiry.LONG
-    character.save(update_fields=("current_hp", "temporary_hp", "spell_slot_current"))
+    native_result = execute_character_event(
+        character,
+        f"{kind}_rest",
+        {"kind": kind, "current_hp": current_hp},
+        created_by=created_by,
+        effects={"type": "sequence", "effects": effects},
+    )
+    character = native_result.character
     expired = list(character.effects.filter(enabled=True, expires_on_rest=expiry))
     for effect in expired:
         effect.enabled = False
@@ -1541,11 +1812,34 @@ def set_inspiration(
 ) -> dict[str, object]:
     if character.inspiration_available == available:
         raise HttpError(422, "Inspiration is already in that state.")
-    character.has_inspiration = available
-    character.inspiration_expires_at = (
-        timezone.now() + INSPIRATION_DURATION if available else None
+    expires_at = timezone.now() + INSPIRATION_DURATION if available else None
+    native_result = execute_character_event(
+        character,
+        "hoard.inspiration.set",
+        {"available": available},
+        created_by=created_by,
+        effects={
+            "type": "sequence",
+            "effects": [
+                {
+                    "type": "setStat",
+                    "stat": "hoard_inspiration",
+                    "new_value": {"type": "constant", "value": available},
+                    "aggregation_type": "set",
+                },
+                {
+                    "type": "setStat",
+                    "stat": "hoard_inspiration_expires_at",
+                    "new_value": {
+                        "type": "constant",
+                        "value": expires_at.isoformat() if expires_at else "",
+                    },
+                    "aggregation_type": "set",
+                },
+            ],
+        },
     )
-    character.save(update_fields=("has_inspiration", "inspiration_expires_at"))
+    character = native_result.character
     CharacterHistory.objects.create(
         campaign=character.campaign,
         character=character,
@@ -1650,7 +1944,16 @@ def spell_delete(request, context_id: int, character_id: int, record_id: int):
     context = _context_access(request, context_id)
     character = _editable_sheet_character(context, character_id)
     spell = get_object_or_404(character.spells, pk=record_id, kind="spell")
-    character.spells.remove(spell)
+    identifier = native_resource_identifier(spell.data) or spell.source_identifier
+    with db_transaction.atomic():
+        execute_character_event(
+            character,
+            decorate_event_name("rpg_onRemove", identifier),
+            {"resource_id": identifier, "kind": spell.kind},
+            created_by=context,
+            removed_resource_identifier=identifier,
+        )
+        character.spells.remove(spell)
     return 204, None
 
 
@@ -1775,6 +2078,107 @@ def _match_import_entry(
     return matched[0] if len(matched) == 1 else None
 
 
+def import_entry_resolution(
+    campaign: Campaign,
+    row: dict[str, object],
+    index=None,
+) -> dict[str, object]:
+    """Describe an import match without silently choosing ambiguous content."""
+    identifiers, names = index or _import_entry_index(campaign)
+    kind = str(row["kind"])
+    identifier = str(row.get("source_identifier") or "")
+    identifier_matches = identifiers.get((kind, identifier), []) if identifier else []
+    if len(identifier_matches) == 1:
+        return {"state": "matched", "entry_id": identifier_matches[0], "by": "id"}
+    if len(identifier_matches) > 1:
+        return {
+            "state": "ambiguous",
+            "entry_id": None,
+            "by": "id",
+            "candidate_ids": identifier_matches,
+        }
+
+    exact_matches = names.get((kind, str(row["name"]).casefold()), [])
+    normalised_matches = names.get((kind, normalised_entry_name(str(row["name"]))), [])
+    matched = list(dict.fromkeys([*exact_matches, *normalised_matches]))
+    if len(matched) == 1:
+        return {"state": "matched", "entry_id": matched[0], "by": "name"}
+    if matched:
+        return {
+            "state": "ambiguous",
+            "entry_id": None,
+            "by": "name",
+            "candidate_ids": matched,
+        }
+    return {"state": "unresolved", "entry_id": None, "by": None}
+
+
+def import_spell_rows(
+    campaign: Campaign,
+    rows: list[dict[str, object]],
+    index=None,
+) -> list[dict[str, object]]:
+    """Add canonical card data and explicit resolution state to CAH spells."""
+    result = []
+    for position, row in enumerate(rows):
+        raw = row.get("raw")
+        canonical = spell_card_data(raw) if isinstance(raw, dict) else {}
+        import_row = {
+            **row,
+            **canonical,
+            "line_id": f"spell-{position}",
+            "kind": "spell",
+        }
+        import_row["resolution"] = import_entry_resolution(campaign, import_row, index)
+        result.append(import_row)
+    return result
+
+
+def import_class_rows(
+    campaign: Campaign,
+    rows: list[dict[str, object]],
+    index=None,
+) -> list[dict[str, object]]:
+    """Add explicit enabled-Compendium resolution state to CAH class jobs."""
+    result = []
+    for row in rows:
+        import_row = {**row, "kind": CompendiumEntry.Kind.CLASS}
+        import_row["resolution"] = import_entry_resolution(
+            campaign,
+            import_row,
+            index,
+        )
+        result.append(import_row)
+    return result
+
+
+def class_archetype_identifiers(entry: CompendiumEntry) -> set[str]:
+    """Return archetype resource IDs nested in an upstream native class entry."""
+    data = entry.data if isinstance(entry.data, dict) else {}
+    stats = data.get("stats")
+    stats = stats if isinstance(stats, dict) else {}
+    archetypes_value = stats.get("archetypes")
+    archetypes = (
+        archetypes_value.get("value")
+        if isinstance(archetypes_value, dict)
+        else archetypes_value
+    )
+    identifiers: set[str] = set()
+    for archetype in archetypes if isinstance(archetypes, list) else []:
+        archetype_stats = archetype.get("stats") if isinstance(archetype, dict) else {}
+        identifier_value = (
+            archetype_stats.get("id") if isinstance(archetype_stats, dict) else None
+        )
+        identifier = (
+            identifier_value.get("value")
+            if isinstance(identifier_value, dict)
+            else identifier_value
+        )
+        if isinstance(identifier, str) and identifier:
+            identifiers.add(identifier)
+    return identifiers
+
+
 def _calculated_values(character: Character) -> dict[str, object]:
     sheet = _sheet_data(character)
     return {
@@ -1809,6 +2213,16 @@ def cah_preview(
     ):
         raise HttpError(403, "You may only import into your own character.")
     entry_index = _import_entry_index(context.campaign)
+    preview.collections["spells"] = import_spell_rows(
+        context.campaign,
+        preview.collections["spells"],
+        entry_index,
+    )
+    preview.collections["classes"] = import_class_rows(
+        context.campaign,
+        preview.collections["classes"],
+        entry_index,
+    )
     inventory = [
         {
             **row,
@@ -1840,6 +2254,10 @@ def cah_preview(
         "token": token,
         "fields": preview.fields,
         "collections": preview.collections,
+        "classes": [
+            {key: value for key, value in row.items() if key != "raw"}
+            for row in preview.collections["classes"]
+        ],
         "inventory": inventory,
         "warnings": preview.warnings,
         "calculated_before": before,
@@ -1903,10 +2321,120 @@ def cah_commit(request, context_id: int, payload: CahCommit):
             target.activate()
     with db_transaction.atomic():
         entry_index = _import_entry_index(context.campaign)
-        for name, value in fields.items():
-            setattr(target, name, value)
-        target.full_clean()
-        target.save()
+        health_fields = {
+            name: value
+            for name, value in fields.items()
+            if name in {"current_hp", "temporary_hp"}
+        }
+        projection_fields = {
+            name: value for name, value in fields.items() if name not in health_fields
+        }
+        if projection_fields:
+            target = execute_projection_update(
+                target,
+                projection_fields,
+                created_by=context,
+                event_name="hoard.cah.import",
+            ).character
+        if health_fields:
+            health_effects = [
+                {
+                    "type": "setStat",
+                    "stat": "current_hp"
+                    if name == "current_hp"
+                    else "hoard_temporary_hp",
+                    "new_value": {"type": "constant", "value": value},
+                    "aggregation_type": "set",
+                }
+                for name, value in health_fields.items()
+            ]
+            target = execute_character_event(
+                target,
+                "hoard.cah.health",
+                health_fields,
+                created_by=context,
+                effects={"type": "sequence", "effects": health_effects},
+            ).character
+        if import_collection("classes"):
+            class_rows = draft["collections"]["classes"]
+            resolutions = payload.class_resolutions
+            resolved_class_ids = {
+                str(row["line_id"]): (
+                    resolutions.get(str(row["line_id"]))
+                    or (
+                        row.get("resolution", {}).get("entry_id")
+                        if isinstance(row.get("resolution"), dict)
+                        else None
+                    )
+                )
+                for row in class_rows
+            }
+            missing = [
+                str(row["name"])
+                for row in class_rows
+                if not isinstance(resolved_class_ids[str(row["line_id"])], int)
+            ]
+            if missing:
+                raise HttpError(
+                    422,
+                    "Resolve every imported class before importing this section: "
+                    + ", ".join(missing),
+                )
+            selected_classes: list[CompendiumEntry] = []
+            details = []
+            for row in class_rows:
+                entry_id = resolved_class_ids[str(row["line_id"])]
+                entry = (
+                    _available_entries(context.campaign, CompendiumEntry.Kind.CLASS)
+                    .filter(pk=entry_id, source__identifier=target.native_system_id)
+                    .first()
+                )
+                if entry is None:
+                    raise HttpError(
+                        422,
+                        f"The selected class for {row['name']} is not enabled for "
+                        "this character's rules lineage.",
+                    )
+                archetype_id = str(row.get("archetype_identifier") or "")
+                if archetype_id and archetype_id not in class_archetype_identifiers(
+                    entry
+                ):
+                    raise HttpError(
+                        422,
+                        f"{row.get('archetype_name') or archetype_id} is not an "
+                        f"archetype of {entry.name} in the enabled Compendium.",
+                    )
+                selected_feature_ids = row.get("selected_feature_ids", [])
+                if not isinstance(selected_feature_ids, list) or not all(
+                    isinstance(value, str) for value in selected_feature_ids
+                ):
+                    raise HttpError(422, "Imported class feature selections are invalid.")
+                selected_classes.append(entry)
+                details.append(
+                    native_class_details(
+                        entry,
+                        class_level=int(row["class_level"]),
+                        archetype_id=archetype_id,
+                        selected_feature_ids=selected_feature_ids,
+                        last_selection_level=int(row["class_level"]),
+                    )
+                )
+            target.native_resources.remove(
+                *target.native_resources.filter(kind=CompendiumEntry.Kind.CLASS)
+            )
+            target.native_resources.add(*selected_classes)
+            target = execute_character_event(
+                target,
+                "hoard.cah.classes",
+                {"classes": [entry.pk for entry in selected_classes]},
+                created_by=context,
+                effects={
+                    "type": "setStat",
+                    "stat": "classes",
+                    "new_value": {"type": "constant", "value": details},
+                    "aggregation_type": "set",
+                },
+            ).character
         notes_import_allowed = (
             context.kind == CampaignContext.Kind.PC and target.context_id == context.pk
         )
@@ -1933,14 +2461,39 @@ def cah_commit(request, context_id: int, payload: CahCommit):
                     catalogue_entry_id=entry_id,
                 )
         if import_collection("spells"):
-            target.spells.clear()
-            for row in draft["collections"]["spells"]:
-                entry_id = _match_import_entry(
-                    context.campaign, {**row, "kind": "spell"}, entry_index
+            spell_rows = draft["collections"]["spells"]
+            resolutions = payload.spell_resolutions
+            missing = [
+                str(row["name"])
+                for row in spell_rows
+                if not isinstance(resolutions.get(str(row["line_id"])), int)
+            ]
+            if missing:
+                raise HttpError(
+                    422,
+                    "Resolve every imported spell before importing this section: "
+                    + ", ".join(missing),
                 )
-                if entry_id is None:
-                    raise HttpError(422, f"Resolve {row['name']} in the compendium.")
-                target.spells.add(entry_id)
+            for existing in list(target.spells.filter(kind="spell")):
+                spell_delete(request, context_id, target.pk, existing.pk)
+            for row in spell_rows:
+                entry_id = resolutions[str(row["line_id"])]
+                entry = (
+                    _available_entries(context.campaign, "spell")
+                    .filter(pk=entry_id)
+                    .first()
+                )
+                if entry is None:
+                    raise HttpError(
+                        422,
+                        f"The selected spell for {row['name']} is not enabled.",
+                    )
+                spell_create(
+                    request,
+                    context_id,
+                    target.pk,
+                    SheetRecord(catalogue_entry_id=entry.pk),
+                )
         if import_collection("companions"):
             target.companions.all().delete()
             for row in draft["collections"]["companions"]:

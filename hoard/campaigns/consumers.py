@@ -26,6 +26,10 @@ from hoard.compendium.models import (
     CompendiumRepository,
     CompendiumSource,
 )
+from hoard.compendium.native.runtime import (
+    decorate_event_name,
+    native_resource_identifier,
+)
 from hoard.compendium.tasks import import_campaign_repository
 
 from .models import (
@@ -33,10 +37,7 @@ from .models import (
     CampaignInvitation,
     CampaignLevelEvent,
     Character,
-    CharacterChoice,
-    CharacterClassLevel,
     CharacterHistory,
-    CharacterLevelProgress,
     ConditionEvent,
     HealthTransaction,
     InvitationEvent,
@@ -108,6 +109,7 @@ from .services import (
     set_character_condition,
     set_combatant_condition,
     set_current_combatant,
+    stabilize_character,
     start_encounter,
     update_combatant,
 )
@@ -486,6 +488,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.level_up.complete": self._level_up_complete,
             "characters.level_up.feats": self._level_up_feats,
             "characters.health.post": self._health_post,
+            "characters.death_saves.set": self.character_death_saves_set,
+            "characters.stabilize": self.character_stabilize,
             "characters.notes.create": self._sheet_change,
             "characters.notes.update": self._sheet_change,
             "characters.notes.delete": self._sheet_change,
@@ -493,6 +497,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.features.update": self._sheet_change,
             "characters.features.delete": self._sheet_change,
             "characters.spells.create": self._sheet_change,
+            "characters.spells.edit": self.spell_edit,
             "characters.spells.delete": self._sheet_change,
             "characters.loadout.create": self._sheet_change,
             "characters.loadout.update": self._sheet_change,
@@ -501,8 +506,12 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.effects.update": self._sheet_change,
             "characters.effects.delete": self._sheet_change,
             "characters.spells.cast": self.spell_cast,
+            "characters.resources.attach": self.character_resource_attach,
+            "characters.resources.detach": self.character_resource_detach,
+            "characters.inventory.attunement.set": self.character_item_attunement_set,
             "characters.rest": self.rest,
             "characters.inspiration.set": self.inspiration_set,
+            "characters.native.event": self.character_native_event,
             "characters.companions.create": self._sheet_change,
             "characters.companions.update": self._sheet_change,
             "characters.companions.delete": self._sheet_change,
@@ -528,6 +537,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "compendium.sources.enable": self._source_enable,
             "compendium.sources.disable": self._source_disable,
             "compendium.repositories.list": self._repository_list,
+            "compendium.custom.export": self.compendium_custom_export,
         }
         handler = handlers.get(message_type)
         if handler is not None:
@@ -1335,10 +1345,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     @database_sync_to_async
     def _builder_definition(self, content: dict[str, object]) -> dict[str, object]:
         context = self._context()
+        system_id = self._string(content, "system_id") or context.campaign.native_system_id
+        if system_id not in {"5e", "5e2024"}:
+            raise ValidationError("Choose either the 5e or 5e 2024 character system.")
         entries = CompendiumEntry.objects.filter(
             source__in=context.campaign.compendium_sources.all(),
             kind__in=("race", "class", "background"),
-        ).values(
+        ).filter(Q(kind__in=("race", "background")) | Q(source__identifier=system_id))
+        entries = entries.values(
             "pk",
             "kind",
             "source_identifier",
@@ -1392,6 +1406,19 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             values.sort(key=lambda row: (str(row["name"]).lower(), row["id"]))
         return {
             **grouped,
+            "system_id": system_id,
+            "systems": [
+                {
+                    "id": source.identifier,
+                    "name": source.name,
+                    "version": source.version,
+                }
+                for source in context.campaign.compendium_sources.filter(
+                    identifier__in=("5e", "5e2024"),
+                )
+                .exclude(system_definition={})
+                .order_by("identifier")
+            ],
             "level": context.campaign.level,
             "skills": [
                 "acrobatics",
@@ -1418,6 +1445,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     @database_sync_to_async
     def _builder_entry_get(self, content: dict[str, object]) -> dict[str, object]:
         context = self._context()
+        system_id = self._string(content, "system_id") or context.campaign.native_system_id
         entry = (
             CompendiumEntry.objects.filter(
                 pk=self._integer(content, "entry_id"),
@@ -1430,6 +1458,10 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if entry is None:
             raise ValidationError(
                 "The selected builder entry is not enabled for this campaign."
+            )
+        if entry.kind == "class" and entry.source.identifier != system_id:
+            raise ValidationError(
+                f"A {system_id} character cannot use a class from {entry.source.name}."
             )
         return {
             "id": entry.pk,
@@ -1446,6 +1478,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     @database_sync_to_async
     def _builder_get(self, content: dict[str, object]) -> dict[str, object]:
         from .api import _character_data, _editable_sheet_character
+        from .services.native import native_class_detail_values
 
         context = self._context()
         character = _editable_sheet_character(
@@ -1453,27 +1486,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         )
         return {
             "character": _character_data(character, context),
-            "class_levels": [
+            "classes": [
                 {
-                    "level": row.level,
-                    "class_entry_id": row.class_entry_id,
-                    "class_name": row.class_name,
-                    "subclass_identifier": row.subclass_identifier,
-                    "subclass_name": row.subclass_name,
-                    "is_override": row.is_override,
+                    "class_entry_id": self._native_class_entry_id(row),
+                    "class_level": self._native_class_level(row),
+                    "subclass_identifier": self._native_class_archetype_id(row),
                 }
-                for row in character.class_levels.all()
-            ],
-            "choices": [
-                {
-                    "level": row.level,
-                    "origin_entry_id": row.origin_entry_id,
-                    "identifier": row.identifier,
-                    "kind": row.kind,
-                    "values": row.values,
-                    "is_override": row.is_override,
-                }
-                for row in character.build_choices.all()
+                for row in native_class_detail_values(character.native_state)
             ],
         }
 
@@ -1490,6 +1509,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if not isinstance(fields, dict):
             raise ValueError("fields must be an object.")
         builder_fields = {
+            "native_system_id",
             "name",
             "race",
             "race_entry_id",
@@ -1522,6 +1542,27 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             raise ValueError(
                 f"Unsupported builder fields: {', '.join(sorted(unknown))}"
             )
+        selected_system_id = str(
+            fields.get("native_system_id") or character.native_system_id
+        )
+        if selected_system_id not in {"5e", "5e2024"}:
+            raise ValidationError("Choose either the 5e or 5e 2024 character system.")
+        if (
+            selected_system_id != character.native_system_id
+            and self._native_class_level_total(character) > 0
+        ):
+            raise ValidationError(
+                "The character system cannot change after choosing a class."
+            )
+        selected_source = context.campaign.compendium_sources.filter(
+            identifier=selected_system_id,
+        ).exclude(system_definition={}).order_by("repository_id").first()
+        if selected_source is None:
+            raise ValidationError(
+                f"The {selected_system_id} character system is not enabled."
+            )
+        fields["native_system_id"] = selected_system_id
+        character.native_system_source = selected_source
         skills = fields.get("skill_proficiencies")
         if skills is not None and (
             not isinstance(skills, dict)
@@ -1541,57 +1582,54 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             if field_name in fields and fields[field_name] is not None:
                 entry = self._enabled_builder_entry(context, fields[field_name], kind)
                 fields[field_name] = entry.pk
-        for key, value in fields.items():
-            setattr(character, key, value)
-        class_levels = content.get("class_levels")
-        choices = content.get("choices")
+        structural_builder_fields = {
+            "native_system_id",
+            "race_entry_id",
+            "background_entry_id",
+            "subrace_identifier",
+        }
+        native_fields = {
+            key: value
+            for key, value in fields.items()
+            if key not in structural_builder_fields
+        }
+        for key in structural_builder_fields & fields.keys():
+            setattr(character, key, fields[key])
+        classes = content.get("classes")
         with transaction.atomic():
             character.full_clean()
             character.save()
-            if isinstance(class_levels, list):
-                character.class_levels.all().delete()
-                for row in class_levels:
-                    if not isinstance(row, dict):
-                        raise ValueError("Each class level must be an object.")
-                    level = int(row.get("level", 0))
-                    if not 1 <= level <= context.campaign.level:
-                        raise ValueError("Class levels must match the campaign level.")
-                    entry_id = row.get("class_entry_id")
-                    entry = (
-                        self._enabled_builder_entry(context, entry_id, "class")
-                        if entry_id
-                        else None
-                    )
-                    CharacterClassLevel.objects.create(
-                        character=character,
-                        level=level,
-                        class_entry=entry,
-                        class_name=str(
-                            row.get("class_name") or (entry.name if entry else "")
-                        ),
-                        subclass_identifier=str(row.get("subclass_identifier") or ""),
-                        subclass_name=str(row.get("subclass_name") or ""),
-                        is_override=bool(row.get("is_override")),
-                    )
-                character.character_class = self._class_summary(character)
-                character.save(update_fields=("character_class",))
-            if isinstance(choices, list):
-                character.build_choices.all().delete()
-                for row in choices:
-                    if not isinstance(row, dict):
-                        raise ValueError("Each builder choice must be an object.")
-                    level = int(row.get("level", 1))
-                    if not 1 <= level <= context.campaign.level:
-                        raise ValueError("Choice levels must match the campaign level.")
-                    CharacterChoice.objects.create(
-                        character=character,
-                        level=level,
-                        origin_entry_id=row.get("origin_entry_id"),
-                        identifier=str(row.get("identifier") or ""),
-                        kind=str(row.get("kind") or "custom"),
-                        values=row.get("values", []),
-                        is_override=bool(row.get("is_override")),
-                    )
+            if classes is not None:
+                details, entries = self._native_builder_classes(
+                    context, classes, selected_system_id
+                )
+                character.native_resources.remove(
+                    *character.native_resources.filter(kind=CompendiumEntry.Kind.CLASS)
+                )
+                character.native_resources.add(*entries)
+                from .services.native import execute_character_event
+
+                character = execute_character_event(
+                    character,
+                    "hoard.character.builder.classes",
+                    {"classes": [entry.pk for entry in entries]},
+                    created_by=context,
+                    effects={
+                        "type": "setStat",
+                        "stat": "classes",
+                        "new_value": {"type": "constant", "value": details},
+                        "aggregation_type": "set",
+                    },
+                ).character
+            if native_fields:
+                from .services.native import execute_projection_update
+
+                character = execute_projection_update(
+                    character,
+                    native_fields,
+                    created_by=context,
+                    event_name="hoard.character.builder.save",
+                ).character
             record_character_history(
                 character,
                 reason=CharacterHistory.Reason.OVERRIDE
@@ -1614,29 +1652,19 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         )
         if not character.name.strip() or not character.race.strip():
             raise ValidationError("Name and race are required.")
-        levels = list(character.class_levels.order_by("level"))
-        if [row.level for row in levels] != list(range(1, context.campaign.level + 1)):
-            raise ValidationError("Choose one class for every campaign level.")
-        if any(not row.class_name.strip() for row in levels):
-            raise ValidationError("Every campaign level requires a class choice.")
+        if self._native_class_level_total(character) != context.campaign.level:
+            raise ValidationError(
+                "Choose class levels whose total matches the campaign level."
+            )
         before = character_snapshot(character)
         was_initial_build = not character.is_build_complete
         was_imported = character.history.filter(
             reason=CharacterHistory.Reason.IMPORT
         ).exists()
-        is_level_up = character.level_progress.filter(
-            level=context.campaign.level, is_complete=False
-        ).exists()
+        is_level_up = character.level < context.campaign.level
         with transaction.atomic():
             character.is_build_complete = True
-            character.character_class = self._class_summary(character)
-            character.save(update_fields=("is_build_complete", "character_class"))
-            for level in range(1, context.campaign.level + 1):
-                CharacterLevelProgress.objects.update_or_create(
-                    character=character,
-                    level=level,
-                    defaults={"is_complete": True, "completed_at": timezone.now()},
-                )
+            character.save(update_fields=("is_build_complete",))
             character = character.activate()
             if (
                 was_initial_build
@@ -1678,12 +1706,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             raise ValidationError(
                 "Level-up is only available for active player characters."
             )
-        progress = character.level_progress.filter(
-            level=context.campaign.level, is_complete=False
-        ).first()
-        if progress is None:
+        if character.level >= context.campaign.level:
             raise ValidationError("This character has no pending level-up.")
-        return character, progress
+        return character, None
 
     @staticmethod
     def _hit_die(entry: CompendiumEntry) -> int:
@@ -1714,17 +1739,17 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             CompendiumEntry.objects.filter(
                 kind=CompendiumEntry.Kind.CLASS,
                 source__in=context.campaign.compendium_sources.all(),
+                source__identifier=character.native_system_id,
             )
             .select_related("source", "source__repository")
             .order_by("name", "pk")
         )
         entries_by_id = {entry.pk: entry for entry in classes}
-        entries_by_name = {entry.name.casefold(): entry for entry in classes}
         preferred_class_ids: list[int] = []
-        for row in character.class_levels.order_by("-level"):
-            entry = entries_by_id.get(row.class_entry_id) or entries_by_name.get(
-                row.class_name.casefold()
-            )
+        from .services.native import native_class_detail_values
+
+        for row in native_class_detail_values(character.native_state):
+            entry = entries_by_id.get(self._native_class_entry_id(row))
             if entry is not None and entry.pk not in preferred_class_ids:
                 preferred_class_ids.append(entry.pk)
         return {
@@ -1769,18 +1794,24 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     def _level_up_data(
         self, context, character, entry: CompendiumEntry
     ) -> dict[str, object]:
-        existing = character.class_levels.filter(class_entry=entry).count()
-        class_level = existing + 1
+        from .services.native import native_class_detail_values
+
+        detail = next(
+            (
+                value
+                for value in native_class_detail_values(character.native_state)
+                if self._native_class_entry_id(value) == entry.pk
+            ),
+            None,
+        )
+        class_level = self._native_class_level(detail) + 1 if detail else 1
         rules = _level_up_rules(entry, class_level)
         entry_data = _builder_entry_data(entry)
         subclass_level = entry_data.get("subclass_selection_level")
         needs_subclass = (
             isinstance(subclass_level, int)
             and subclass_level == class_level
-            and not character.class_levels.filter(
-                class_entry=entry,
-                subclass_identifier__gt="",
-            ).exists()
+            and not self._native_class_archetype_id(detail or {})
         )
         return {
             "class": {
@@ -1806,7 +1837,10 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             context, self._integer(content, "character_id")
         )
         entry = self._enabled_builder_entry(
-            context, self._integer(content, "class_entry_id"), "class"
+            context,
+            self._integer(content, "class_entry_id"),
+            "class",
+            native_system_id=character.native_system_id,
         )
         return self._level_up_data(context, character, entry)
 
@@ -1819,7 +1853,10 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             context, self._integer(content, "character_id")
         )
         entry = self._enabled_builder_entry(
-            context, self._integer(content, "class_entry_id"), "class"
+            context,
+            self._integer(content, "class_entry_id"),
+            "class",
+            native_system_id=character.native_system_id,
         )
         before = _character_data(character)["sheet"]
         hp_increase = self._nonnegative_integer(content, "hp_increase")
@@ -1865,13 +1902,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import _character_data
 
         context = self._context()
-        character, progress = self._pending_level_up(
+        character, _ = self._pending_level_up(
             context, self._integer(content, "character_id")
         )
-        if character.class_levels.filter(level=context.campaign.level).exists():
-            raise ValidationError("This campaign level already has a class allocation.")
         entry = self._enabled_builder_entry(
-            context, self._integer(content, "class_entry_id"), "class"
+            context,
+            self._integer(content, "class_entry_id"),
+            "class",
+            native_system_id=character.native_system_id,
         )
         method = self._string(content, "hp_method", required=True)
         if method not in {"roll", "average"}:
@@ -1967,72 +2005,81 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 "This class level does not grant an ability score improvement."
             )
         with transaction.atomic():
-            CharacterClassLevel.objects.create(
-                character=character,
-                level=context.campaign.level,
-                class_entry=entry,
-                class_name=entry.name,
-                subclass_identifier=subclass_identifier,
-                subclass_name=subclass_name,
-                is_override=bool(content.get("class_override")),
+            from .services.native import (
+                execute_character_event,
+                native_class_detail_values,
+                native_class_details,
             )
-            character.base_hp += hp_increase
-            character.ability_score_adjustments = {
+
+            details = native_class_detail_values(character.native_state)
+            existing_detail = next(
+                (
+                    row
+                    for row in details
+                    if self._native_class_entry_id(row) == entry.pk
+                ),
+                None,
+            )
+            if existing_detail:
+                existing_detail["stats"]["class_level"] = {
+                    "value": self._native_class_level(existing_detail) + 1
+                }
+                if subclass_identifier:
+                    existing_detail["stats"]["archetype_id"] = {
+                        "value": subclass_identifier
+                    }
+            else:
+                details.append(
+                    native_class_details(
+                        entry,
+                        class_level=1,
+                        archetype_id=subclass_identifier,
+                        last_selection_level=1,
+                    )
+                )
+                character.native_resources.add(entry)
+            updated_adjustments = {
                 **character.ability_score_adjustments,
                 **{
                     key: int(character.ability_score_adjustments.get(key, 0)) + value
                     for key, value in adjustments.items()
                 },
             }
-            character.character_class = self._class_summary(character)
-            character.save(
-                update_fields=(
-                    "base_hp",
-                    "ability_score_adjustments",
-                    "character_class",
-                )
-            )
-            for row in choices:
-                if not isinstance(row, dict):
-                    raise ValidationError("Each level-up choice must be an object.")
-                identifier = str(row.get("identifier") or "").strip()
-                if not identifier:
-                    raise ValidationError("Each level-up choice needs an identifier.")
-                CharacterChoice.objects.update_or_create(
-                    character=character,
-                    level=context.campaign.level,
-                    identifier=identifier,
-                    defaults={
-                        "origin_entry": entry,
-                        "kind": str(row.get("kind") or "class_choice"),
-                        "values": row.get("values", []),
-                        "is_override": bool(row.get("is_override")),
-                    },
-                )
-            if rule_data["ability_score_improvement"] and asi_choice == "feat":
-                CharacterChoice.objects.update_or_create(
-                    character=character,
-                    level=context.campaign.level,
-                    identifier="asi-feat",
-                    defaults={
-                        "origin_entry": feat_entry,
-                        "kind": "feat",
-                        "values": [feat_entry.name if feat_entry else feat_override],
-                        "is_override": feat_entry is None,
-                    },
-                )
-            progress.hp_method = method
-            progress.hp_base_increase = hp_increase
-            progress.is_complete = True
-            progress.completed_at = timezone.now()
-            progress.save(
-                update_fields=(
-                    "hp_method",
-                    "hp_base_increase",
-                    "is_complete",
-                    "completed_at",
-                )
-            )
+            character = execute_character_event(
+                character,
+                "hoard.character.level_up.classes",
+                {"class": entry.pk},
+                created_by=context,
+                effects={
+                    "type": "sequence",
+                    "effects": [
+                        {
+                            "type": "setStat",
+                            "stat": "classes",
+                            "new_value": {"type": "constant", "value": details},
+                            "aggregation_type": "set",
+                        },
+                        {
+                            "type": "setStat",
+                            "stat": "base_hp",
+                            "new_value": {
+                                "type": "constant",
+                                "value": character.base_hp + hp_increase,
+                            },
+                            "aggregation_type": "set",
+                        },
+                        {
+                            "type": "setStat",
+                            "stat": "hoard_ability_score_adjustments",
+                            "new_value": {
+                                "type": "constant",
+                                "value": updated_adjustments,
+                            },
+                            "aggregation_type": "set",
+                        },
+                    ],
+                },
+            ).character
             post_health_transaction(
                 character,
                 reason=HealthTransaction.Reason.HEALING,
@@ -2201,6 +2248,294 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         return result
 
     @database_sync_to_async
+    def spell_edit(self, content: dict[str, object]) -> dict[str, object]:
+        """Update shared custom content or clone and switch this character."""
+        from types import SimpleNamespace
+
+        from django.db import transaction
+
+        from . import api
+
+        context = self._context()
+        character = api._editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        original = character.spells.select_related("source__repository").filter(
+            pk=self._integer(content, "spell_id"), kind=CompendiumEntry.Kind.SPELL
+        ).first()
+        if original is None:
+            raise ValidationError("That spell is not attached to this character.")
+        card = api.SpellCard(**self.spell_card_payload(content))
+        if not card.name.strip():
+            raise ValidationError("A spell name is required.")
+        mode = self._string(content, "mode", required=True)
+        is_custom = original.source.repository.campaign_id == context.campaign_id
+        if mode == "shared":
+            if not is_custom:
+                raise ValidationError(
+                    "Published spells are immutable; clone this spell to edit it."
+                )
+            original.name = card.name.strip()
+            original.description = card.description.strip()
+            original.data = api.spell_card_resource_data(
+                card, original.source_identifier
+            )
+            original.full_clean()
+            original.save()
+            result = original
+        elif mode == "clone":
+            with transaction.atomic():
+                result = api.custom_spell_entry(context, card)
+                request = SimpleNamespace(auth=context.user)
+                api.spell_delete(request, context.pk, character.pk, original.pk)
+                api.spell_create(
+                    request,
+                    context.pk,
+                    character.pk,
+                    api.SheetRecord(catalogue_entry_id=result.pk),
+                )
+        else:
+            raise ValidationError("Spell edits must update shared content or clone it.")
+        CharacterHistory.objects.create(
+            campaign=context.campaign,
+            character=character,
+            created_by=context,
+            reason=CharacterHistory.Reason.EDIT,
+            description=f"Edited spell {original.name}",
+            changes={
+                "spell": {
+                    "from": original.pk,
+                    "to": result.pk,
+                    "mode": mode,
+                }
+            },
+        )
+        notify_campaign_changed(context.campaign_id)
+        return {"id": result.pk, **api.spell_entry_data(result)}
+
+    @database_sync_to_async
+    def character_resource_attach(self, content: dict[str, object]) -> dict[str, object]:
+        """Attach any enabled neutral native resource to a character."""
+        from django.db import transaction
+
+        from .api import _editable_sheet_character, _enabled_entry
+        from .services.native import execute_character_event
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        entry = _enabled_entry(
+            context.campaign, self._integer(content, "entry_id")
+        )
+        if entry.kind in {CompendiumEntry.Kind.CLASS, "subclass"}:
+            if entry.source.identifier != character.native_system_id:
+                raise ValidationError(
+                    "Classes and subclasses must match the character's rules lineage."
+                )
+            raise ValidationError("Add classes and subclasses through progression.")
+        identifier = native_resource_identifier(entry.data) or entry.source_identifier
+        with transaction.atomic():
+            character.native_resources.add(entry)
+            execute_character_event(
+                character,
+                decorate_event_name("rpg_onCreate", identifier),
+                {"resource_id": identifier, "kind": entry.kind},
+                created_by=context,
+            )
+        notify_campaign_changed(context.campaign_id)
+        return {"id": entry.pk, "name": entry.name, "kind": entry.kind}
+
+    @database_sync_to_async
+    def character_resource_detach(self, content: dict[str, object]) -> None:
+        """Detach a selected native resource without deleting Compendium content."""
+        from django.db import transaction
+
+        from .api import _editable_sheet_character
+        from .services.native import execute_character_event
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        entry = character.native_resources.filter(
+            pk=self._integer(content, "entry_id")
+        ).first()
+        if entry is None:
+            raise ValidationError("That resource is not attached to this character.")
+        identifier = native_resource_identifier(entry.data) or entry.source_identifier
+        with transaction.atomic():
+            execute_character_event(
+                character,
+                decorate_event_name("rpg_onRemove", identifier),
+                {"resource_id": identifier, "kind": entry.kind},
+                created_by=context,
+                removed_resource_identifier=identifier,
+            )
+            character.native_resources.remove(entry)
+        notify_campaign_changed(context.campaign_id)
+
+    @database_sync_to_async
+    def character_item_attunement_set(
+        self, content: dict[str, object]
+    ) -> dict[str, object]:
+        """Persist attunement on a held item's native resource instance."""
+        from .api import _editable_sheet_character
+        from .services.native import execute_character_event
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        entry_id = self._integer(content, "entry_id")
+        is_attuned = content.get("is_attuned")
+        if not isinstance(is_attuned, bool):
+            raise ValidationError("Attunement state must be true or false.")
+
+        inventory = character.inventory
+        entry = next((item for item in inventory if item.pk == entry_id), None)
+        if entry is None:
+            raise ValidationError("Only an item held by this character can be attuned.")
+        if not entry.requires_attunement:
+            raise ValidationError("This item does not require attunement.")
+
+        resource_state = character.native_state.get("$hoard_resource_state", {})
+        if not isinstance(resource_state, dict):
+            resource_state = {}
+        attuned_entry_ids = {
+            int(key)
+            for key, values in resource_state.items()
+            if isinstance(key, str)
+            and key.isdigit()
+            and isinstance(values, dict)
+            and values.get("is_attuned") is True
+        }
+        if is_attuned and entry_id not in attuned_entry_ids:
+            attunement_limit = (
+                3 if character.native_system_id in {"5e", "5e2024"} else None
+            )
+            if attunement_limit is not None and len(attuned_entry_ids) >= attunement_limit:
+                raise ValidationError(
+                    f"This rules system allows at most {attunement_limit} attuned items."
+                )
+
+        identifier = native_resource_identifier(entry.data) or entry.source_identifier
+        if not identifier:
+            raise ValidationError("This item has no native resource identifier.")
+        execute_character_event(
+            character,
+            "hoard.attunement.set",
+            {"entry_id": entry_id, "is_attuned": is_attuned},
+            created_by=context,
+            resource_updates={identifier: {"is_attuned": is_attuned}},
+        )
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+        return {"entry_id": entry_id, "is_attuned": is_attuned}
+
+    @database_sync_to_async
+    def character_death_saves_set(
+        self, content: dict[str, object]
+    ) -> dict[str, object]:
+        """Set one cumulative death-save counter and apply its terminal state."""
+        from django.db import transaction
+
+        from .api import _editable_sheet_character
+        from .services.native import execute_character_event
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        kind = self._string(content, "kind", required=True)
+        count = self._integer(content, "count")
+        if kind not in {"successes", "failures"}:
+            raise ValidationError("Death-save kind must be successes or failures.")
+        if not 0 <= count <= 3:
+            raise ValidationError("Death-save count must be from 0 to 3.")
+        if character.current_hp != 0:
+            raise ValidationError("Death saves can only be changed at 0 HP.")
+        if character.is_dead:
+            raise ValidationError("A dead character must be revived before acting.")
+
+        native_kind = "success" if kind == "successes" else "failure"
+        effects = [
+            {
+                "type": "setStat",
+                "stat": f"death_saving_throws_{native_kind}_{index}",
+                "new_value": {"type": "constant", "value": index <= count},
+                "aggregation_type": "set",
+            }
+            for index in range(1, 4)
+        ]
+        if kind == "failures" and count == 3:
+            effects.extend(
+                [
+                    {
+                        "type": "setStat",
+                        "stat": "hoard_is_dead",
+                        "new_value": {"type": "constant", "value": True},
+                        "aggregation_type": "set",
+                    },
+                    {
+                        "type": "setStat",
+                        "stat": "hoard_died_campaign_era",
+                        "new_value": {
+                            "type": "constant",
+                            "value": character.campaign.calendar_era_abbreviation,
+                        },
+                        "aggregation_type": "set",
+                    },
+                    {
+                        "type": "setStat",
+                        "stat": "hoard_died_campaign_year",
+                        "new_value": {
+                            "type": "constant",
+                            "value": character.campaign.calendar_year,
+                        },
+                        "aggregation_type": "set",
+                    },
+                    {
+                        "type": "setStat",
+                        "stat": "hoard_died_campaign_day",
+                        "new_value": {
+                            "type": "constant",
+                            "value": character.campaign.calendar_day,
+                        },
+                        "aggregation_type": "set",
+                    },
+                ]
+            )
+
+        with transaction.atomic():
+            execute_character_event(
+                character,
+                "hoard.death_saves.set",
+                {"kind": kind, "count": count},
+                created_by=context,
+                effects={"type": "sequence", "effects": effects},
+            )
+            if kind == "successes" and count == 3:
+                stabilize_character(
+                    character,
+                    created_by=context,
+                )
+
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+        return {"kind": kind, "count": count}
+
+    @database_sync_to_async
+    def character_stabilize(self, content: dict[str, object]) -> None:
+        """Stabilize an editable character and apply the prone condition."""
+        from .api import _editable_sheet_character
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context, self._integer(content, "character_id")
+        )
+        stabilize_character(character, created_by=context)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
     def rest(self, content: dict[str, object]) -> dict[str, object]:
         from . import api
 
@@ -2232,6 +2567,9 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if context.kind != CampaignContext.Kind.GM and available:
             raise PermissionError("Only the game master may award inspiration.")
         result = api.set_inspiration(character, available, created_by=context)
+        character.refresh_from_db(
+            fields=("has_inspiration", "inspiration_expires_at")
+        )
         notify_campaign_event(
             context.campaign_id,
             CharacterInspirationChangedEvent(
@@ -2242,6 +2580,72 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             ),
         )
         return result
+
+    @database_sync_to_async
+    def character_native_event(self, content: dict[str, object]) -> dict[str, object]:
+        """Execute a system-defined event from a native rendered control."""
+        from .api import _editable_sheet_character
+        from .services.native import (
+            character_native_source,
+            execute_character_event,
+            hoard_native_definition,
+        )
+
+        context = self._context()
+        character = _editable_sheet_character(
+            context,
+            self._integer(content, "character_id"),
+        )
+        event_name = self._string(content, "event_name", required=True, maximum=300)
+        payload = content.get("payload", {})
+        view_values = content.get("view_values", {})
+        stat_updates = content.get("stat_updates", {})
+        if not all(
+            isinstance(value, dict)
+            for value in (payload, view_values, stat_updates)
+        ):
+            raise ValidationError(
+                "Native payload, view values, and stat updates must be objects."
+            )
+        effects = [
+            {
+                "type": "setStat",
+                "stat": stat,
+                "new_value": {"type": "constant", "value": value},
+                "aggregation_type": "set",
+            }
+            for stat, value in stat_updates.items()
+            if isinstance(stat, str) and not stat.startswith("$")
+        ]
+        if len(effects) != len(stat_updates):
+            raise ValidationError("Native stat updates require plain stat identifiers.")
+        definition = hoard_native_definition(character_native_source(character))
+        editable_stats = {
+            stat.get("id")
+            for stat in definition.get("character_stats", [])
+            if isinstance(stat, dict) and stat.get("type") == "base"
+        }
+        if set(stat_updates) - editable_stats:
+            raise ValidationError("A native control targeted a non-editable stat.")
+        result = execute_character_event(
+            character,
+            event_name,
+            payload,
+            created_by=context,
+            view_values=view_values,
+            effects={"type": "sequence", "effects": effects} if effects else None,
+        )
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+        return {
+            "event_id": result.event.pk,
+            "character_id": result.character.pk,
+            "fired_events": result.execution.fired_events,
+            "changes": result.execution.changes,
+            "messages": result.execution.messages,
+            "interface_actions": result.execution.interface_actions,
+            "delayed_effects": result.execution.delayed_effects,
+            "unsupported": result.execution.unsupported,
+        }
 
     @database_sync_to_async
     def _transaction_list(self, content: dict[str, object]) -> dict[str, object]:
@@ -2422,6 +2826,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             _calculated_values,
             _import_entry_index,
             _match_import_entry,
+            import_class_rows,
+            import_spell_rows,
         )
         from .services.cah import parse_cah
 
@@ -2440,6 +2846,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             pk=metadata["character_id"], campaign=context.campaign
         )
         entry_index = _import_entry_index(context.campaign)
+        preview.collections["spells"] = import_spell_rows(
+            context.campaign,
+            preview.collections["spells"],
+            entry_index,
+        )
+        preview.collections["classes"] = import_class_rows(
+            context.campaign,
+            preview.collections["classes"],
+            entry_index,
+        )
         inventory = [
             {
                 **row,
@@ -2494,6 +2910,24 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             collection_managers["notes"] = target.notes
         collection_changes = [
             {
+                "collection": "classes",
+                "before_count": len(
+                    [
+                        resource
+                        for resource in target.native_state.get("classes", [])
+                        if isinstance(resource, dict)
+                        and resource.get("resource_id") == "class_details"
+                    ]
+                ),
+                "after_count": len(preview.collections["classes"]),
+                "names": [
+                    str(row.get("name") or "Untitled")
+                    for row in preview.collections["classes"][:10]
+                ],
+                "remaining_count": max(0, len(preview.collections["classes"]) - 10),
+            }
+        ] + [
+            {
                 "collection": name,
                 "before_count": manager.count(),
                 "after_count": len(preview.collections[name]),
@@ -2511,6 +2945,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "field_changes": field_changes,
             "collection_changes": collection_changes,
             "inventory": public_inventory,
+            "classes": [
+                {key: value for key, value in row.items() if key != "raw"}
+                for row in preview.collections["classes"]
+            ],
+            "spells": [
+                {key: value for key, value in row.items() if key != "raw"}
+                for row in preview.collections["spells"]
+            ],
             "warnings": preview.warnings,
             "calculated_before": _calculated_values(target),
             "calculated_after": _calculated_values(candidate),
@@ -2571,6 +3013,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             character_id=character_id,
             inventory=content.get("inventory", []),
             collections=collection_choices,
+            class_resolutions=content.get("class_resolutions", {}),
+            spell_resolutions=content.get("spell_resolutions", {}),
         )
         cah_commit(SimpleNamespace(auth=context.user), context.pk, payload)
         character.refresh_from_db()
@@ -2615,8 +3059,19 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         context = self._context()
         offset = self._nonnegative_integer(content, "offset")
         limit = min(self._positive_integer(content, "limit", default=100), 100)
+        query = self._string(content, "query", maximum=200)
+        entries = _items(context.campaign)
+
+        if query:
+            entries = entries.filter(
+                Q(name__icontains=query)
+                | Q(description__icontains=query)
+                | Q(source_book__icontains=query)
+                | Q(source__name__icontains=query)
+            )
+
         rows = list(
-            _items(context.campaign).order_by("name")[offset : offset + limit + 1]
+            entries.order_by("name", "pk")[offset : offset + limit + 1]
         )
         more = len(rows) > limit
         return {
@@ -2673,7 +3128,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     @database_sync_to_async
     def spell_compendium_update(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import SpellCard, spell_entry_data
+        from .api import SpellCard, spell_card_resource_data, spell_entry_data
 
         context = self._context()
         entry = CompendiumEntry.objects.filter(
@@ -2688,7 +3143,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             raise ValidationError("A spell name is required.")
         entry.name = card.name.strip()
         entry.description = card.description.strip()
-        entry.data = {"spell": card.model_dump(exclude={"name", "description"})}
+        entry.data = spell_card_resource_data(card, entry.source_identifier)
         entry.full_clean()
         entry.save()
         notify_campaign_changed(context.campaign_id)
@@ -2700,6 +3155,38 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         if not isinstance(card, dict):
             raise ValidationError("Spell data must be an object.")
         return card
+
+    @database_sync_to_async
+    def compendium_custom_export(self, content: dict[str, object]) -> dict[str, object]:
+        """Return campaign custom resources as a published native resource pack."""
+        import base64
+        import hashlib
+
+        from hoard.compendium.native.export import export_campaign_repository
+
+        from .api import _gm
+        from .services.native import hoard_native_definition
+
+        context = self._context()
+        _gm(context)
+        source = context.campaign.native_system_source
+        if source is None:
+            source = context.campaign.compendium_sources.filter(
+                identifier=context.campaign.native_system_id
+            ).exclude(system_definition={}).first()
+        if source is None:
+            raise ValidationError("The campaign has no enabled native system to export.")
+        package = export_campaign_repository(
+            context.campaign,
+            hoard_native_definition(source),
+        )
+        return {
+            "filename": package.filename,
+            "content_base64": base64.b64encode(package.content).decode("ascii"),
+            "sha256": hashlib.sha256(package.content).hexdigest(),
+            "resource_count": package.resource_count,
+            "system_id": context.campaign.native_system_id,
+        }
 
     @database_sync_to_async
     def _item_update(self, content: dict[str, object]) -> dict[str, object]:
@@ -2731,12 +3218,18 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _compendium_search(self, content: dict[str, object]) -> list[dict[str, object]]:
-        from .api import _available_entries
+        from .api import _available_entries, spell_entry_data
 
         context = self._context()
-        kind = self._string(content, "kind", required=True)
+        kind = self._string(content, "kind") or "all"
         query = self._string(content, "query")
-        entries = _available_entries(context.campaign, kind)
+        entries = (
+            CompendiumEntry.objects.filter(
+                source__in=context.campaign.compendium_sources.all()
+            ).select_related("source__repository")
+            if kind == "all"
+            else _available_entries(context.campaign, kind)
+        )
         if query:
             entries = entries.filter(name__icontains=query)
         return [
@@ -2746,8 +3239,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 "description": entry.description,
                 "kind": entry.kind,
                 "source": entry.source.name,
+                "source_identifier": entry.source_identifier,
+                "is_custom": entry.source.repository.campaign_id is not None,
+                "details": spell_entry_data(entry)
+                if entry.kind == CompendiumEntry.Kind.SPELL
+                else {},
             }
-            for entry in entries.order_by("name")[:100]
+            for entry in entries.order_by("kind", "name")[:250]
         ]
 
     @database_sync_to_async
@@ -2794,12 +3292,27 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         ).first()
         if source is None:
             raise HttpError(404, "Compendium source not found.")
+        if (
+            context.campaign.native_system_source_id == source.pk
+            or Character.objects.filter(
+                campaign=context.campaign,
+                native_system_source=source,
+                is_archived=False,
+            ).exists()
+        ):
+            raise ValidationError(
+                "This source supplies the campaign or an active character's rules. "
+                "Choose a replacement system version before disabling it."
+            )
         context.campaign.compendium_sources.remove(source)
         notify_campaign_changed(context.campaign_id)
 
     @database_sync_to_async
     def _repository_list(self, content: dict[str, object]) -> list[dict[str, object]]:
-        self._context()
+        from .api import _gm
+
+        context = self._context()
+        _gm(context)
         installed = set(
             CompendiumRepository.objects.filter(sources__isnull=False).values_list(
                 "identifier", flat=True
@@ -2858,16 +3371,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     def _incomplete_level_ups(campaign) -> list[dict[str, object]]:
         return [
             {
-                "character_id": row.character_id,
-                "character_name": row.character.name,
-                "level": row.level,
+                "character_id": character.pk,
+                "character_name": character.name,
+                "level": character.level,
             }
-            for row in CharacterLevelProgress.objects.filter(
-                character__campaign=campaign,
-                character__is_active=True,
-                character__is_archived=False,
-                is_complete=False,
-            ).select_related("character")
+            for character in campaign.characters.filter(
+                is_active=True,
+                is_archived=False,
+                context__isnull=False,
+            )
+            if character.level < campaign.level
         ]
 
     @staticmethod
@@ -2896,7 +3409,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         return f"{origin}/invites/{token}" if origin else f"/invites/{token}"
 
     @staticmethod
-    def _enabled_builder_entry(context, entry_id, kind: str):
+    def _enabled_builder_entry(
+        context,
+        entry_id,
+        kind: str,
+        *,
+        native_system_id: str | None = None,
+    ):
         entry = CompendiumEntry.objects.filter(
             pk=entry_id,
             kind=kind,
@@ -2904,14 +3423,80 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         ).first()
         if entry is None:
             raise ValidationError(f"Selected {kind} is not enabled for this campaign.")
+        if (
+            kind == "class"
+            and native_system_id is not None
+            and entry.source.identifier != native_system_id
+        ):
+            raise ValidationError(
+                f"A {native_system_id} character cannot use a class from "
+                f"{entry.source.name}."
+            )
         return entry
 
     @staticmethod
-    def _class_summary(character: Character) -> str:
-        counts: dict[str, int] = {}
-        for row in character.class_levels.all():
-            counts[row.class_name] = counts.get(row.class_name, 0) + 1
-        return " / ".join(f"{name} {level}" for name, level in counts.items())
+    def _native_class_entry_id(detail: dict[str, object]) -> int | None:
+        stats = detail.get("stats")
+        class_value = stats.get("class") if isinstance(stats, dict) else None
+        resource = class_value.get("value") if isinstance(class_value, dict) else None
+        entry_id = resource.get("$hoard_entry_id") if isinstance(resource, dict) else None
+        return entry_id if isinstance(entry_id, int) else None
+
+    @staticmethod
+    def _native_class_level(detail: dict[str, object]) -> int:
+        stats = detail.get("stats")
+        class_level = stats.get("class_level") if isinstance(stats, dict) else None
+        value = class_level.get("value") if isinstance(class_level, dict) else 0
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    @staticmethod
+    def _native_class_archetype_id(detail: dict[str, object]) -> str:
+        stats = detail.get("stats")
+        archetype = stats.get("archetype_id") if isinstance(stats, dict) else None
+        value = archetype.get("value") if isinstance(archetype, dict) else ""
+        return value if isinstance(value, str) else ""
+
+    @classmethod
+    def _native_class_level_total(cls, character: Character) -> int:
+        from .services.native import native_class_level
+
+        return native_class_level(character.native_state)
+
+    def _native_builder_classes(self, context, value, system_id: str):
+        """Validate builder class selections and make native class-details values."""
+        from .services.native import native_class_details
+
+        if not isinstance(value, list):
+            raise ValueError("Classes must be a list.")
+        entries: list[CompendiumEntry] = []
+        details: list[dict[str, object]] = []
+        seen: set[int] = set()
+        for row in value:
+            if not isinstance(row, dict):
+                raise ValueError("Each class must be an object.")
+            entry_id = row.get("class_entry_id")
+            if not isinstance(entry_id, int) or isinstance(entry_id, bool):
+                raise ValidationError("Choose a Compendium class for every class row.")
+            if entry_id in seen:
+                raise ValidationError("Each class may appear only once.")
+            level = row.get("class_level")
+            if not isinstance(level, int) or isinstance(level, bool) or level < 1:
+                raise ValidationError("Each selected class needs a level of at least one.")
+            entry = self._enabled_builder_entry(
+                context, entry_id, "class", native_system_id=system_id
+            )
+            seen.add(entry_id)
+            entries.append(entry)
+            details.append(
+                native_class_details(
+                    entry,
+                    class_level=level,
+                    archetype_id=str(row.get("subclass_identifier") or ""),
+                    selected_feature_ids=row.get("selected_feature_ids", []),
+                    last_selection_level=level,
+                )
+            )
+        return details, entries
 
     @staticmethod
     def _event_metadata(event) -> dict[str, object]:

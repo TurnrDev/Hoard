@@ -45,6 +45,14 @@ XP_LEVEL_THRESHOLDS = (
 
 class Campaign(models.Model):
     name = models.CharField("Campaign Name", max_length=200)
+    native_system_id = models.CharField(max_length=200, default="5e")
+    native_system_source = models.ForeignKey(
+        "compendium.CompendiumSource",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
     calendar_era_abbreviation = models.CharField(
         "Calendar Era Abbreviation", max_length=20, default="PD"
     )
@@ -259,12 +267,31 @@ class Character(models.Model):
     hp_adjustment = models.SmallIntegerField("HP Adjustment", default=0)
     current_hp = models.IntegerField("Current HP", default=1)
     temporary_hp = models.IntegerField("Temporary HP", default=0)
+    is_dead = models.BooleanField(default=False)
+    died_campaign_era = models.CharField(max_length=20, blank=True)
+    died_campaign_year = models.PositiveIntegerField(null=True, blank=True)
+    died_campaign_day = models.PositiveSmallIntegerField(null=True, blank=True)
     base_ac = models.PositiveSmallIntegerField("Base AC", default=10)
     ac_adjustment = models.SmallIntegerField("AC Adjustment", default=0)
     speed = models.CharField(max_length=100, blank=True)
     spell_slot_current = models.JSONField(default=dict, blank=True)
     spell_slot_adjustments = models.JSONField(default=dict, blank=True)
     spells = models.ManyToManyField("compendium.CompendiumEntry", blank=True)
+    native_system_id = models.CharField(max_length=200, default="5e")
+    native_system_version = models.CharField(max_length=50, blank=True)
+    native_system_source = models.ForeignKey(
+        "compendium.CompendiumSource",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    native_state = models.JSONField(default=dict, blank=True)
+    native_resources = models.ManyToManyField(
+        "compendium.CompendiumEntry",
+        blank=True,
+        related_name="+",
+    )
     has_inspiration = models.BooleanField(default=False)
     inspiration_expires_at = models.DateTimeField(blank=True, null=True)
     proficiency_bonus_adjustment = models.SmallIntegerField(
@@ -333,7 +360,24 @@ class Character(models.Model):
 
     @property
     def level(self) -> int:
-        return self.campaign.level if self.is_player_character else self.npc_level
+        if not self.is_player_character:
+            return self.npc_level
+
+        classes = self.native_state.get("classes")
+        if not isinstance(classes, list):
+            return self.campaign.level
+
+        total = 0
+        for detail in classes:
+            if not isinstance(detail, dict) or detail.get("resource_id") != "class_details":
+                continue
+            stats = detail.get("stats")
+            class_level = stats.get("class_level") if isinstance(stats, dict) else None
+            value = class_level.get("value") if isinstance(class_level, dict) else None
+            if isinstance(value, int) and not isinstance(value, bool):
+                total += max(value, 0)
+
+        return total
 
     @property
     def max_hp(self) -> int:
@@ -416,7 +460,13 @@ class Character(models.Model):
             .annotate(total=Sum("amount"))
             .filter(total__gt=0)
         )
-        items = CompendiumEntry.objects.in_bulk([row["item_id"] for row in rows])
+        item_ids = [row["item_id"] for row in rows]
+        items = {
+            item.pk: item
+            for item in CompendiumEntry.objects.filter(pk__in=item_ids).select_related(
+                "source", "source__repository"
+            )
+        }
         return {items[row["item_id"]]: row["total"] for row in rows}
 
     def activate(self) -> Character:

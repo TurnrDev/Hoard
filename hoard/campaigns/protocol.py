@@ -118,6 +118,7 @@ QUERY_OPERATIONS = frozenset(
         "compendium.search",
         "compendium.sources.list",
         "compendium.repositories.list",
+        "compendium.custom.export",
         "user.contexts.list",
         "invite.inspect",
     }
@@ -155,6 +156,8 @@ COMMAND_OPERATIONS = frozenset(
         "characters.builder.complete",
         "characters.level_up.complete",
         "characters.health.post",
+        "characters.death_saves.set",
+        "characters.stabilize",
         "characters.notes.create",
         "characters.notes.update",
         "characters.notes.delete",
@@ -162,7 +165,11 @@ COMMAND_OPERATIONS = frozenset(
         "characters.features.update",
         "characters.features.delete",
         "characters.spells.create",
+        "characters.spells.edit",
         "characters.spells.delete",
+        "characters.resources.attach",
+        "characters.resources.detach",
+        "characters.inventory.attunement.set",
         "characters.loadout.create",
         "characters.loadout.update",
         "characters.loadout.delete",
@@ -172,6 +179,7 @@ COMMAND_OPERATIONS = frozenset(
         "characters.spells.cast",
         "characters.rest",
         "characters.inspiration.set",
+        "characters.native.event",
         "characters.companions.create",
         "characters.companions.update",
         "characters.companions.delete",
@@ -208,6 +216,7 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         CharacterCreateCommand,
         CharacterHealthCommand,
         CharacterIdentifierCommand,
+        CharacterNativeEventCommand,
         CharacterUpdateCommand,
         CombatantConditionCommand,
         CombatantConditionIdentifierCommand,
@@ -326,6 +335,11 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         name="characters.health.post",
         kind=OperationKind.COMMAND,
         payload_model=CharacterHealthCommand,
+    )
+    definitions["characters.native.event"] = OperationDefinition(
+        name="characters.native.event",
+        kind=OperationKind.COMMAND,
+        payload_model=CharacterNativeEventCommand,
     )
     definitions["characters.create"] = OperationDefinition(
         name="characters.create",

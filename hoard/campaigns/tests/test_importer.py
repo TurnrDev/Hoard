@@ -6,8 +6,14 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
 
+from hoard.campaigns.api import import_entry_resolution
 from hoard.campaigns.models import Campaign, CampaignContext, Character, CharacterNote
 from hoard.campaigns.services.cah import parse_cah
+from hoard.compendium.models import (
+    CompendiumEntry,
+    CompendiumRepository,
+    CompendiumSource,
+)
 
 from .helpers import ContextSocketMixin
 
@@ -25,7 +31,16 @@ class CahImporterTests(SimpleTestCase):
         self.assertEqual(preview.fields["speed"], "30")
         self.assertEqual(preview.fields["background"], "Criminal")
         self.assertEqual(preview.fields["languages"], ["Common", "Choose 1"])
-        self.assertEqual(preview.fields["character_class"], "Fighter")
+        self.assertNotIn("character_class", preview.fields)
+        self.assertEqual(preview.collections["classes"][0]["name"], "Fighter")
+        self.assertEqual(preview.collections["classes"][0]["class_level"], 1)
+        self.assertEqual(len(preview.collections["classes"]), 1)
+        imported_class = preview.collections["classes"][0]
+        self.assertEqual(imported_class["source_identifier"], "fighter")
+        self.assertEqual(imported_class["name"], "Fighter")
+        self.assertEqual(imported_class["class_level"], 1)
+        self.assertEqual(imported_class["archetype_identifier"], "fighter_dueling")
+        self.assertEqual(imported_class["archetype_name"], "Dueling")
         self.assertEqual(preview.fields["spell_slot_current"]["first"], 0)
         self.assertEqual(len(preview.collections["notes"]), 1)
         self.assertEqual(len(preview.inventory), 7)
@@ -43,6 +58,18 @@ class CahImporterTests(SimpleTestCase):
 class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
     def setUp(self) -> None:
         self.campaign = Campaign.objects.create(name="Test campaign")
+        repository = CompendiumRepository.objects.create(
+            identifier="default", name="Default systems"
+        )
+        source = CompendiumSource.objects.create(
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            version="test",
+            system_definition={"id": "5e", "character_stats": []},
+        )
+        self.campaign.compendium_sources.add(source)
+        self.source = source
         user = get_user_model().objects.create_user(
             username="player", password="secret"
         )
@@ -64,6 +91,77 @@ class CahImportApiTests(ContextSocketMixin, TransactionTestCase):
             charisma=10,
         )
         self.client.force_login(user)
+
+    def test_spell_resolution_prefers_id_and_requires_unique_names(self) -> None:
+        first = CompendiumEntry.objects.create(
+            source=self.source,
+            source_identifier="spell:flame",
+            kind=CompendiumEntry.Kind.SPELL,
+            name="Produce Flame",
+        )
+        resolution = import_entry_resolution(
+            self.campaign,
+            {
+                "kind": "spell",
+                "source_identifier": "spell:flame",
+                "name": "Renamed Flame",
+            },
+        )
+        self.assertEqual(resolution["entry_id"], first.pk)
+        self.assertEqual(resolution["by"], "id")
+
+        second = CompendiumEntry.objects.create(
+            source=self.source,
+            source_identifier="spell:flame-copy",
+            kind=CompendiumEntry.Kind.SPELL,
+            name="Produce-Flame",
+        )
+        resolution = import_entry_resolution(
+            self.campaign,
+            {"kind": "spell", "source_identifier": "", "name": "Produce Flame"},
+        )
+        self.assertEqual(resolution["state"], "ambiguous")
+        self.assertCountEqual(resolution["candidate_ids"], [first.pk, second.pk])
+
+    def test_commit_blocks_an_included_unresolved_spell(self) -> None:
+        from django.core.cache import cache
+
+        token = "unresolved-spell"
+        cache.set(
+            f"cah-import:{self.context.user_id}:{token}",
+            {
+                "campaign_id": self.campaign.pk,
+                "fields": {},
+                "collections": {
+                    "notes": [],
+                    "features": [],
+                    "spells": [
+                        {
+                            "line_id": "spell-0",
+                            "kind": "spell",
+                            "name": "Missing Spell",
+                        }
+                    ],
+                    "companions": [],
+                },
+                "inventory": [],
+                "warnings": [],
+            },
+            timeout=900,
+        )
+
+        response = self.socket_request(
+            self.context.user,
+            self.context.pk,
+            "characters.imports.cah.commit",
+            token=token,
+            character_id=self.character.pk,
+            collections={"spells": True},
+            spell_resolutions={},
+        )
+
+        self.assertEqual(response["type"], "command.error")
+        self.assertIn("Resolve every imported spell", str(response["detail"]))
 
     def test_preview_and_commit_replace_sheet_without_coins_or_xp(self) -> None:
         source = Path(__file__).with_name("fixtures") / "5e_companion_minimal.cah"

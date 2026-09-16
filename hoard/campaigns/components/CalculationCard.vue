@@ -4,7 +4,7 @@
     mode="out-in"
   >
     <section
-      v-if="!calculationVisible"
+      v-if="!backVisible"
       key="summary"
       class="border rounded-3 p-3 p-md-4 h-100"
     >
@@ -56,25 +56,40 @@
           <div class="text-uppercase fw-semibold small text-body-secondary">
             {{ label }}
           </div>
-          <span class="small text-body-secondary">Calculation</span>
+          <span class="small text-body-secondary">
+            {{ backLabel || "Calculation" }}
+          </span>
         </div>
-        <Button
-          size="small"
-          text
-          rounded
-          icon="mdi mdi-rotate-3d-variant"
-          :aria-label="`Show ${label} summary`"
-          @click="hideCalculation"
-        />
+        <div class="d-flex align-items-center gap-1">
+          <div
+            v-if="$slots.actions"
+            @click.stop
+            @keydown.stop
+          >
+            <slot name="actions" />
+          </div>
+          <Button
+            v-if="!forceBack"
+            size="small"
+            text
+            rounded
+            icon="mdi mdi-rotate-3d-variant"
+            :aria-label="`Show ${label} summary`"
+            @click="hideCalculation"
+          />
+        </div>
       </header>
 
-      <CalculationBreakdown
-        :label="calculationLabel || label"
-        :calculation="calculation"
-        expanded
-      />
+      <slot name="back">
+        <CalculationBreakdown
+          :label="calculationLabel || label"
+          :calculation="calculation"
+          expanded
+        />
+      </slot>
 
       <Button
+        v-if="!forceBack"
         class="mt-3"
         size="small"
         text
@@ -101,12 +116,19 @@ export default defineComponent({
     interactive: { type: Boolean, default: false },
     activationLabel: { type: String, default: "" },
     calculationLabel: { type: String, default: "" },
+    forceBack: { type: Boolean, default: false },
+    backLabel: { type: String, default: "" },
   },
   emits: ["activate"],
   data() {
     return {
       calculationVisible: false,
     };
+  },
+  computed: {
+    backVisible(): boolean {
+      return this.forceBack || this.calculationVisible;
+    },
   },
   methods: {
     activate(): void {

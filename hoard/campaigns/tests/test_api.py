@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TransactionTestCase, override_settings
@@ -58,7 +59,10 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             identifier="test-api", name="Tests"
         )
         self.source = CompendiumSource.objects.create(
-            repository=repository, identifier="5e", name="5e"
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            system_definition={"id": "5e", "character_stats": []},
         )
         self.campaign.compendium_sources.add(self.source)
         self.item = CompendiumEntry.objects.create(
@@ -77,6 +81,14 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             )
         )
         self.assertEqual(set(contexts), {"gm", "pc"})
+
+    def test_session_probe_clears_an_invalid_session_cookie(self) -> None:
+        self.client.cookies[settings.SESSION_COOKIE_NAME] = "invalid-session"
+
+        response = self.client.get("/api/auth/session/")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.cookies[settings.SESSION_COOKIE_NAME].value, "")
 
     def test_metadata_exposes_explicit_field_and_choice_labels(self) -> None:
         self.client.force_login(self.player_user)
@@ -124,6 +136,21 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
             self.gm_user, self.gm.pk, "campaign.calendar.adjust", amount=-1
         )
         self.assertEqual(response["type"], "command.error")
+
+    def test_non_gm_cannot_export_or_browse_repository_management(self) -> None:
+        exported = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "compendium.custom.export",
+        )
+        repositories = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "compendium.repositories.list",
+        )
+
+        self.assertEqual(exported["type"], "query.error")
+        self.assertEqual(repositories["type"], "query.error")
 
     def test_player_cannot_edit_another_character(self) -> None:
         response = self.socket_request(
@@ -236,6 +263,46 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.character.refresh_from_db()
         self.assertTrue(self.character.portrait.name.endswith(".png"))
 
+        portrait_response = self.client.get(response.json()["portrait_url"])
+
+        self.assertEqual(portrait_response.status_code, 200)
+        self.assertEqual(portrait_response["Content-Type"], "image/png")
+        self.assertEqual(
+            b"".join(portrait_response.streaming_content),
+            b"\x89PNG\r\n\x1a\nportrait-test",
+        )
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_character_portrait_requires_campaign_membership(self) -> None:
+        self.character.portrait.save(
+            "private.png",
+            SimpleUploadedFile(
+                "private.png",
+                b"\x89PNG\r\n\x1a\nportrait-test",
+                content_type="image/png",
+            ),
+        )
+        portrait_url = self.character.portrait.url
+
+        anonymous_response = self.client.get(portrait_url)
+
+        outsider = get_user_model().objects.create_user(
+            username="outsider",
+            password="secret",
+        )
+        self.client.force_login(outsider)
+        outsider_response = self.client.get(portrait_url)
+
+        self.assertEqual(anonymous_response.status_code, 401)
+        self.assertEqual(outsider_response.status_code, 404)
+
     def test_transaction_response_has_an_immutable_timestamp(self) -> None:
         response = self.socket_request(
             self.gm_user,
@@ -260,7 +327,7 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.item.is_magic = False
         self.item.requires_attunement = False
         self.item.kind = "weapon"
-        self.item.data = {"item_type": "sword"}
+        self.item.item_type = "sword"
         self.item.save()
 
         item = _item_data(_items(self.campaign).get(pk=self.item.pk))
@@ -281,7 +348,247 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
 
         self.assertIn("data", item.get_deferred_fields())
         self.assertIn("data", item.source.get_deferred_fields())
+        self.assertIn("system_definition", item.source.get_deferred_fields())
         self.assertIn("data", item.source.repository.get_deferred_fields())
+
+    def test_item_list_search_returns_only_matching_equipment(self) -> None:
+        CompendiumEntry.objects.create(
+            source=self.source,
+            kind="weapon",
+            source_identifier="sword",
+            name="Longsword",
+        )
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "compendium.items.list",
+            query="rope",
+            offset=0,
+            limit=100,
+        )
+
+        self.assertEqual(response["type"], "query.result")
+        self.assertEqual([item["name"] for item in response["data"]["items"]], ["Rope"])
+        self.assertIsNone(response["data"]["next_offset"])
+
+    def test_character_inventory_embeds_held_item_metadata(self) -> None:
+        self.item.item_type = "adventuring gear"
+        self.item.weight_amount = 10
+        self.item.weight_unit = "lb"
+        self.item.save()
+        self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "inventory.transactions.create",
+            from_character_id=None,
+            to_character_id=self.character.pk,
+            item_id=self.item.pk,
+            quantity=1,
+        )
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "campaign.get",
+        )
+        character = next(
+            value
+            for value in response["data"]["characters"]
+            if value["id"] == self.character.pk
+        )
+        inventory_item = character["inventory"][0]["item"]
+
+        self.assertEqual(inventory_item["name"], "Rope")
+        self.assertEqual(inventory_item["equipment"]["item_type"], "adventuring gear")
+        self.assertEqual(inventory_item["equipment"]["weight_amount"], "10.000")
+
+    def test_character_can_attune_a_held_item(self) -> None:
+        self.item.requires_attunement = True
+        self.item.data = {
+            "resource_id": "item",
+            "stats": {
+                "id": {"value": "rope"},
+                "name": {"value": "Rope"},
+                "requires_attunement": {"value": True},
+                "is_attuned": {"value": False},
+            },
+        }
+        self.item.save(update_fields=("requires_attunement", "data"))
+        self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "inventory.transactions.create",
+            from_character_id=None,
+            to_character_id=self.character.pk,
+            item_id=self.item.pk,
+            quantity=1,
+        )
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.inventory.attunement.set",
+            character_id=self.character.pk,
+            entry_id=self.item.pk,
+            is_attuned=True,
+        )
+        campaign = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "campaign.get",
+        )
+
+        self.assertEqual(response["type"], "command.ack")
+        character = next(
+            row
+            for row in campaign["data"]["characters"]
+            if row["id"] == self.character.pk
+        )
+        self.assertTrue(character["inventory"][0]["is_attuned"])
+
+    def test_three_death_save_successes_stabilize_at_one_hp(self) -> None:
+        self.character.current_hp = 0
+        self.character.native_state = {"current_hp": 0}
+        self.character.save(update_fields=("current_hp", "native_state"))
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.death_saves.set",
+            character_id=self.character.pk,
+            kind="successes",
+            count=3,
+        )
+
+        self.assertEqual(response["type"], "command.ack")
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.current_hp, 1)
+        self.assertFalse(self.character.is_dead)
+        self.assertFalse(
+            any(
+                self.character.native_state.get(
+                    f"death_saving_throws_{kind}_{index}", False
+                )
+                for kind in ("success", "failure")
+                for index in range(1, 4)
+            )
+        )
+        self.assertTrue(self.character.conditions.filter(identifier="prone").exists())
+
+    def test_stabilize_revives_a_dead_character_at_one_hp_and_applies_prone(
+        self,
+    ) -> None:
+        self.character.current_hp = 0
+        self.character.is_dead = True
+        self.character.native_state = {
+            "current_hp": 0,
+            "hoard_is_dead": True,
+            "death_saving_throws_failure_1": True,
+            "death_saving_throws_failure_2": True,
+            "death_saving_throws_failure_3": True,
+        }
+        self.character.save(
+            update_fields=("current_hp", "is_dead", "native_state")
+        )
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.stabilize",
+            character_id=self.character.pk,
+        )
+
+        self.assertEqual(response["type"], "command.ack")
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.current_hp, 1)
+        self.assertFalse(self.character.is_dead)
+        self.assertTrue(self.character.conditions.filter(identifier="prone").exists())
+        self.assertFalse(
+            any(
+                self.character.native_state.get(
+                    f"death_saving_throws_{kind}_{index}", False
+                )
+                for kind in ("success", "failure")
+                for index in range(1, 4)
+            )
+        )
+
+    def test_character_at_zero_hp_cannot_rest(self) -> None:
+        self.character.current_hp = 0
+        self.character.native_state = {"current_hp": 0}
+        self.character.save(update_fields=("current_hp", "native_state"))
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.rest",
+            character_id=self.character.pk,
+            kind="long",
+        )
+
+        self.assertEqual(response["type"], "command.error")
+        self.assertIn("Stabilize", response["detail"])
+
+    def test_three_death_save_failures_record_death_and_expire_revival_notice(
+        self,
+    ) -> None:
+        self.character.current_hp = 0
+        self.character.native_state = {"current_hp": 0}
+        self.character.save(update_fields=("current_hp", "native_state"))
+
+        response = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.death_saves.set",
+            character_id=self.character.pk,
+            kind="failures",
+            count=3,
+        )
+
+        self.assertEqual(response["type"], "command.ack")
+        self.character.refresh_from_db()
+        self.assertTrue(self.character.is_dead)
+        self.assertEqual(
+            (
+                self.character.died_campaign_era,
+                self.character.died_campaign_year,
+                self.character.died_campaign_day,
+            ),
+            (
+                self.campaign.calendar_era_abbreviation,
+                self.campaign.calendar_year,
+                self.campaign.calendar_day,
+            ),
+        )
+
+        campaign = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "campaign.get",
+        )
+        character = next(
+            row
+            for row in campaign["data"]["characters"]
+            if row["id"] == self.character.pk
+        )
+        self.assertTrue(character["death"]["notice_visible"])
+        self.assertTrue(character["death"]["revival_notice_visible"])
+
+        self.campaign.calendar_day += 10
+        self.campaign.save(update_fields=("calendar_day",))
+        campaign = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "campaign.get",
+        )
+        character = next(
+            row
+            for row in campaign["data"]["characters"]
+            if row["id"] == self.character.pk
+        )
+        self.assertTrue(character["death"]["notice_visible"])
+        self.assertFalse(character["death"]["revival_notice_visible"])
 
     def test_builder_definition_is_lightweight_and_loads_selected_entry(self) -> None:
         character_class = CompendiumEntry.objects.create(
@@ -379,6 +686,49 @@ class ContextApiTests(ContextSocketMixin, TransactionTestCase):
         self.assertEqual(rangers[0]["id"], canonical.pk)
         self.assertEqual(rangers[0]["source_book"], "PHB")
         self.assertEqual(len(rangers[0]["alias_ids"]), 1)
+
+    def test_builder_keeps_class_lineage_with_the_selected_system(self) -> None:
+        source_2024 = CompendiumSource.objects.create(
+            repository=self.source.repository,
+            identifier="5e2024",
+            name="5e 2024",
+            system_definition={"id": "5e2024", "character_stats": []},
+        )
+        self.campaign.compendium_sources.add(source_2024)
+        class_2014 = CompendiumEntry.objects.create(
+            source=self.source,
+            kind="class",
+            source_identifier="wizard",
+            name="Wizard (2014)",
+        )
+        class_2024 = CompendiumEntry.objects.create(
+            source=source_2024,
+            kind="class",
+            source_identifier="wizard",
+            name="Wizard (2024)",
+        )
+
+        definition_2014 = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.builder.definition",
+            system_id="5e",
+        )
+        definition_2024 = self.socket_request(
+            self.player_user,
+            self.pc.pk,
+            "characters.builder.definition",
+            system_id="5e2024",
+        )
+
+        self.assertEqual(
+            [row["id"] for row in definition_2014["data"]["class"]],
+            [class_2014.pk],
+        )
+        self.assertEqual(
+            [row["id"] for row in definition_2024["data"]["class"]],
+            [class_2024.pk],
+        )
 
     def test_builder_class_defaults_subclass_selection_to_level_three(self) -> None:
         character_class = CompendiumEntry.objects.create(

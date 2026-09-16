@@ -183,6 +183,7 @@ import {
   isUnauthenticatedError,
   logout,
   type Campaign,
+  type CampaignCalendar,
   type CampaignMember,
   type Character,
   type EncounterCombatant,
@@ -614,6 +615,23 @@ export default defineComponent({
       void this.refreshCampaignChrome(context);
 
       this.unsubscribeCampaignChanges = subscribeDomainEvents((event) => {
+        if (event.type === "campaign.calendar_changed") {
+          const calendar = event.calendar as CampaignCalendar | undefined;
+
+          if (
+            calendar &&
+            typeof calendar.era_abbreviation === "string" &&
+            typeof calendar.era_name === "string" &&
+            typeof calendar.year === "number" &&
+            typeof calendar.day === "number"
+          ) {
+            this.campaignStore.applyCalendarChanged(calendar);
+            campaignRefreshRevision.value += 1;
+          }
+
+          return;
+        }
+
         if (
           event.type === "character.health_changed" &&
           typeof event.character_id === "number" &&

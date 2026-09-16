@@ -23,13 +23,13 @@ from .experience import ExperienceAccount, ExperienceEntry, ExperienceTransactio
 from .history import (
     CampaignLevelEvent,
     CharacterHistory,
+    CharacterNativeEvent,
     HealthTransaction,
     MembershipEvent,
 )
 from .inventory import InventoryAccount, InventoryEntry, InventoryTransaction
 from .invites import CampaignInvitation, InvitationEvent
 from .money import MoneyAccount, MoneyEntry, MoneyTransaction
-from .progression import CharacterChoice, CharacterClassLevel, CharacterLevelProgress
 from .sheet import (
     CharacterCompanion,
     CharacterEffect,
@@ -49,10 +49,8 @@ __all__ = [
     "ConditionEvent",
     "CharacterCondition",
     "Character",
-    "CharacterChoice",
-    "CharacterClassLevel",
     "CharacterHistory",
-    "CharacterLevelProgress",
+    "CharacterNativeEvent",
     "CharacterCompanion",
     "CharacterEffect",
     "CharacterFeature",

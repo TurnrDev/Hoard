@@ -162,6 +162,62 @@ def _languages(*sources: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
+def _class_entries(source: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read Companion ``jobs`` as native class-details import rows.
+
+    A CAH job is already one entry per class, carrying its class level and the
+    selected subtype ID.  Treating it as a single display string loses
+    multiclass characters and is incompatible with RPG Companion's
+    ``class_details`` resource.
+    """
+    required_classes = _dict(source.get("allRequiredClasses"))
+    definitions = {
+        str(definition.get("id")): definition
+        for value in _list(required_classes.get("jobs"))
+        if (definition := _dict(value)).get("id")
+    }
+    entries: list[dict[str, Any]] = []
+    for position, value in enumerate(_list(source.get("jobs"))):
+        job = _dict(value)
+        identifier = str(job.get("jobId") or "").strip()
+        if not identifier:
+            continue
+        definition = definitions.get(identifier, {})
+        archetype_id = str(job.get("subtypeId") or "").strip()
+        archetypes = _list(definition.get("archetypes")) + _list(
+            definition.get("subtypes")
+        )
+        archetype = next(
+            (
+                candidate
+                for value in archetypes
+                if (candidate := _dict(value)).get("id") == archetype_id
+            ),
+            {},
+        )
+        name = definition.get("name") or identifier
+        entries.append(
+            {
+                "line_id": f"class-{position}",
+                "kind": "class",
+                "source_identifier": identifier,
+                "name": _name(name),
+                "class_level": _integer(job.get("level"), minimum=1) or 1,
+                "archetype_identifier": archetype_id,
+                "archetype_name": str(archetype.get("name") or "").strip(),
+                "selected_feature_ids": [
+                    str(selected.get("id"))
+                    for selectable in _list(definition.get("selectableFeatures"))
+                    if isinstance(selected := _dict(selectable), dict)
+                    for value in _list(selected.get("selectedFeatures"))
+                    if _dict(value).get("id")
+                ],
+                "raw": {"job": job, "class": definition},
+            }
+        )
+    return entries
+
+
 def parse_cah(raw: bytes) -> CahPreview:
     """Parse supported sheet content while retaining import trace data per entry."""
     try:
@@ -216,10 +272,7 @@ def parse_cah(raw: bytes) -> CahPreview:
     languages = _languages(required_race, required_background)
     if languages:
         fields["languages"] = languages
-    jobs = _list(source.get("jobs"))
-    if jobs and _dict(jobs[0]).get("jobId"):
-        fields["character_class"] = _name(_dict(jobs[0])["jobId"])
-
+    classes = _class_entries(source)
     for ability_name in ABILITIES:
         ability = _dict(source.get(ability_name))
         if not ability:
@@ -286,6 +339,7 @@ def parse_cah(raw: bytes) -> CahPreview:
         fields=fields,
         collections={
             "notes": notes,
+            "classes": classes,
             "features": _feature_entries(source),
             "spells": spells,
             "companions": companions,

@@ -37,6 +37,11 @@ class CompendiumSource(models.Model):
     )
     identifier = models.CharField(max_length=200)
     name = models.CharField(max_length=200)
+    version = models.CharField(max_length=50, blank=True)
+    minimum_app_version = models.CharField(max_length=50, blank=True)
+    package_layout = models.CharField(max_length=20, blank=True)
+    package_checksum = models.CharField(max_length=64, blank=True)
+    system_definition = models.JSONField(default=dict, blank=True)
     data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -77,11 +82,12 @@ class CompendiumEntry(models.Model):
         on_delete=models.SET_NULL,
         related_name="created_compendium_entries",
     )
-    kind = models.CharField(max_length=20, choices=Kind.choices)
+    kind = models.CharField(max_length=100)
     source_identifier = models.CharField(max_length=200)
     name = models.CharField(max_length=200)
     source_book = models.CharField(max_length=100, blank=True)
     description = models.TextField(blank=True)
+    item_type = models.CharField(max_length=100, blank=True)
     cost_amount = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True
     )

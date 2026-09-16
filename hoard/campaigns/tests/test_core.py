@@ -152,14 +152,72 @@ class CoreModelTests(TestCase):
             identifier="test-spells", name="Test spells"
         )
         source = CompendiumSource.objects.create(
-            repository=repository, identifier="5e", name="5e"
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            system_definition={
+                "id": "5e",
+                "character_stats": [
+                    {"id": "base_hp", "type": "base", "default_value": 1},
+                    {"id": "current_hp", "type": "base", "default_value": 1},
+                    *[
+                        {
+                            "id": f"spell_slots_{level}",
+                            "type": "base",
+                            "default_value": 0,
+                        }
+                        for level in range(1, 10)
+                    ],
+                ],
+                "mechanics": [
+                    {
+                        "id": "restore_slots",
+                        "event_names": "long_rest",
+                        "effects": {
+                            "type": "setStat",
+                            "stat": "spell_slots_1",
+                            "new_value": {"type": "constant", "value": 4},
+                            "aggregation_type": "set",
+                        },
+                    }
+                ],
+                "resources": [
+                    {
+                        "id": "spell",
+                        "stats": [
+                            {"id": "id", "type": "base", "default_value": ""},
+                        ],
+                        "mechanics": [
+                            {
+                                "id": "cast",
+                                "event_names": "castSpell",
+                                "effects": {
+                                    "type": "addToStat",
+                                    "stat": "$character.spell_slots_1",
+                                    "value": {"type": "constant", "value": -1},
+                                    "aggregation_type": "set",
+                                },
+                            }
+                        ],
+                    }
+                ],
+            },
         )
+        self.campaign.compendium_sources.add(source)
+        character.native_system_source = source
+        character.save(update_fields=("native_system_source",))
         spell = CompendiumEntry.objects.create(
             source=source,
             kind=CompendiumEntry.Kind.SPELL,
             source_identifier="shield",
             name="Shield",
-            data={"spell": {"level": 1}},
+            data={
+                "resource_id": "spell",
+                "stats": {
+                    "id": {"value": "shield"},
+                    "level": {"value": "spell_level_1"},
+                },
+            },
         )
         character.spells.add(spell)
         character.spell_slot_current = {"1": 2, "2": 2}

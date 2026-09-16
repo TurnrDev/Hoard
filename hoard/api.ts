@@ -155,6 +155,8 @@ export type CharacterInventoryItem = {
   item_id: number;
   name: string;
   quantity: number;
+  item: Item;
+  is_attuned: boolean;
 };
 
 export type CharacterNote = {
@@ -186,6 +188,9 @@ export type CharacterSpell = {
   ritual: boolean;
   classes: string[];
   description: string;
+  source: string;
+  source_identifier: string;
+  is_custom: boolean;
 };
 
 export type CharacterLoadoutItem = {
@@ -300,6 +305,9 @@ export type CompendiumSearchEntry = {
   description: string;
   kind: string;
   source: string;
+  source_identifier: string;
+  is_custom: boolean;
+  details: Record<string, unknown>;
 };
 
 export type EncounterCombatantInput = {
@@ -320,6 +328,9 @@ export type ConditionMutation = {
 
 export type Character = {
   id: number;
+  native_system_id: "5e" | "5e2024";
+  native_system_version: string;
+  native_sheet: NativeSheet;
   context_id: number | null;
   name: string;
   portrait_url: string | null;
@@ -342,6 +353,15 @@ export type Character = {
   languages: string[];
   equipment_proficiencies: Record<string, string[]>;
   has_inspiration: boolean;
+  is_dead: boolean;
+  death: {
+    campaign_era: string;
+    campaign_year: number;
+    campaign_day: number;
+    campaign_date: string;
+    notice_visible: boolean;
+    revival_notice_visible: boolean;
+  } | null;
   inspiration_expires_at: string | null;
   conditions: ActiveCondition[];
   is_build_complete: boolean;
@@ -356,12 +376,38 @@ export type Character = {
   experience: number;
   money: Record<string, number | string>;
   inventory: CharacterInventoryItem[];
+  death_saves: {
+    successes: boolean[];
+    failures: boolean[];
+  };
   notes: CharacterNote[];
   features: CharacterFeature[];
   spells: CharacterSpell[];
   loadout: CharacterLoadoutItem[];
   effects: CharacterEffect[];
   companions: CharacterCompanion[];
+};
+
+export type NativeViewNode = {
+  type?: string;
+  id?: string;
+  stat?: string;
+  current_value?: unknown;
+  value?: unknown;
+  formula?: Record<string, unknown>;
+  system_behaviour?: {
+    event?: unknown;
+    control?: string;
+  };
+  [key: string]: unknown;
+};
+
+export type NativeSheet = {
+  available: boolean;
+  system_id: string;
+  version: string;
+  sections: Array<{ id: string; view: NativeViewNode }>;
+  diagnostics: string[];
 };
 
 export type IncompleteLevelUp = {
@@ -576,10 +622,30 @@ export async function getCampaigns(): Promise<CampaignSummary[]> {
   return [...campaigns.values()];
 }
 
-export async function getCampaign(id: number): Promise<Campaign> {
+const pendingCampaignRequests = new Map<number, Promise<Campaign>>();
+
+async function requestCampaign(id: number): Promise<Campaign> {
   await ensureCampaignRealtime(id);
 
   return campaignRequest<Campaign>("campaign.get");
+}
+
+export function getCampaign(id: number): Promise<Campaign> {
+  const pending = pendingCampaignRequests.get(id);
+
+  if (pending) {
+    return pending;
+  }
+
+  const request = requestCampaign(id).finally(() => {
+    if (pendingCampaignRequests.get(id) === request) {
+      pendingCampaignRequests.delete(id);
+    }
+  });
+
+  pendingCampaignRequests.set(id, request);
+
+  return request;
 }
 
 export function getCalendar(id: number): Promise<CampaignCalendar> {
@@ -631,6 +697,17 @@ async function getCompendiumItemPages(contextId: number): Promise<Item[]> {
     nextOffset = page.next_offset;
   }
   return items;
+}
+
+export async function searchItems(contextId: number, query = ""): Promise<Item[]> {
+  await ensureCampaignRealtime(contextId);
+  const page = await campaignRequest<CompendiumItemPage>("compendium.items.list", {
+    offset: 0,
+    limit: 100,
+    query,
+  });
+
+  return page.items;
 }
 
 export function getCompendiumSources(id: number): Promise<CompendiumSource[]> {
@@ -784,9 +861,39 @@ export type CahPreview = {
   field_changes: CahFieldChange[];
   collection_changes: CahCollectionChange[];
   inventory: CahInventoryLine[];
+  classes: CahClassResolution[];
+  spells: CahSpellResolution[];
   warnings: string[];
   calculated_before: Record<string, Calculation | Record<string, Calculation>> | null;
   calculated_after: Record<string, Calculation | Record<string, Calculation>> | null;
+};
+
+export type CahSpellResolution = SpellCard & {
+  line_id: string;
+  source_identifier: string;
+  resolution: {
+    state: "matched" | "ambiguous" | "unresolved";
+    entry_id: number | null;
+    by: "id" | "name" | null;
+    candidate_ids?: number[];
+  };
+  selected_entry_id?: number | null;
+};
+
+export type CahClassResolution = {
+  line_id: string;
+  source_identifier: string;
+  name: string;
+  class_level: number;
+  archetype_identifier: string;
+  archetype_name: string;
+  resolution: {
+    state: "matched" | "ambiguous" | "unresolved";
+    entry_id: number | null;
+    by: "id" | "name" | null;
+    candidate_ids?: number[];
+  };
+  selected_entry_id?: number | null;
 };
 export function previewCahImport(
   contextId: number,
@@ -823,6 +930,8 @@ export async function commitCahImport(
   fields: Record<string, unknown> = {},
   excludedFields: string[] = [],
   collections: Record<string, boolean> = {},
+  classResolutions: Record<string, number> = {},
+  spellResolutions: Record<string, number> = {},
 ): Promise<Character> {
   await ensureCampaignRealtime(contextId);
 
@@ -833,6 +942,8 @@ export async function commitCahImport(
     fields,
     excluded_fields: excludedFields,
     collections,
+    class_resolutions: classResolutions,
+    spell_resolutions: spellResolutions,
   });
 }
 
@@ -852,6 +963,82 @@ export function updateCharacter(
   return contextRequest<void>(campaignId, "characters.update", {
     character_id: characterId,
     fields: { ...fields, character_class: characterClass },
+  });
+}
+
+export type NativeEventResult = {
+  event_id: number;
+  character_id: number;
+  fired_events: Array<Record<string, unknown>>;
+  changes: Array<Record<string, unknown>>;
+  messages: Array<Record<string, unknown>>;
+  interface_actions: Array<Record<string, unknown>>;
+  delayed_effects: Array<Record<string, unknown>>;
+  unsupported: Array<Record<string, unknown>>;
+};
+
+export function executeCharacterNativeEvent(
+  contextId: number,
+  characterId: number,
+  eventName: string,
+  options: {
+    payload?: Record<string, unknown>;
+    view_values?: Record<string, unknown>;
+    stat_updates?: Record<string, unknown>;
+  } = {},
+): Promise<NativeEventResult> {
+  return contextRequest(contextId, "characters.native.event", {
+    character_id: characterId,
+    event_name: eventName,
+    ...options,
+  });
+}
+
+export function setCharacterDeathSaves(
+  contextId: number,
+  characterId: number,
+  kind: "successes" | "failures",
+  count: number,
+): Promise<{ kind: "successes" | "failures"; count: number }> {
+  return contextRequest(contextId, "characters.death_saves.set", {
+    character_id: characterId,
+    kind,
+    count,
+  });
+}
+
+export function setCharacterItemAttunement(
+  contextId: number,
+  characterId: number,
+  entryId: number,
+  isAttuned: boolean,
+): Promise<{ entry_id: number; is_attuned: boolean }> {
+  return contextRequest(contextId, "characters.inventory.attunement.set", {
+    character_id: characterId,
+    entry_id: entryId,
+    is_attuned: isAttuned,
+  });
+}
+
+export function attachCharacterNativeResource(
+  contextId: number,
+  characterId: number,
+  entryId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.resources.attach", {
+    character_id: characterId,
+    entry_id: entryId,
+  });
+}
+
+export function detachCharacterNativeResource(
+  contextId: number,
+  characterId: number,
+  entryId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.resources.detach", {
+    character_id: characterId,
+    entry_id: entryId,
   });
 }
 
@@ -1117,6 +1304,15 @@ export function restCharacter(
   });
 }
 
+export function stabilizeCharacter(
+  contextId: number,
+  characterId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.stabilize", {
+    character_id: characterId,
+  });
+}
+
 export function setCharacterInspiration(
   contextId: number,
   characterId: number,
@@ -1254,6 +1450,20 @@ export function searchCompendiumEntries(
   });
 }
 
+export type CompendiumCustomExport = {
+  filename: string;
+  content_base64: string;
+  sha256: string;
+  resource_count: number;
+  system_id: string;
+};
+
+export function exportCompendiumCustomContent(
+  contextId: number,
+): Promise<CompendiumCustomExport> {
+  return contextRequest(contextId, "compendium.custom.export");
+}
+
 export type SpellCard = {
   name: string;
   level: number;
@@ -1299,6 +1509,21 @@ export function updateCompendiumSpell(
   });
 }
 
+export function editCharacterSpell(
+  contextId: number,
+  characterId: number,
+  spellId: number,
+  mode: "shared" | "clone",
+  spell: SpellCard,
+): Promise<{ id: number } & SpellCard> {
+  return contextRequest(contextId, "characters.spells.edit", {
+    character_id: characterId,
+    spell_id: spellId,
+    mode,
+    spell,
+  });
+}
+
 export function setCombatantCondition(
   contextId: number,
   combatantId: number,
@@ -1333,24 +1558,36 @@ export type BuilderEntry = {
   data?: Record<string, unknown>;
 };
 export type BuilderDefinition = {
+  system_id: "5e" | "5e2024";
+  systems: Array<{
+    id: "5e" | "5e2024";
+    name: string;
+    version: string;
+  }>;
   level: number;
   race: BuilderEntry[];
   class: BuilderEntry[];
   background: BuilderEntry[];
   skills: string[];
 };
-export function getBuilderDefinition(contextId: number): Promise<BuilderDefinition> {
-  return contextRequest<BuilderDefinition>(contextId, "characters.builder.definition");
+export function getBuilderDefinition(
+  contextId: number,
+  systemId?: "5e" | "5e2024",
+): Promise<BuilderDefinition> {
+  return contextRequest<BuilderDefinition>(contextId, "characters.builder.definition", {
+    system_id: systemId,
+  });
 }
 
 export function getBuilderEntry(
   contextId: number,
   entryId: number,
+  systemId?: "5e" | "5e2024",
 ): Promise<BuilderEntry & { kind: "race" | "class" | "background" }> {
   return contextRequest<BuilderEntry & { kind: "race" | "class" | "background" }>(
     contextId,
     "characters.builder.entry.get",
-    { entry_id: entryId },
+    { entry_id: entryId, system_id: systemId },
   );
 }
 

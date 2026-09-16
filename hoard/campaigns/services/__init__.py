@@ -38,6 +38,7 @@ from .health import (
     CharacterHealthService,
     create_health_baseline,
     post_health_transaction,
+    stabilize_character,
 )
 from .invitations import accept_invitation, create_invitation, register_and_accept
 from .ledger import (
@@ -69,6 +70,7 @@ __all__ = [
     "take_loot",
     "transfer_item",
     "post_health_transaction",
+    "stabilize_character",
     "create_health_baseline",
     "accept_invitation",
     "create_invitation",

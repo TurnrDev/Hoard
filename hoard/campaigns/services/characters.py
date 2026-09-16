@@ -1,11 +1,13 @@
 """Lifecycle commands for campaign characters."""
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils import timezone
 
 from ..models import CampaignContext, Character, CharacterHistory
 from .health import CharacterHealthService
 from .history import character_snapshot, record_character_history
+from .native import execute_projection_update
 
 
 class CharacterLifecycleService:
@@ -73,16 +75,35 @@ class CharacterLifecycleService:
         if unknown or blocked_fields:
             unsupported = ", ".join(sorted(unknown | blocked_fields))
             raise ValidationError(f"Unsupported character fields: {unsupported}")
-        for key, value in fields.items():
-            setattr(character, key, value)
-        character.full_clean()
-        character.save()
-        record_character_history(
-            character,
-            reason=CharacterHistory.Reason.EDIT,
-            before=before,
-            created_by=context,
-        )
+        structural_fields = {
+            "background_entry_id",
+            "race_entry_id",
+            "subrace_identifier",
+            "npc_level",
+            "is_active",
+            "is_build_complete",
+        }
+        native_fields = {
+            key: value for key, value in fields.items() if key not in structural_fields
+        }
+        with transaction.atomic():
+            for key in structural_fields & fields.keys():
+                setattr(character, key, fields[key])
+            if structural_fields & fields.keys():
+                character.save(update_fields=tuple(structural_fields & fields.keys()))
+            if native_fields:
+                character = execute_projection_update(
+                    character,
+                    native_fields,
+                    created_by=context,
+                ).character
+            character.full_clean()
+            record_character_history(
+                character,
+                reason=CharacterHistory.Reason.EDIT,
+                before=before,
+                created_by=context,
+            )
 
         return character
 

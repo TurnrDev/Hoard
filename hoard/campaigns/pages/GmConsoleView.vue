@@ -123,7 +123,6 @@
           <GmItemForm
             :context-id="contextId"
             :characters="characters"
-            :items="items"
             @completed="completed"
           />
         </section>
@@ -159,10 +158,8 @@ import GmSharedXpForm from "@/campaigns/components/GmSharedXpForm.vue";
 import {
   approveCampaignLevel,
   getCampaign,
-  getItems,
   type Campaign,
   type Character,
-  type Item,
 } from "@/api";
 import { campaignRefreshRevision } from "@/realtime";
 
@@ -181,7 +178,6 @@ export default defineComponent({
     return {
       campaign: undefined as Campaign | undefined,
       characters: [] as Character[],
-      items: [] as Item[],
       error: "",
     };
   },
@@ -216,17 +212,13 @@ export default defineComponent({
     },
     async load(): Promise<void> {
       try {
-        const [nextCampaign, nextItems] = await Promise.all([
-          getCampaign(this.contextId),
-          getItems(this.contextId),
-        ]);
+        const nextCampaign = await getCampaign(this.contextId);
         if (!nextCampaign.is_game_master) {
           await this.$router.replace(`/c/${this.contextId}`);
           return;
         }
         this.campaign = nextCampaign;
         this.characters = nextCampaign.characters;
-        this.items = nextItems;
       } catch (exception) {
         this.error =
           exception instanceof Error

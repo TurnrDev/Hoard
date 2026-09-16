@@ -6,8 +6,15 @@ pkgs.mkShellNoCC {
   packages = with pkgs; [
     python314
     uv
-    nodejs_22
+    nodejs_24
     git
+    docker_29
     docker-compose
   ];
+
+  shellHook = ''
+    echo "Hoard development: Docker Compose is the preferred full-stack environment."
+    echo "Run: docker compose up --build"
+    echo "This shell provides Python 3.14, uv, Node 24, Git, and Docker 29 tooling for host-side work."
+  '';
 }

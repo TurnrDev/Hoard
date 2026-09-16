@@ -3,7 +3,8 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from ..models import Character, HealthTransaction
+from ..models import CampaignContext, Character, CharacterCondition, HealthTransaction
+from .native import execute_character_event
 
 
 class CharacterHealthService:
@@ -38,6 +39,46 @@ class CharacterHealthService:
     ) -> HealthTransaction:
         """Create the initial health ledger record for a character."""
         return create_health_baseline(character, created_by=created_by)
+
+
+def stabilize_character(
+    character: Character,
+    *,
+    created_by: CampaignContext,
+) -> HealthTransaction:
+    """Restore a dying or dead character to one HP and leave them prone."""
+    with transaction.atomic():
+        locked = Character.objects.select_for_update().get(pk=character.pk)
+        if locked.current_hp != 0 and not locked.is_dead:
+            raise ValidationError(
+                "Only a character making death saves or marked dead can be stabilized."
+            )
+        if locked.current_hp != 0:
+            raise ValidationError("A dead character must be at 0 HP to be stabilized.")
+
+        posted = post_health_transaction(
+            locked,
+            reason=HealthTransaction.Reason.HEALING,
+            current_hp_delta=1,
+            description="Stabilized at 1 HP",
+            created_by=created_by,
+        )
+
+        if not locked.conditions.filter(
+            identifier=CharacterCondition.Identifier.PRONE
+        ).exists():
+            from .combat import set_character_condition
+
+            set_character_condition(
+                created_by,
+                locked.pk,
+                identifier=CharacterCondition.Identifier.PRONE,
+                source="Stabilization",
+                duration="Until the character stands",
+                exhaustion_level=None,
+            )
+
+        return posted
 
 
 def post_health_transaction(
@@ -97,9 +138,61 @@ def post_health_transaction(
             temporary_hp_after=after_temporary,
             description=description,
         )
-        locked.current_hp = after_current
-        locked.temporary_hp = after_temporary
-        locked.save(update_fields=("current_hp", "temporary_hp"))
+        execute_character_event(
+            locked,
+            "set_current_hp",
+            {
+                "reason": reason,
+                "current_hp": after_current,
+                "temporary_hp": after_temporary,
+            },
+            created_by=created_by,
+            effects={
+                "type": "sequence",
+                "effects": [
+                    {
+                        "type": "setStat",
+                        "stat": "current_hp",
+                        "new_value": {
+                            "type": "stat",
+                            "stat": "$event.current_hp",
+                        },
+                        "aggregation_type": "set",
+                    },
+                    {
+                        "type": "setStat",
+                        "stat": "hoard_temporary_hp",
+                        "new_value": {
+                            "type": "stat",
+                            "stat": "$event.temporary_hp",
+                        },
+                        "aggregation_type": "set",
+                    },
+                    *(
+                        [
+                            {
+                                "type": "setStat",
+                                "stat": f"death_saving_throws_{kind}_{index}",
+                                "new_value": {"type": "constant", "value": False},
+                                "aggregation_type": "set",
+                            }
+                            for kind in ("success", "failure")
+                            for index in range(1, 4)
+                        ]
+                        + [
+                            {
+                                "type": "setStat",
+                                "stat": "hoard_is_dead",
+                                "new_value": {"type": "constant", "value": False},
+                                "aggregation_type": "set",
+                            }
+                        ]
+                        if after_current > 0
+                        else []
+                    ),
+                ],
+            },
+        )
         return posted
 
 

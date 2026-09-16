@@ -1,1 +1,3 @@
 *.cah linguist-language=JSON
+hoard/compendium/native/tools linguist-vendored
+docs linguist-documentation

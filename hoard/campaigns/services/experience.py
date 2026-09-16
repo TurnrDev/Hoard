@@ -100,6 +100,11 @@ def award_shared_experience(
         )
         campaign.shared_experience += per_character
         campaign.save(update_fields=("shared_experience",))
+        project_group_experience(
+            recipients,
+            campaign.shared_experience,
+            created_by=created_by,
+        )
         return (per_character, posted) if return_transaction else per_character
 
 
@@ -163,4 +168,38 @@ def reverse_experience_transaction(
             campaign = Campaign.objects.select_for_update().get(pk=original.campaign_id)
             campaign.shared_experience -= per_character
             campaign.save(update_fields=("shared_experience",))
+            recipients = list(
+                Character.objects.select_for_update().filter(
+                    campaign=campaign,
+                    is_active=True,
+                    context__isnull=False,
+                )
+            )
+            project_group_experience(recipients, campaign.shared_experience)
         return reversed_transaction
+
+
+def project_group_experience(
+    characters: list[Character],
+    amount: int,
+    *,
+    created_by=None,
+) -> None:
+    """Route group XP changes into initialized authoritative native states."""
+    from .native import execute_character_event
+
+    for character in characters:
+        if not character.native_state:
+            continue
+        execute_character_event(
+            character,
+            "hoard.group_experience.changed",
+            {"amount": amount},
+            created_by=created_by,
+            effects={
+                "type": "setStat",
+                "stat": "hoard_group_experience",
+                "new_value": {"type": "constant", "value": amount},
+                "aggregation_type": "set",
+            },
+        )

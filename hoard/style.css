@@ -334,7 +334,7 @@ select:focus-visible {
   line-height: 1;
 }
 
-.party-rail__entry--critical .p-progressbar-value {
+.party-rail__entry--bloodied .p-progressbar-value {
   background: #c73737;
 }
 
@@ -342,16 +342,32 @@ select:focus-visible {
   background: #d97706;
 }
 
-.party-rail__entry--healthy .p-progressbar-value {
+.party-rail__entry--damaged .p-progressbar-value {
+  background: #d6b514;
+}
+
+.party-rail__entry--scratched .p-progressbar-value {
   background: #86a83d;
 }
 
-[data-hoard-palette="colourblind"] .party-rail__entry--critical .p-progressbar-value {
-  background: #d6508f;
+.party-rail__entry--healthy .p-progressbar-value {
+  background: #3c8c45;
+}
+
+[data-hoard-palette="colourblind"] .party-rail__entry--bloodied .p-progressbar-value {
+  background: #7b4ab7;
 }
 
 [data-hoard-palette="colourblind"] .party-rail__entry--wounded .p-progressbar-value {
-  background: #d99a19;
+  background: #d6508f;
+}
+
+[data-hoard-palette="colourblind"] .party-rail__entry--damaged .p-progressbar-value {
+  background: #f4f4f4;
+}
+
+[data-hoard-palette="colourblind"] .party-rail__entry--scratched .p-progressbar-value {
+  background: #73b9e6;
 }
 
 [data-hoard-palette="colourblind"] .party-rail__entry--healthy .p-progressbar-value {

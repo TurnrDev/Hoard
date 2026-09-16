@@ -14,7 +14,7 @@
           Compendium
         </h1>
         <p class="mb-0 text-body-secondary">
-          Browse imported references and campaign-local equipment.
+          Browse every enabled native resource and campaign-custom entry.
         </p>
       </div>
       <div class="d-flex flex-wrap gap-2">
@@ -24,10 +24,19 @@
           @click="openEditor()"
         />
         <Button
+          v-if="campaign?.is_game_master"
           icon="mdi mdi-bookshelf"
           label="Sources"
           outlined
           @click="openPacks"
+        />
+        <Button
+          v-if="campaign?.is_game_master"
+          icon="mdi mdi-download"
+          label="Export custom content"
+          outlined
+          :loading="exporting"
+          @click="exportCustomContent"
         />
       </div>
     </header>
@@ -40,7 +49,23 @@
       {{ error }}
     </Message>
     <div class="row justify-content-between align-items-end g-2 mb-4">
-      <div class="col-12 col-lg-7">
+      <div class="col-12 col-md-4 col-lg-3">
+        <label
+          class="d-grid gap-2"
+          for="compendium-kind"
+        >
+          <span class="fw-semibold">Resource type</span>
+          <Select
+            id="compendium-kind"
+            v-model="kind"
+            :options="kindOptions"
+            option-label="label"
+            option-value="value"
+            fluid
+          />
+        </label>
+      </div>
+      <div class="col-12 col-md-8 col-lg-6">
         <label
           class="d-grid gap-2"
           for="compendium-search"
@@ -54,7 +79,7 @@
         </label>
       </div>
       <p class="col-12 col-lg-auto mb-0 small text-body-secondary">
-        {{ filtered.length }} matching items
+        {{ filtered.length }} matching resources
       </p>
     </div>
     <ProgressBar
@@ -76,51 +101,59 @@
       class="list-unstyled row g-3"
     >
       <li
-        v-for="item in filtered"
-        :key="item.id"
+        v-for="entry in filtered"
+        :key="entry.id"
         class="col-12 col-md-6 col-xl-4"
       >
         <article class="border rounded-3 p-3 h-100 d-flex flex-column">
           <header>
-            <h2 class="h4">{{ item.name }}</h2>
+            <h2 class="h4">{{ entry.name }}</h2>
           </header>
-          <p class="small text-body-secondary">{{ summary(item) }}</p>
+          <p class="small text-body-secondary">
+            {{ displayIdentifier(entry.kind) }} · {{ entry.source }}
+          </p>
           <div class="flex-grow-1">
-            <p>{{ item.description || "No description." }}</p>
+            <dl
+              v-if="entry.kind === 'spell'"
+              class="row g-2 small"
+            >
+              <div
+                v-for="fact in spellFacts(entry)"
+                :key="fact.label"
+                class="col-6"
+              >
+                <dt class="text-body-secondary">{{ fact.label }}</dt>
+                <dd class="mb-0">{{ fact.value }}</dd>
+              </div>
+            </dl>
+            <p>{{ entry.description || "No description." }}</p>
             <Chip
-              v-if="item.equipment.category"
+              v-if="entry.is_custom"
               size="small"
               class="me-1"
             >
-              {{ item.equipment.category }}
+              Campaign custom
             </Chip>
             <Chip
-              v-if="item.equipment.item_type"
-              size="small"
-              class="compendium-item__fact"
-            >
-              {{ item.equipment.item_type }}
-            </Chip>
-            <Chip
-              v-if="item.equipment.rarity"
+              v-if="spellLevel(entry)"
               size="small"
             >
-              {{ item.equipment.rarity }}
+              {{ spellLevel(entry) }}
             </Chip>
           </div>
           <footer
-            v-if="campaign?.is_game_master && !item.is_imported"
+            v-if="campaign?.is_game_master && customItem(entry)"
             class="d-flex gap-2 mt-3"
           >
             <Button
               label="Edit"
               outlined
-              @click="openEditor(item)"
+              @click="editEntry(entry)"
             />
             <Button
               severity="danger"
               label="Delete"
-              @click="remove(item)"
+              @click="removeEntry(entry)"
             />
           </footer>
         </article>
@@ -303,6 +336,7 @@ import InputText from "primevue/inputtext";
 import Message from "primevue/message";
 import ProgressBar from "primevue/progressbar";
 import ProgressSpinner from "primevue/progressspinner";
+import Select from "primevue/select";
 import Textarea from "primevue/textarea";
 import ToggleSwitch from "primevue/toggleswitch";
 import { defineComponent } from "vue";
@@ -311,16 +345,20 @@ import {
   deleteItem,
   disableCompendiumSource,
   enableCompendiumSource,
+  exportCompendiumCustomContent,
   getCampaign,
   getItems,
   getCompendiumRepositories,
   getCompendiumSources,
+  searchCompendiumEntries,
   updateItem,
   type Campaign,
   type Item,
   type CompendiumRepository,
   type CompendiumSource,
+  type CompendiumSearchEntry,
 } from "@/api";
+import { displayIdentifier } from "@/campaigns/display";
 import {
   startRepositoryImport,
   subscribeRepositoryImport,
@@ -338,6 +376,7 @@ export default defineComponent({
     Message,
     ProgressBar,
     ProgressSpinner,
+    Select,
     Textarea,
     ToggleSwitch,
   },
@@ -345,7 +384,22 @@ export default defineComponent({
     return {
       campaign: undefined as Campaign | undefined,
       items: [] as Item[],
+      entries: [] as CompendiumSearchEntry[],
       query: "",
+      kind: "all",
+      kindOptions: [
+        { label: "All resources", value: "all" },
+        { label: "Spells", value: "spell" },
+        { label: "Classes", value: "class" },
+        { label: "Species and races", value: "race" },
+        { label: "Backgrounds", value: "background" },
+        { label: "Feats", value: "feat" },
+        { label: "Equipment", value: "item" },
+        { label: "Weapons", value: "weapon" },
+        { label: "Armour", value: "armor" },
+        { label: "Creatures", value: "monster" },
+      ],
+      exporting: false,
       editorOpen: false,
       editing: undefined as Item | undefined,
       name: "",
@@ -368,24 +422,16 @@ export default defineComponent({
     campaignId(): number {
       return Number(this.$route.params.id);
     },
-    filtered(): Item[] {
+    filtered(): CompendiumSearchEntry[] {
       const needle = this.query.trim().toLowerCase();
-      if (!needle) {
-        return this.items;
-      }
-      return this.items.filter((item) =>
-        [
-          item.name,
-          item.description,
-          item.source_system,
-          item.equipment.category,
-          item.equipment.item_type,
-          item.equipment.source_book,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
+      return this.entries.filter(
+        (entry) =>
+          (this.kind === "all" || entry.kind === this.kind) &&
+          [entry.name, entry.description, entry.source, entry.kind]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(needle),
       );
     },
     filteredRepositories(): CompendiumRepository[] {
@@ -420,6 +466,94 @@ export default defineComponent({
       );
     },
 
+    displayIdentifier,
+
+    customItem(entry: CompendiumSearchEntry): Item | undefined {
+      return entry.is_custom
+        ? this.items.find((item) => item.id === entry.id && !item.is_imported)
+        : undefined;
+    },
+
+    editEntry(entry: CompendiumSearchEntry): void {
+      const item = this.customItem(entry);
+
+      if (item) {
+        this.openEditor(item);
+      }
+    },
+
+    async removeEntry(entry: CompendiumSearchEntry): Promise<void> {
+      const item = this.customItem(entry);
+
+      if (item) {
+        await this.remove(item);
+      }
+    },
+
+    spellLevel(entry: CompendiumSearchEntry): string {
+      if (entry.kind !== "spell") {
+        return "";
+      }
+      const level = Number(entry.details.level ?? 0);
+
+      return level === 0 ? "Cantrip" : `Level ${level}`;
+    },
+
+    spellFacts(entry: CompendiumSearchEntry): Array<{
+      label: string;
+      value: string;
+    }> {
+      return [
+        ["Casting time", entry.details.casting_time],
+        ["Range", entry.details.range],
+        ["Target", entry.details.target],
+        ["Components", entry.details.components],
+        ["Materials", entry.details.materials],
+        ["Duration", entry.details.duration],
+        ["School", entry.details.school],
+        ["Classes", entry.details.classes],
+      ].flatMap(([label, value]) => {
+        if (value === undefined || value === null || value === "") {
+          return [];
+        }
+
+        return [
+          {
+            label: String(label),
+            value: Array.isArray(value) ? value.join(", ") : String(value),
+          },
+        ];
+      });
+    },
+
+    async exportCustomContent(): Promise<void> {
+      if (!this.campaign?.is_game_master) {
+        return;
+      }
+
+      this.exporting = true;
+      try {
+        const result = await exportCompendiumCustomContent(this.campaignId);
+        const bytes = Uint8Array.from(atob(result.content_base64), (value) =>
+          value.charCodeAt(0),
+        );
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = result.filename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        this.showSuccess(`Exported ${result.resource_count} custom resources.`);
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to export custom content.";
+      } finally {
+        this.exporting = false;
+      }
+    },
+
     dismissError(open: boolean): void {
       if (!open) {
         this.error = "";
@@ -437,10 +571,11 @@ export default defineComponent({
     async load(): Promise<void> {
       this.itemsLoading = true;
       try {
-        [this.campaign, this.items, this.packs] = await Promise.all([
+        [this.campaign, this.items, this.packs, this.entries] = await Promise.all([
           getCampaign(this.campaignId),
           getItems(this.campaignId),
           getCompendiumSources(this.campaignId),
+          searchCompendiumEntries(this.campaignId, "all"),
         ]);
       } catch (exception) {
         this.error =
@@ -453,6 +588,10 @@ export default defineComponent({
     },
 
     async openPacks(): Promise<void> {
+      if (!this.campaign?.is_game_master) {
+        return;
+      }
+
       this.packsOpen = true;
       if (this.registry.length || this.repositoriesLoading) {
         return;

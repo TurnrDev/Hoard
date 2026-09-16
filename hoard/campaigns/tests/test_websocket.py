@@ -96,6 +96,76 @@ class ContextSocketTests(TransactionTestCase):
         self.assertEqual(response["request_id"], message["request_id"])
         self.assertEqual(response["data"]["year"], 81)
 
+    def test_spell_edit_clones_published_content_and_switches_character(self) -> None:
+        repository = CompendiumRepository.objects.create(
+            identifier="spell-test-default", name="Published"
+        )
+        source = CompendiumSource.objects.create(
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            version="test",
+            system_definition={
+                "id": "5e",
+                "character_stats": [{"id": "spells", "type": "base"}],
+                "resources": [{"id": "spell", "stats": [], "mechanics": []}],
+            },
+        )
+        self.campaign.compendium_sources.add(source)
+        character = Character.objects.create(
+            campaign=self.campaign,
+            name="Mage",
+            character_class="Wizard",
+            strength=10,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+        )
+        spell = CompendiumEntry.objects.create(
+            source=source,
+            kind=CompendiumEntry.Kind.SPELL,
+            source_identifier="spell:flame",
+            name="Produce Flame",
+            data={"resource_id": "spell", "stats": {"id": {"value": "spell:flame"}}},
+        )
+        character.spells.add(spell)
+        card = {
+            "name": "Blue Flame",
+            "level": 0,
+            "school": "Conjuration",
+            "casting_time": "1 action",
+            "range": "Self",
+            "target": "One creature",
+            "components": "V, S",
+            "materials": "",
+            "duration": "10 minutes",
+            "concentration": True,
+            "ritual": False,
+            "classes": ["Druid"],
+            "description": "A blue flame appears.",
+        }
+
+        response = async_to_sync(self.socket_request)(
+            self.user,
+            self.context.pk,
+            {
+                "type": "characters.spells.edit",
+                "request_id": request_id(),
+                "character_id": character.pk,
+                "spell_id": spell.pk,
+                "mode": "clone",
+                "spell": card,
+            },
+        )
+
+        self.assertEqual(response["type"], "command.ack")
+        attached = character.spells.get()
+        self.assertNotEqual(attached.pk, spell.pk)
+        self.assertEqual(attached.name, "Blue Flame")
+        self.assertEqual(attached.source.repository.campaign_id, self.campaign.pk)
+
     def test_calendar_command_validates_its_pydantic_payload(self) -> None:
         message = {
             "type": "campaign.calendar.adjust",
@@ -203,6 +273,21 @@ class ContextSocketTests(TransactionTestCase):
             wisdom=10,
             charisma=10,
             is_active=True,
+        )
+        repository = await database_sync_to_async(CompendiumRepository.objects.create)(
+            identifier="inspiration-test",
+            name="Inspiration test",
+        )
+        source = await database_sync_to_async(CompendiumSource.objects.create)(
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            system_definition={"id": "5e", "character_stats": []},
+        )
+        await database_sync_to_async(self.campaign.compendium_sources.add)(source)
+        character.native_system_source = source
+        await database_sync_to_async(character.save)(
+            update_fields=("native_system_source",)
         )
         game_master_socket = WebsocketCommunicator(
             URLRouter(websocket_urlpatterns), f"/ws/contexts/{self.context.pk}/"
@@ -598,6 +683,41 @@ class ContextSocketTests(TransactionTestCase):
             is_active=False,
             is_build_complete=False,
         )
+        repository = CompendiumRepository.objects.create(
+            identifier="builder-test",
+            name="Builder test",
+        )
+        source = CompendiumSource.objects.create(
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            system_definition={
+                "id": "5e",
+                "character_stats": [
+                    {"id": "name", "type": "base", "default_value": ""},
+                    {"id": "base_hp", "type": "base", "default_value": 1},
+                    {"id": "current_hp", "type": "base", "default_value": 1},
+                    *[
+                        {
+                            "id": f"{ability}_score",
+                            "type": "base",
+                            "default_value": 8,
+                        }
+                        for ability in (
+                            "strength",
+                            "dexterity",
+                            "constitution",
+                            "intelligence",
+                            "wisdom",
+                            "charisma",
+                        )
+                    ],
+                ],
+            },
+        )
+        self.campaign.compendium_sources.add(source)
+        character.native_system_source = source
+        character.save(update_fields=("native_system_source",))
         saved = async_to_sync(self.socket_request)(
             player,
             context.pk,
@@ -670,9 +790,20 @@ class ContextSocketTests(TransactionTestCase):
             identifier="level-test", name="Level test"
         )
         source = CompendiumSource.objects.create(
-            repository=repository, identifier="5e", name="5e"
+            repository=repository,
+            identifier="5e",
+            name="5e",
+            system_definition={
+                "id": "5e",
+                "character_stats": [
+                    {"id": "base_hp", "type": "base", "default_value": 1},
+                    {"id": "current_hp", "type": "base", "default_value": 1},
+                ],
+            },
         )
         self.campaign.compendium_sources.add(source)
+        character.native_system_source = source
+        character.save(update_fields=("native_system_source",))
         fighter = CompendiumEntry.objects.create(
             source=source,
             kind=CompendiumEntry.Kind.CLASS,

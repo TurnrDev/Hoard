@@ -100,11 +100,11 @@
 </template>
 
 <script lang="ts">
+import type { ActiveCondition } from "@/api";
+import { conditionIcon } from "@/campaigns/conditionDisplay";
 import OverlayBadge from "primevue/overlaybadge";
 import ProgressBar from "primevue/progressbar";
 import { defineComponent, type PropType } from "vue";
-import type { ActiveCondition } from "@/api";
-import { conditionIcon } from "@/campaigns/conditionDisplay";
 import CharacterAvatar from "./CharacterAvatar.vue";
 import ConditionIndicators from "./ConditionIndicators.vue";
 
@@ -212,23 +212,39 @@ export default defineComponent({
         .join(" — ");
     },
     healthLabel(): string {
+      const state = this.healthState === "unknown" ? "" : `, ${this.healthState}`;
+
       if (this.showHpNumbers && this.currentHp !== null && this.maxHp !== null) {
-        return `${this.name} health: ${this.currentHp} of ${this.maxHp}`;
+        return `${this.name} health: ${this.currentHp} of ${this.maxHp}${state}`;
       }
 
-      return `${this.name} health bar`;
+      return `${this.name} health bar${state}`;
     },
-    healthState(): "critical" | "wounded" | "healthy" | "unknown" {
+    healthState():
+      | "bloodied"
+      | "wounded"
+      | "damaged"
+      | "scratched"
+      | "healthy"
+      | "unknown" {
       if (!this.showHpBar || this.healthPercentage === null) {
         return "unknown";
       }
 
-      if (this.healthPercentage <= 25) {
-        return "critical";
+      if (this.healthPercentage <= 20) {
+        return "bloodied";
+      }
+
+      if (this.healthPercentage <= 40) {
+        return "wounded";
       }
 
       if (this.healthPercentage <= 60) {
-        return "wounded";
+        return "damaged";
+      }
+
+      if (this.healthPercentage < 100) {
+        return "scratched";
       }
 
       return "healthy";

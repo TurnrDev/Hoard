@@ -374,14 +374,16 @@ export default defineComponent({
     compact: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
+    remoteSearch: { type: Boolean, default: false },
   },
-  emits: ["update:modelValue"],
+  emits: ["update:modelValue", "search"],
   data() {
     return {
       open: false,
       detailItem: undefined as Item | undefined,
       page: 1,
       filters: this.initialFilters(),
+      searchTimer: undefined as number | undefined,
     };
   },
   computed: {
@@ -427,6 +429,24 @@ export default defineComponent({
         this.page = this.pageCount;
       }
     },
+    "filters.search"(query: string): void {
+      if (!this.remoteSearch) {
+        return;
+      }
+
+      if (this.searchTimer !== undefined) {
+        window.clearTimeout(this.searchTimer);
+      }
+
+      this.searchTimer = window.setTimeout(() => {
+        this.$emit("search", query);
+      }, 250);
+    },
+  },
+  beforeUnmount(): void {
+    if (this.searchTimer !== undefined) {
+      window.clearTimeout(this.searchTimer);
+    }
   },
   methods: {
     itemSummary,
@@ -453,6 +473,10 @@ export default defineComponent({
     show(): void {
       this.filters = this.initialFilters();
       this.open = true;
+
+      if (this.remoteSearch) {
+        this.$emit("search", this.filters.search);
+      }
     },
     clear(): void {
       this.$emit("update:modelValue", undefined);

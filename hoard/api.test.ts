@@ -8,6 +8,7 @@ import {
   createMoneyExchange,
   createMoneyTransfer,
   endEncounter,
+  getCampaign,
   initialiseCsrf,
   login,
   removeCharacterCondition,
@@ -56,6 +57,23 @@ describe("API client", () => {
         headers: expect.objectContaining({ "X-CSRFToken": "token" }),
       }),
     );
+  });
+
+  it("shares simultaneous campaign reads for the same context", async () => {
+    const first = getCampaign(8);
+    const second = getCampaign(8);
+    const third = getCampaign(8);
+
+    const campaigns = await Promise.all([first, second, third]);
+
+    expect(campaigns).toEqual([
+      { id: 4, ledger: "test" },
+      { id: 4, ledger: "test" },
+      { id: 4, ledger: "test" },
+    ]);
+    expect(ensureCampaignRealtime).toHaveBeenCalledOnce();
+    expect(campaignRequest).toHaveBeenCalledOnce();
+    expect(campaignRequest).toHaveBeenCalledWith("campaign.get");
   });
 
   it("sends inventory moves over the acting context socket", async () => {

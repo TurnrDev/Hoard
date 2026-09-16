@@ -35,7 +35,10 @@
     <ItemPickerDialog
       v-model="itemId"
       :candidates="candidates"
+      :loading="itemsLoading"
+      :remote-search="action === 'give'"
       :label="action === 'give' ? 'Item' : 'Item in inventory'"
+      @search="searchAvailableItems"
     />
     <label class="d-grid gap-2 mt-3">
       <span class="fw-semibold">Quantity</span>
@@ -76,7 +79,12 @@ import Button from "primevue/button";
 import InputNumber from "primevue/inputnumber";
 import Message from "primevue/message";
 import Textarea from "primevue/textarea";
-import { createInventoryTransaction, type Character, type Item } from "@/api";
+import {
+  createInventoryTransaction,
+  searchItems,
+  type Character,
+  type Item,
+} from "@/api";
 import type { PickerCandidate } from "@/campaigns/itemPicker";
 import GmCharacterSelect from "./GmCharacterSelect.vue";
 import ItemPickerDialog from "./ItemPickerDialog.vue";
@@ -93,7 +101,6 @@ export default defineComponent({
   props: {
     contextId: { type: Number, required: true },
     characters: { type: Array as PropType<Character[]>, required: true },
-    items: { type: Array as PropType<Item[]>, required: true },
   },
   emits: ["completed"],
   data() {
@@ -104,6 +111,9 @@ export default defineComponent({
       description: "",
       action: "give" as "give" | "take",
       error: "",
+      items: [] as Item[],
+      itemsLoading: false,
+      itemSearchSequence: 0,
     };
   },
   computed: {
@@ -113,13 +123,13 @@ export default defineComponent({
     candidates(): PickerCandidate[] {
       return this.action === "give"
         ? this.items.map((item) => ({ item }))
-        : (this.selectedCharacter?.inventory.flatMap((entry) => {
-            const item = this.items.find((value) => value.id === entry.item_id);
-            return item ? [{ item, quantity: entry.quantity }] : [];
-          }) ?? []);
+        : (this.selectedCharacter?.inventory.map((entry) => ({
+            item: entry.item,
+            quantity: entry.quantity,
+          })) ?? []);
     },
     selectedItem(): Item | undefined {
-      return this.items.find((item) => item.id === this.itemId);
+      return this.candidates.find(({ item }) => item.id === this.itemId)?.item;
     },
   },
   watch: {
@@ -130,6 +140,33 @@ export default defineComponent({
     },
   },
   methods: {
+    async searchAvailableItems(query: string): Promise<void> {
+      if (this.action !== "give") {
+        return;
+      }
+
+      const sequence = ++this.itemSearchSequence;
+      this.itemsLoading = true;
+
+      try {
+        const items = await searchItems(this.contextId, query);
+
+        if (sequence === this.itemSearchSequence) {
+          this.items = items;
+        }
+      } catch (exception) {
+        if (sequence === this.itemSearchSequence) {
+          this.error =
+            exception instanceof Error
+              ? exception.message
+              : "Unable to search campaign items.";
+        }
+      } finally {
+        if (sequence === this.itemSearchSequence) {
+          this.itemsLoading = false;
+        }
+      }
+    },
     async submit(): Promise<void> {
       try {
         this.error = "";

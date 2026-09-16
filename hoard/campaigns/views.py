@@ -1,15 +1,53 @@
+import mimetypes
+from pathlib import Path
 from uuid import uuid4
 
 from django.core.cache import cache
 from django.core.files.base import ContentFile
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.http import require_POST
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.views.decorators.http import require_POST, require_safe
 
 from .models import CampaignContext, Character
 from .realtime import notify_campaign_changed
 
 MAX_CAH_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_PORTRAIT_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+@require_safe
+def character_portrait(request, filename: str):
+    """Serve a portrait only to active members of its character's campaign."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+
+    portrait_name = f"character-portraits/{filename}"
+    character = (
+        Character.objects.filter(
+            portrait=portrait_name,
+            campaign__contexts__user=request.user,
+            campaign__contexts__is_active=True,
+        )
+        .distinct()
+        .first()
+    )
+    if character is None:
+        raise Http404("Portrait not found.")
+
+    content_type, _encoding = mimetypes.guess_type(filename)
+    try:
+        portrait_file = character.portrait.open("rb")
+    except FileNotFoundError as error:
+        raise Http404("Portrait file not found.") from error
+
+    response = FileResponse(
+        portrait_file,
+        content_type=content_type or "application/octet-stream",
+        filename=Path(filename).name,
+    )
+    response["Cache-Control"] = "private, max-age=86400"
+    response["X-Content-Type-Options"] = "nosniff"
+
+    return response
 
 
 @require_POST

@@ -32,6 +32,19 @@
             </span>
           </h1>
           <p class="mb-1">{{ character.race }} · {{ character.class }}</p>
+          <p
+            v-if="character.is_dead"
+            class="mb-1 text-danger fw-semibold"
+          >
+            <span
+              class="mdi mdi-coffin me-1"
+              aria-hidden="true"
+            />
+            Dead
+            <template v-if="character.death">
+              · Died {{ character.death.campaign_date }}
+            </template>
+          </p>
           <p class="mb-0 text-body-secondary tabular-nums">
             Level {{ experienceProgress.level }} ·
             {{ formatXp(experienceProgress.current) }} ·
@@ -69,6 +82,17 @@
       @close="error = ''"
     >
       {{ error }}
+    </Message>
+    <Message
+      v-if="ownCharacter && character.is_dead && character.death?.notice_visible"
+      severity="error"
+      class="mb-4"
+    >
+      You are dead.
+      <template v-if="character.death.revival_notice_visible">
+        Your party can still revive you.
+      </template>
+      You died on {{ character.death.campaign_date }}.
     </Message>
     <Message
       v-if="character && !character.level_up_complete"
@@ -197,6 +221,8 @@
               :interactive="canEdit"
               activation-label="Adjust hit points"
               calculation-label="Maximum HP"
+              :force-back="character.sheet.current_hp === 0"
+              back-label="Death saving throws"
               @activate="openHpAdjustment"
             >
               <template #actions>
@@ -213,6 +239,52 @@
                 </template>
                 <span aria-hidden="true">/</span>
                 {{ character.sheet.max_hp }}
+              </template>
+              <template #back>
+                <div class="d-grid gap-3">
+                  <div
+                    v-for="kind in deathSaveKinds"
+                    :key="kind"
+                  >
+                    <div
+                      class="d-flex align-items-center justify-content-between gap-2"
+                    >
+                      <span class="fw-semibold">
+                        {{ kind === "successes" ? "Successes" : "Failures" }}
+                      </span>
+                      <span
+                        class="d-flex gap-1"
+                        role="group"
+                        :aria-label="`${deathSaveCount(kind)} of 3 ${kind}`"
+                      >
+                        <button
+                          v-for="index in 3"
+                          :key="index"
+                          type="button"
+                          :class="[
+                            'death-save-toggle mdi',
+                            character.death_saves[kind][index - 1]
+                              ? kind === 'successes'
+                                ? 'mdi-check-circle'
+                                : 'mdi-close-circle'
+                              : 'mdi-circle-outline',
+                          ]"
+                          :aria-label="`Set ${kind} to ${deathSaveTargetCount(kind, index - 1)}`"
+                          :aria-pressed="character.death_saves[kind][index - 1]"
+                          :disabled="deathSaveBusy || !canEdit || character.is_dead"
+                          @click="toggleDeathSave(kind, index - 1)"
+                        />
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    v-if="canEdit"
+                    label="Stabilize"
+                    icon="mdi mdi-medical-bag"
+                    :loading="stabilizationBusy"
+                    @click="stabilize"
+                  />
+                </div>
               </template>
             </CalculationCard>
           </div>
@@ -393,6 +465,16 @@
                           {{ spell.description }}
                         </p>
                       </div>
+                      <Button
+                        v-if="canEdit"
+                        icon="mdi mdi-pencil-outline"
+                        text
+                        rounded
+                        size="small"
+                        class="flex-shrink-0"
+                        :aria-label="`Edit ${spell.name}`"
+                        @click="openExistingSpellEditor(spell)"
+                      />
                       <Button
                         v-if="canEdit"
                         size="small"
@@ -646,16 +728,16 @@
 
         <section class="mt-4 border rounded-3 p-3 p-md-4">
           <header class="d-flex align-items-center gap-2 flex-wrap">
-            Inventory
+            Equipment
             <span class="small text-body-secondary ms-2">
-              {{ character.inventory.length }} items
+              {{ character.inventory.length }} carried
             </span>
             <span class="flex-grow-1" />
             <Button
               v-if="canAct"
               size="small"
               icon="mdi mdi-plus"
-              @click="addItemOpen = true"
+              @click="openAddItemDialog"
             >
               Add item
             </Button>
@@ -669,6 +751,7 @@
               <thead>
                 <tr>
                   <th scope="col">Item</th>
+                  <th scope="col">Type</th>
                   <th
                     scope="col"
                     class="text-end tabular-nums"
@@ -687,6 +770,8 @@
                   >
                     Value
                   </th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Attunement</th>
                   <th
                     scope="col"
                     class="text-end"
@@ -701,8 +786,40 @@
                   :key="entry.item_id"
                 >
                   <th scope="row">{{ entry.name }}</th>
+                  <td>
+                    {{
+                      displayName(
+                        entry.item.equipment.item_type ||
+                          entry.item.equipment.category ||
+                          "item",
+                      )
+                    }}
+                  </td>
                   <td class="text-end tabular-nums">
                     {{ entry.quantity.toLocaleString() }}
+                  </td>
+                  <td>{{ entry.equipped ? "Equipped" : "Carried" }}</td>
+                  <td>
+                    <Button
+                      v-if="entry.item.equipment.requires_attunement"
+                      size="small"
+                      text
+                      :icon="
+                        entry.is_attuned
+                          ? 'mdi mdi-link-variant'
+                          : 'mdi mdi-link-variant-off'
+                      "
+                      :label="entry.is_attuned ? 'Attuned' : 'Attune'"
+                      :aria-label="`${entry.is_attuned ? 'Remove attunement from' : 'Attune to'} ${entry.name}`"
+                      :disabled="!canEdit || attunementBusyItemId === entry.item_id"
+                      @click="toggleItemAttunement(entry)"
+                    />
+                    <span
+                      v-else
+                      class="text-body-secondary"
+                    >
+                      Not required
+                    </span>
                   </td>
                   <td class="text-end tabular-nums">
                     {{ formatItemWeight(entry.item) }}
@@ -728,11 +845,12 @@
               v-else
               class="text-body-secondary"
             >
-              No inventory recorded.
+              No equipment recorded.
             </span>
           </div>
         </section>
         <section
+          v-if="character.effects.length"
           class="mt-4 border rounded-3 p-3 p-md-4"
           aria-labelledby="equipment-heading"
         >
@@ -741,7 +859,7 @@
               id="equipment-heading"
               class="h4 mb-0"
             >
-              Equipment and effects
+              Active effects
             </h2>
             <span class="flex-grow-1" />
             <Button
@@ -755,43 +873,6 @@
           </header>
 
           <div class="d-grid gap-4">
-            <section v-if="character.loadout.length">
-              <h3 class="h6 mb-2">
-                Equipment
-                <span class="fw-normal text-body-secondary">
-                  {{ character.loadout.length }}
-                </span>
-              </h3>
-              <div
-                class="table-responsive"
-                tabindex="0"
-                aria-label="Character equipment table"
-              >
-                <table class="table table-striped mb-0">
-                  <caption class="visually-hidden">
-                    Equipment carried by {{ character.name }}
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Item</th>
-                      <th scope="col">Slot</th>
-                      <th scope="col">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="item in character.loadout"
-                      :key="item.id"
-                    >
-                      <th scope="row">{{ item.name }}</th>
-                      <td>{{ displayName(item.slot) }}</td>
-                      <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
             <section v-if="character.effects.length">
               <h3 class="h6 mb-2">
                 Active effects
@@ -878,13 +959,6 @@
                 </table>
               </div>
             </section>
-
-            <p
-              v-if="!character.loadout.length && !character.effects.length"
-              class="text-body-secondary mb-0"
-            >
-              No equipment is equipped and no effects are tracked.
-            </p>
           </div>
         </section>
         <section
@@ -1266,8 +1340,11 @@
           <ItemPickerDialog
             v-model="grantItemId"
             :candidates="allItemCandidates"
+            :loading="itemsLoading"
+            remote-search
             label="Item"
             no-data-text="No campaign items available."
+            @search="searchAvailableItems"
           />
           <label class="form-label mb-0">
             Quantity
@@ -1295,6 +1372,70 @@
           />
         </footer>
       </section>
+    </Dialog>
+    <Dialog
+      v-model:visible="nativeBehaviourOpen"
+      header="System behaviour"
+      :style="{ width: 'min(40rem, calc(100vw - 2rem))' }"
+    >
+      <p class="text-body-secondary">
+        This control comes from the active RPG Companion system. Hoard executes its
+        event and mechanics against authoritative native character state, then updates
+        the familiar sheet fields as read-only projections.
+      </p>
+      <dl v-if="nativeBehaviourNode">
+        <dt>Control</dt>
+        <dd>{{ displayName(String(nativeBehaviourNode.id ?? "native control")) }}</dd>
+        <dt>Event</dt>
+        <dd>
+          <code>{{ nativeBehaviourEvent }}</code>
+        </dd>
+      </dl>
+      <Message
+        v-if="!nativeBehaviourEvent"
+        severity="warn"
+      >
+        This native view does not expose a directly executable event. Hoard keeps the
+        control visible so unsupported behaviour is not silently omitted.
+      </Message>
+    </Dialog>
+    <Dialog
+      v-model:visible="nativeResourcePickerOpen"
+      :header="`Add ${displayName(nativeResourceKind || 'resource')}`"
+      :style="{ width: 'min(38rem, calc(100vw - 2rem))' }"
+    >
+      <div class="d-flex gap-2 mb-3">
+        <InputText
+          v-model="nativeResourceQuery"
+          placeholder="Search enabled Compendium content"
+          fluid
+          @keyup.enter.prevent="searchNativeResources"
+        />
+        <Button
+          label="Search"
+          icon="mdi mdi-magnify"
+          @click="searchNativeResources"
+        />
+      </div>
+      <div class="list-group">
+        <button
+          v-for="entry in nativeResourceResults"
+          :key="entry.id"
+          type="button"
+          class="list-group-item list-group-item-action text-start"
+          @click="attachNativeResource(entry.id)"
+        >
+          <strong>{{ entry.name }}</strong>
+          <span class="small text-body-secondary ms-2">{{ entry.source }}</span>
+        </button>
+      </div>
+      <Message
+        v-if="!nativeResourceResults.length"
+        severity="info"
+        class="mb-0"
+      >
+        Search the enabled Compendium for this native resource type.
+      </Message>
     </Dialog>
     <Dialog
       v-model:visible="noteRemoveOpen"
@@ -1590,8 +1731,13 @@
         class="d-grid gap-3"
         @submit.prevent="saveSpell"
       >
-        <h2 class="h3 mb-0">Add spell</h2>
-        <div class="d-flex gap-2">
+        <h2 class="h3 mb-0">
+          {{ editingSpell ? `Edit ${editingSpell.name}` : "Add spell" }}
+        </h2>
+        <div
+          v-if="!editingSpell"
+          class="d-flex gap-2"
+        >
           <InputText
             v-model="spellQuery"
             placeholder="Search the compendium"
@@ -1606,7 +1752,7 @@
           />
         </div>
         <div
-          v-if="spellResults.length"
+          v-if="!editingSpell && spellResults.length"
           class="list-group"
         >
           <button
@@ -1620,9 +1766,39 @@
             <span class="small text-body-secondary ms-2">{{ result.source }}</span>
           </button>
         </div>
-        <p class="small text-body-secondary mb-0">
+        <p
+          v-if="!editingSpell"
+          class="small text-body-secondary mb-0"
+        >
           Choose an existing spell, or create a campaign-custom spell below.
         </p>
+        <Message
+          v-else-if="!editingSpell.is_custom"
+          severity="info"
+        >
+          Published Compendium content is immutable. Saving creates a campaign-custom
+          copy and switches only this character to it.
+        </Message>
+        <div v-else>
+          <label
+            for="spell-edit-mode"
+            class="form-label"
+          >
+            Apply changes
+          </label>
+          <Select
+            id="spell-edit-mode"
+            v-model="spellEditMode"
+            :options="spellEditModes"
+            option-label="label"
+            option-value="value"
+            fluid
+          />
+          <div class="form-text">
+            Shared updates affect every character using this custom spell. A copy only
+            changes this character.
+          </div>
+        </div>
         <div>
           <label
             for="spell-name"
@@ -1817,8 +1993,8 @@
           />
           <Button
             type="submit"
-            label="Add spell"
-            icon="mdi mdi-plus"
+            :label="editingSpell ? 'Save spell' : 'Add spell'"
+            :icon="editingSpell ? 'mdi mdi-content-save-outline' : 'mdi mdi-plus'"
             :loading="spellBusy"
             :disabled="!spellName.trim()"
           />
@@ -2192,22 +2368,29 @@ import Textarea from "primevue/textarea";
 import { defineComponent } from "vue";
 import {
   archiveCharacter,
+  attachCharacterNativeResource,
   castCharacterSpell,
   changeCharacterSheetRecord,
   createCompendiumSpell,
+  editCharacterSpell,
+  executeCharacterNativeEvent,
   createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
+  detachCharacterNativeResource,
   getCampaign,
-  getItems,
   getTransactions,
   postHealth,
   removeCharacterCondition,
   removeCharacterPortrait,
   restCharacter,
+  searchItems,
   searchCompendiumEntries,
   setCharacterCondition,
+  setCharacterDeathSaves,
+  setCharacterItemAttunement,
   setCharacterInspiration,
+  stabilizeCharacter,
   updateCharacter,
   uploadCharacterPortrait,
   type Campaign,
@@ -2217,6 +2400,7 @@ import {
   type Item,
   type LedgerTransaction,
   type CompendiumSearchEntry,
+  type NativeViewNode,
 } from "@/api";
 import { exchangedCoinAmount } from "@/campaigns/coinExchange";
 import {
@@ -2329,9 +2513,21 @@ export default defineComponent({
       ownCharacter: false,
       characters: [] as Character[],
       items: [] as Item[],
+      itemsLoading: false,
+      itemSearchSequence: 0,
+      attunementBusyItemId: undefined as number | undefined,
+      deathSaveBusy: false,
+      stabilizationBusy: false,
+      deathSaveKinds: ["successes", "failures"] as const,
       flippedAbilityKey: "",
       moneyValueVisible: readCoinDisplayMode() === "value",
       error: typeof levelUpError === "string" ? levelUpError : "",
+      nativeBehaviourOpen: false,
+      nativeBehaviourNode: undefined as NativeViewNode | undefined,
+      nativeResourcePickerOpen: false,
+      nativeResourceKind: "",
+      nativeResourceQuery: "",
+      nativeResourceResults: [] as CompendiumSearchEntry[],
       grantItemId: undefined as number | undefined,
       grantQuantity: 1,
       itemAction: undefined as "use" | "destroy" | "transfer" | undefined,
@@ -2362,6 +2558,12 @@ export default defineComponent({
       shortRestOpen: false,
       shortRestHp: 0,
       spellEditorOpen: false,
+      editingSpell: undefined as Character["spells"][number] | undefined,
+      spellEditMode: "shared" as "shared" | "clone",
+      spellEditModes: [
+        { label: "Update shared custom spell", value: "shared" },
+        { label: "Clone for this character", value: "clone" },
+      ],
       spellRemoveOpen: false,
       spellBusy: false,
       spellToRemove: undefined as Character["spells"][number] | undefined,
@@ -2402,6 +2604,43 @@ export default defineComponent({
     };
   },
   computed: {
+    nativeExtensionSections(): Character["native_sheet"]["sections"] {
+      const customSections = new Set([
+        "avatar",
+        "conditions",
+        "status",
+        "abilities",
+        "saving_throws",
+        "skills",
+        "equipment",
+        "weapons",
+        "features",
+        "notes",
+        "spell_slots",
+        "spells",
+        "companions",
+      ]);
+
+      return (this.character?.native_sheet.sections ?? []).filter(
+        (section) => !customSections.has(section.id),
+      );
+    },
+    nativeBehaviourEvent(): string {
+      const event = this.nativeBehaviourNode?.system_behaviour?.event;
+      if (typeof event === "string") {
+        return event;
+      }
+      if (typeof event === "object" && event !== null) {
+        const name = (event as Record<string, unknown>).name;
+        if (typeof name === "object" && name !== null && "formula" in name) {
+          return String((name as Record<string, unknown>).value ?? "");
+        }
+
+        return String(name ?? "");
+      }
+
+      return "";
+    },
     characterActionItems(): MenuItem[] {
       const items: MenuItem[] = [];
 
@@ -2419,22 +2658,34 @@ export default defineComponent({
         });
       }
 
+      items.push({
+        label: "Add condition",
+        icon: "mdi mdi-bandage",
+        command: () => this.openConditionManager(),
+      });
+
+      if (this.needsStabilization) {
+        items.push({
+          label: "Stabilize",
+          icon: "mdi mdi-medical-bag",
+          command: () => void this.stabilize(),
+        });
+      } else {
+        items.push(
+          {
+            label: "Short rest",
+            icon: "mdi mdi-weather-sunset",
+            command: () => this.openShortRest(),
+          },
+          {
+            label: "Long rest",
+            icon: "mdi mdi-weather-night",
+            command: () => void this.takeRest("long"),
+          },
+        );
+      }
+
       items.push(
-        {
-          label: "Add condition",
-          icon: "mdi mdi-bandage",
-          command: () => this.openConditionManager(),
-        },
-        {
-          label: "Short rest",
-          icon: "mdi mdi-weather-sunset",
-          command: () => this.openShortRest(),
-        },
-        {
-          label: "Long rest",
-          icon: "mdi mdi-weather-night",
-          command: () => void this.takeRest("long"),
-        },
         { separator: true },
         {
           label: "Edit character",
@@ -2492,7 +2743,7 @@ export default defineComponent({
       ];
     },
     hpActionItems(): MenuItem[] {
-      return [
+      const items: MenuItem[] = [
         {
           label: "Add temporary HP",
           icon: "mdi mdi-shield-plus-outline",
@@ -2504,17 +2755,30 @@ export default defineComponent({
           command: () => this.openHealthFor("damage"),
         },
         { separator: true },
-        {
-          label: "Short rest",
-          icon: "mdi mdi-weather-sunset",
-          command: () => this.openShortRest(),
-        },
-        {
-          label: "Long rest",
-          icon: "mdi mdi-weather-night",
-          command: () => void this.takeRest("long"),
-        },
       ];
+
+      if (this.needsStabilization) {
+        items.push({
+          label: "Stabilize",
+          icon: "mdi mdi-medical-bag",
+          command: () => void this.stabilize(),
+        });
+      } else {
+        items.push(
+          {
+            label: "Short rest",
+            icon: "mdi mdi-weather-sunset",
+            command: () => this.openShortRest(),
+          },
+          {
+            label: "Long rest",
+            icon: "mdi mdi-weather-night",
+            command: () => void this.takeRest("long"),
+          },
+        );
+      }
+
+      return items;
     },
     refreshRevision(): number {
       return campaignRefreshRevision.value;
@@ -2551,10 +2815,20 @@ export default defineComponent({
       return this.items.map((item) => ({ item }));
     },
     inventoryRows() {
-      return (this.character?.inventory ?? []).map((entry) => ({
-        ...entry,
-        item: this.items.find((item) => item.id === entry.item_id),
-      }));
+      const loadoutByItem = new Map(
+        (this.character?.loadout ?? []).map((entry) => [entry.item_id, entry]),
+      );
+
+      return (this.character?.inventory ?? []).map((entry) => {
+        const loadout = loadoutByItem.get(entry.item_id);
+
+        return {
+          ...entry,
+          item: entry.item,
+          equipped: loadout?.equipped ?? false,
+          slot: loadout?.slot ?? "other",
+        };
+      });
     },
     destinationOptions() {
       return this.characters
@@ -2618,6 +2892,12 @@ export default defineComponent({
       const sheet = this.character?.sheet;
 
       return Boolean(sheet && sheet.current_hp < sheet.max_hp);
+    },
+    needsStabilization(): boolean {
+      return Boolean(
+        this.character &&
+        (this.character.sheet.current_hp === 0 || this.character.is_dead),
+      );
     },
     movementSpeedLabel(): string {
       const speed = this.character?.sheet.speed.trim();
@@ -2774,6 +3054,190 @@ export default defineComponent({
     },
   },
   methods: {
+    deathSaveCount(kind: "successes" | "failures"): number {
+      return this.character?.death_saves[kind].filter(Boolean).length ?? 0;
+    },
+    deathSaveTargetCount(kind: "successes" | "failures", index: number): number {
+      const currentValue = this.character?.death_saves[kind][index] ?? false;
+
+      return currentValue ? index : index + 1;
+    },
+    async toggleDeathSave(
+      kind: "successes" | "failures",
+      index: number,
+    ): Promise<void> {
+      if (!this.character || this.deathSaveBusy || !this.canEdit) {
+        return;
+      }
+
+      const targetCount = this.deathSaveTargetCount(kind, index);
+      this.deathSaveBusy = true;
+
+      try {
+        await setCharacterDeathSaves(
+          this.campaignId,
+          this.character.id,
+          kind,
+          targetCount,
+        );
+        this.showSuccess(
+          `${targetCount} ${kind === "successes" ? "success" : "failure"}${targetCount === 1 ? "" : "s"} marked.`,
+        );
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to update death saving throws.";
+      } finally {
+        this.deathSaveBusy = false;
+      }
+    },
+    async stabilize(): Promise<void> {
+      if (!this.character || !this.canEdit || this.stabilizationBusy) {
+        return;
+      }
+
+      this.stabilizationBusy = true;
+      this.error = "";
+
+      try {
+        await stabilizeCharacter(this.campaignId, this.character.id);
+        await this.load();
+        this.showSuccess("Character stabilized at 1 HP and is prone.");
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to stabilize this character.";
+      } finally {
+        this.stabilizationBusy = false;
+      }
+    },
+    async toggleItemAttunement(entry: InventoryRow): Promise<void> {
+      if (!this.character || this.attunementBusyItemId || !this.canEdit) {
+        return;
+      }
+
+      this.attunementBusyItemId = entry.item_id;
+
+      try {
+        await setCharacterItemAttunement(
+          this.campaignId,
+          this.character.id,
+          entry.item_id,
+          !entry.is_attuned,
+        );
+        this.showSuccess(entry.is_attuned ? "Attunement removed." : "Item attuned.");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to change attunement.";
+      } finally {
+        this.attunementBusyItemId = undefined;
+      }
+    },
+    showNativeBehaviour(node: NativeViewNode): void {
+      this.nativeBehaviourNode = node;
+      this.nativeBehaviourOpen = true;
+    },
+    async openNativeResourcePicker(kind: string): Promise<void> {
+      this.nativeResourceKind = kind;
+      this.nativeResourceQuery = "";
+      this.nativeResourceResults = [];
+      this.nativeResourcePickerOpen = true;
+      await this.searchNativeResources();
+    },
+    async searchNativeResources(): Promise<void> {
+      if (!this.nativeResourceKind) {
+        return;
+      }
+
+      try {
+        this.nativeResourceResults = await searchCompendiumEntries(
+          this.campaignId,
+          this.nativeResourceKind,
+          this.nativeResourceQuery,
+        );
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to search native resources.";
+      }
+    },
+    async attachNativeResource(entryId: number): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        await attachCharacterNativeResource(
+          this.campaignId,
+          this.character.id,
+          entryId,
+        );
+        this.nativeResourcePickerOpen = false;
+        this.showSuccess("Resource attached.");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to attach resource.";
+      }
+    },
+    async detachNativeResource(entryId: number): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        await detachCharacterNativeResource(
+          this.campaignId,
+          this.character.id,
+          entryId,
+        );
+        this.showSuccess("Resource detached. Compendium content was kept.");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to detach resource.";
+      }
+    },
+    async runNativeControl(control: {
+      eventName: string;
+      viewValues?: Record<string, unknown>;
+      statUpdates?: Record<string, unknown>;
+    }): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+
+      try {
+        const result = await executeCharacterNativeEvent(
+          this.campaignId,
+          this.character.id,
+          control.eventName,
+          {
+            view_values: control.viewValues,
+            stat_updates: control.statUpdates,
+          },
+        );
+        const message = result.messages.at(-1);
+        this.showSuccess(
+          typeof message?.message === "string"
+            ? message.message
+            : "System action applied.",
+        );
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to apply the system action.";
+      }
+    },
     showAbilityCalculation(abilityKey: string): void {
       this.flippedAbilityKey = abilityKey;
     },
@@ -2980,6 +3444,8 @@ export default defineComponent({
       }
     },
     openSpellEditor(): void {
+      this.editingSpell = undefined;
+      this.spellEditMode = "shared";
       this.spellName = "";
       this.spellLevel = 0;
       this.spellDescription = "";
@@ -2995,6 +3461,26 @@ export default defineComponent({
       this.spellClasses = "";
       this.spellConcentration = false;
       this.spellRitual = false;
+      this.spellEditorOpen = true;
+    },
+    openExistingSpellEditor(spell: Character["spells"][number]): void {
+      this.editingSpell = spell;
+      this.spellEditMode = spell.is_custom ? "shared" : "clone";
+      this.spellName = spell.name;
+      this.spellLevel = spell.level;
+      this.spellDescription = spell.description;
+      this.spellCastingTime = spell.casting_time;
+      this.spellRange = spell.range;
+      this.spellTarget = spell.target;
+      this.spellComponents = spell.components;
+      this.spellMaterials = spell.materials;
+      this.spellDuration = spell.duration;
+      this.spellSchool = spell.school;
+      this.spellClasses = spell.classes.join(", ");
+      this.spellConcentration = spell.concentration;
+      this.spellRitual = spell.ritual;
+      this.spellQuery = "";
+      this.spellResults = [];
       this.spellEditorOpen = true;
     },
     async searchSpells(): Promise<void> {
@@ -3052,7 +3538,7 @@ export default defineComponent({
       this.spellBusy = true;
 
       try {
-        const entry = await createCompendiumSpell(this.campaignId, {
+        const card = {
           name: this.spellName.trim(),
           level: this.spellLevel,
           school: this.spellSchool.trim(),
@@ -3069,7 +3555,21 @@ export default defineComponent({
             .map((value) => value.trim())
             .filter(Boolean),
           description: this.spellDescription.trim(),
-        });
+        };
+        if (this.editingSpell) {
+          await editCharacterSpell(
+            this.campaignId,
+            this.character.id,
+            this.editingSpell.id,
+            this.editingSpell.is_custom ? this.spellEditMode : "clone",
+            card,
+          );
+          this.spellEditorOpen = false;
+          this.showSuccess(`${this.spellName.trim()} saved.`);
+          await this.load();
+          return;
+        }
+        const entry = await createCompendiumSpell(this.campaignId, card);
         await changeCharacterSheetRecord(
           this.campaignId,
           this.character.id,
@@ -3325,9 +3825,8 @@ export default defineComponent({
     },
     async load(): Promise<void> {
       try {
-        const [nextCampaign, nextItems, recent] = await Promise.all([
+        const [nextCampaign, recent] = await Promise.all([
           getCampaign(this.campaignId),
-          getItems(this.campaignId),
           getTransactions(this.campaignId, "all", 1, this.characterId),
         ]);
 
@@ -3345,7 +3844,6 @@ export default defineComponent({
           return;
         }
 
-        this.items = nextItems;
         this.activity = recent.results.slice(0, 5);
 
         if (!this.character) {
@@ -3356,6 +3854,32 @@ export default defineComponent({
           exception instanceof Error
             ? exception.message
             : "Unable to load character profile.";
+      }
+    },
+    openAddItemDialog(): void {
+      this.addItemOpen = true;
+    },
+    async searchAvailableItems(query: string): Promise<void> {
+      const sequence = ++this.itemSearchSequence;
+      this.itemsLoading = true;
+
+      try {
+        const items = await searchItems(this.campaignId, query);
+
+        if (sequence === this.itemSearchSequence) {
+          this.items = items;
+        }
+      } catch (exception) {
+        if (sequence === this.itemSearchSequence) {
+          this.error =
+            exception instanceof Error
+              ? exception.message
+              : "Unable to search campaign items.";
+        }
+      } finally {
+        if (sequence === this.itemSearchSequence) {
+          this.itemsLoading = false;
+        }
       }
     },
     async toggleInspiration(): Promise<void> {
@@ -3790,6 +4314,25 @@ export default defineComponent({
 .sheet-copy {
   overflow-wrap: anywhere;
   white-space: pre-line;
+}
+
+.death-save-toggle {
+  border: 0;
+  border-radius: 50%;
+  padding: 0.125rem;
+  background: transparent;
+  color: currentColor;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.death-save-toggle:focus-visible {
+  outline: 0.2rem solid var(--bs-focus-ring-color);
+  outline-offset: 0.1rem;
+}
+
+.death-save-toggle:disabled {
+  opacity: 0.65;
 }
 
 .ability-card-flip-enter-active,

@@ -26,6 +26,31 @@ class CharacterHistory(CampaignDatedEvent):
         verbose_name_plural = "Character Modifications"
 
 
+class CharacterNativeEvent(CampaignDatedEvent):
+    """Immutable audit record for one authoritative native interpreter event."""
+
+    character = models.ForeignKey(
+        "campaigns.Character",
+        on_delete=models.PROTECT,
+        related_name="native_events",
+    )
+    event_name = models.CharField(max_length=300)
+    payload = models.JSONField(default=dict)
+    system_identifier = models.CharField(max_length=200)
+    system_version = models.CharField(max_length=50, blank=True)
+    system_checksum = models.CharField(max_length=64, blank=True)
+    fired_events = models.JSONField(default=list)
+    changes = models.JSONField(default=list)
+    messages = models.JSONField(default=list)
+    interface_actions = models.JSONField(default=list)
+    delayed_effects = models.JSONField(default=list)
+    unsupported = models.JSONField(default=list)
+
+    class Meta:
+        verbose_name = "Native Character Event"
+        verbose_name_plural = "Native Character Events"
+
+
 class HealthTransaction(CampaignDatedEvent):
     class Reason(models.TextChoices):
         BASELINE = "baseline", "Baseline"

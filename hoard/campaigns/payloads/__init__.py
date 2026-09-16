@@ -14,6 +14,7 @@ from .characters import (
     CharacterInspirationChangedEvent,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
+    CharacterNativeEventCommand,
     CharacterUpdateCommand,
 )
 from .combat import (
@@ -63,6 +64,7 @@ __all__ = [
     "CharacterInspirationChangedEvent",
     "CharacterLifecycleData",
     "CharacterLifecycleEvent",
+    "CharacterNativeEventCommand",
     "CharacterUpdateCommand",
     "EncounterCharacterAddCommand",
     "EncounterCombatantAddCommand",

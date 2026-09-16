@@ -20,6 +20,12 @@ from requests.utils import urlparse
 
 from hoard.compendium.ingest.sources import import_resources, import_source_directory
 from hoard.compendium.models import CompendiumRepository, CompendiumSource
+from hoard.compendium.native import (
+    compile_native_systems,
+    compose_development_system,
+    read_published_system,
+)
+from hoard.compendium.native.packages import definition_checksum
 
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 20_000
@@ -101,25 +107,46 @@ def _import_development_sources(
         raise ValidationError(
             "Repository does not provide a supported 5e or 5e2024 source."
         )
-    for index, system_directory in enumerate(source_directories, start=1):
-        identifier = system_directory.name
-        source, _ = CompendiumSource.objects.update_or_create(
-            repository=repository,
-            identifier=identifier,
-            defaults={"name": identifier, "data": {}},
-        )
-        imported_identifiers.add(identifier)
-        _report(
-            progress,
-            "importing",
-            f"Importing {identifier}",
-            index,
-            len(source_directories),
-        )
-        counts = import_source_directory(system_directory, source)
-        created += counts[0]
-        updated += counts[1]
-        skipped += counts[2]
+    requires_compiler = any(
+        next(system_directory.rglob("*.rpgs"), None) is not None
+        for system_directory in source_directories
+    )
+    with TemporaryDirectory(prefix="hoard-rpgscript-") as temporary:
+        compiled = Path(temporary) / "compiled"
+        if requires_compiler:
+            _report(progress, "compiling", "Compiling RPGScript system definitions")
+            compile_native_systems(systems, compiled)
+
+        for index, system_directory in enumerate(source_directories, start=1):
+            identifier = system_directory.name
+            source, _ = CompendiumSource.objects.update_or_create(
+                repository=repository,
+                identifier=identifier,
+                defaults={"name": identifier},
+            )
+            if requires_compiler:
+                definition = read_published_system(compiled / identifier / "system.rpg")
+            else:
+                definition = compose_development_system(system_directory)
+            update_source_definition(source, definition, "development")
+            imported_identifiers.add(identifier)
+            _report(
+                progress,
+                "importing",
+                f"Importing {identifier}",
+                index,
+                len(source_directories),
+            )
+            if requires_compiler:
+                resources = _read_published_resources(
+                    compiled / identifier / "resources.rpg.gzip"
+                )
+                counts = import_resources(resources, source)
+            else:
+                counts = import_source_directory(system_directory, source)
+            created += counts[0]
+            updated += counts[1]
+            skipped += counts[2]
     _remove_missing_supported_sources(repository, imported_identifiers)
     return created, updated, skipped
 
@@ -169,6 +196,8 @@ def _import_published_sources(
                 "data": {"manifest": system},
             },
         )
+        definition = read_published_system(system_directory / "system.rpg")
+        update_source_definition(source, definition, "published")
         imported_identifiers.add(identifier)
         _report(
             progress,
@@ -184,6 +213,30 @@ def _import_published_sources(
         skipped += counts[2]
     _remove_missing_supported_sources(repository, imported_identifiers)
     return created, updated, skipped
+
+
+def update_source_definition(
+    source: CompendiumSource, definition: dict[str, object], layout: str
+) -> None:
+    """Persist a complete native definition and its compatibility metadata."""
+    source.name = _system_name(definition, source.identifier)
+    version = definition.get("version")
+    minimum = definition.get("min_app_version")
+    source.version = version if isinstance(version, str) else ""
+    source.minimum_app_version = minimum if isinstance(minimum, str) else ""
+    source.package_layout = layout
+    source.package_checksum = definition_checksum(definition)
+    source.system_definition = definition
+    source.save(
+        update_fields=(
+            "name",
+            "version",
+            "minimum_app_version",
+            "package_layout",
+            "package_checksum",
+            "system_definition",
+        )
+    )
 
 
 def _supported_source_identifiers(
@@ -239,7 +292,7 @@ def _read_published_resources(path: Path) -> list[tuple[dict[str, object], str]]
                 raise ValidationError(
                     "RPG Companion resource bundle contains an unsafe path."
                 )
-            if not member.isfile():
+            if not member.isfile() or member.name.endswith("/"):
                 continue
             content = archive.extractfile(member)
             if content is None:
@@ -249,7 +302,9 @@ def _read_published_resources(path: Path) -> list[tuple[dict[str, object], str]]
                     _read_gzip(content.read(), "RPG Companion resource")
                 )
             except json.JSONDecodeError as error:
-                raise ValidationError("RPG Companion resource is invalid.") from error
+                raise ValidationError(
+                    f"RPG Companion resource {member.name} is invalid."
+                ) from error
             if isinstance(resource, dict):
                 resources.append((resource, Path(member.name).stem))
     return resources

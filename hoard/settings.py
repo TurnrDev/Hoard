@@ -22,7 +22,10 @@ VITE_DIST_DIR: Path = BASE_DIR / "hoard" / "dist"
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY: str = "django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m"
+SECRET_KEY: str = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG: bool = os.environ.get("DJANGO_DEBUG", "true").lower() in {
@@ -32,7 +35,11 @@ DEBUG: bool = os.environ.get("DJANGO_DEBUG", "true").lower() in {
     "on",
 }
 
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS: list[str] = [
+    host.strip()
+    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
+    if host.strip()
+]
 
 
 # Application definition
@@ -54,6 +61,7 @@ INSTALLED_APPS: list[str] = [
 
 MIDDLEWARE: list[str] = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -173,11 +181,29 @@ USE_TZ: bool = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL: str = "static/"
+STATIC_URL: str = "/static/"
 STATICFILES_DIRS: list[Path] = [VITE_DIST_DIR]
 STATIC_ROOT: Path = BASE_DIR / "staticfiles"
 MEDIA_URL: str = "media/"
 MEDIA_ROOT: Path = BASE_DIR / "media"
+
+STORAGES: dict[str, dict[str, str]] = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedStaticFilesStorage"
+        ),
+    },
+}
+
+# Vite fingerprints production assets itself. Preserve those exact names so ESM
+# imports share one module identity, while still allowing WhiteNoise to cache
+# fingerprinted assets indefinitely.
+WHITENOISE_IMMUTABLE_FILE_TEST: str = r"^.+-[A-Za-z0-9_-]{8}\.[^/]+$"
 
 DJANGO_VITE: dict[str, dict[str, object]] = {
     "default": {

@@ -66,6 +66,24 @@
       <div class="row g-3">
         <template v-if="step === 1">
           <label class="col-12 d-grid gap-2">
+            <span class="fw-semibold">Character rules</span>
+            <Select
+              :model-value="form.native_system_id"
+              :options="definition?.systems ?? []"
+              option-label="name"
+              option-value="id"
+              :loading="definitionLoading || draftLoading"
+              :disabled="systemSelectionLocked"
+              fluid
+              @update:model-value="selectSystem"
+            />
+            <small class="text-body-secondary">
+              5e and 5e 2024 equipment, spells, feats, ancestries, and backgrounds can
+              be mixed. Classes and subclasses stay in the rules version chosen when the
+              character starts.
+            </small>
+          </label>
+          <label class="col-12 d-grid gap-2">
             <span class="fw-semibold">Name</span>
             <InputText
               v-model="form.name"
@@ -256,12 +274,10 @@
           </div>
         </template>
         <template v-else-if="step === 3">
-          <Message
-            severity="info"
-            class="mb-4"
-          >
-            Choose the class receiving each campaign level. Subclass fields allow
-            Compendium or GM-approved custom choices.
+          <Message severity="info" class="mb-4">
+            Choose the class receiving each campaign level. Classes are native
+            Compendium resources; their levels and subclass selections are stored in
+            the RPG Companion character state.
           </Message>
           <div
             class="col-12 row g-3"
@@ -271,7 +287,6 @@
             <div class="col-12 col-lg-2 fw-semibold">Level {{ row.level }}</div>
             <div class="col-12 col-lg-5">
               <CompendiumEntryPicker
-                v-if="!row.is_override"
                 :model-value="row.class_entry_id"
                 :items="definition?.class"
                 label="Class"
@@ -279,36 +294,10 @@
                 :disabled="definitionLoading || draftLoading"
                 @update:model-value="selectClass(row, $event)"
               />
-              <label
-                v-else
-                class="d-grid gap-2"
-              >
-                <span class="fw-semibold">Custom class</span>
-                <InputText
-                  v-model="row.class_name"
-                  fluid
-                />
-              </label>
-              <div class="d-flex align-items-center gap-2 mt-2">
-                <Checkbox
-                  v-model="row.is_override"
-                  :input-id="`class-override-${row.level}`"
-                  binary
-                />
-                <label :for="`class-override-${row.level}`">Use a custom class</label>
-              </div>
             </div>
             <div class="col-12 col-lg-5">
               <CompendiumChoicePicker
-                v-if="row.is_override"
-                :model-value="row.subclass_name"
-                :items="[]"
-                label="Subclass / class choice override"
-                hint="Custom class metadata has no known unlock level"
-                @update:model-value="selectSubclass(row, $event)"
-              />
-              <CompendiumChoicePicker
-                v-else-if="row.class_entry_id && entryLoading(row.class_entry_id)"
+                v-if="row.class_entry_id && entryLoading(row.class_entry_id)"
                 :model-value="row.subclass_name"
                 :items="[]"
                 label="Loading class choices"
@@ -644,6 +633,7 @@ export default defineComponent({
       loadingEntryIds: new Set<number>(),
       entryRequests: new Map<number, Promise<void>>(),
       form: {
+        native_system_id: "5e" as "5e" | "5e2024",
         name: "",
         race: "",
         race_entry_id: undefined as number | undefined,
@@ -714,6 +704,13 @@ export default defineComponent({
         ...this.classLevels.map((row) => row.class_entry_id),
       ].some((id) => this.entryLoading(id));
     },
+    systemSelectionLocked(): boolean {
+      return (
+        this.definitionLoading ||
+        this.draftLoading ||
+        this.classLevels.some((row) => typeof row.class_entry_id === "number")
+      );
+    },
   },
   watch: {
     step(value: number) {
@@ -764,9 +761,13 @@ export default defineComponent({
       this.form.languages.splice(index, 1);
     },
 
-    async loadDefinition(): Promise<BuilderDefinition> {
+    async loadDefinition(systemId?: "5e" | "5e2024"): Promise<BuilderDefinition> {
       try {
-        const nextDefinition = await getBuilderDefinition(this.contextId);
+        const selectedSystemId = systemId ?? this.form.native_system_id;
+        const nextDefinition = await getBuilderDefinition(
+          this.contextId,
+          selectedSystemId,
+        );
         this.definition = nextDefinition;
 
         return nextDefinition;
@@ -795,8 +796,13 @@ export default defineComponent({
         ]);
         this.items = nextItems;
         const value = draft.character as Character;
+        const activeDefinition =
+          nextDefinition.system_id === value.native_system_id
+            ? nextDefinition
+            : await this.loadDefinition(value.native_system_id);
         this.character = value;
         Object.assign(this.form, {
+          native_system_id: value.native_system_id,
           name: value.name,
           race: value.race,
           race_entry_id: this.canonicalEntryId("race", value.race_entry_id),
@@ -828,19 +834,32 @@ export default defineComponent({
           wisdom: value.sheet.abilities.wisdom.raw,
           charisma: value.sheet.abilities.charisma.raw,
         });
-        this.classLevels = (draft.class_levels as ClassLevel[]) ?? [];
+        const nativeClasses =
+          (draft.classes as Array<{
+            class_entry_id?: number;
+            class_level: number;
+            subclass_identifier: string;
+          }>) ?? [];
+        this.classLevels = [];
+        for (const selected of nativeClasses) {
+          for (let index = 0; index < selected.class_level; index += 1) {
+            this.classLevels.push({
+              level: this.classLevels.length + 1,
+              class_entry_id: selected.class_entry_id,
+              class_name: "",
+              subclass_identifier:
+                index === selected.class_level - 1
+                  ? selected.subclass_identifier
+                  : "",
+              subclass_name: "",
+              is_override: false,
+            });
+          }
+        }
         for (const row of this.classLevels) {
           row.class_entry_id = this.canonicalEntryId("class", row.class_entry_id);
         }
-        const choices =
-          (draft.choices as Array<{
-            identifier: string;
-            values: string[];
-          }>) ?? [];
-        this.startingEquipment =
-          choices.find((choice) => choice.identifier === "starting_equipment")
-            ?.values ?? [];
-        for (let level = 1; level <= nextDefinition.level; level += 1) {
+        for (let level = 1; level <= activeDefinition.level; level += 1) {
           if (!this.classLevels.some((row) => row.level === level)) {
             this.classLevels.push({
               level,
@@ -903,9 +922,31 @@ export default defineComponent({
       await this.loadEntryData(raceEntryId);
     },
 
+    async selectSystem(value: "5e" | "5e2024"): Promise<void> {
+      if (value === this.form.native_system_id || this.systemSelectionLocked) {
+        return;
+      }
+
+      this.form.native_system_id = value;
+      this.definitionLoading = true;
+
+      try {
+        await this.loadDefinition(value);
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to change character rules.";
+      }
+    },
+
     async loadEntryDetails(id: number, candidate: BuilderEntry): Promise<void> {
       try {
-        const details = await getBuilderEntry(this.contextId, id);
+        const details = await getBuilderEntry(
+          this.contextId,
+          id,
+          this.form.native_system_id,
+        );
         Object.assign(candidate, details);
       } catch (exception) {
         this.error =
@@ -1119,14 +1160,29 @@ export default defineComponent({
             this.entry("background", this.form.background_entry_id)?.name ??
             this.form.background;
         }
-        this.classLevels.forEach((row) => {
-          if (row.is_override) {
-            row.class_entry_id = undefined;
-          } else {
-            row.class_name =
-              this.entry("class", row.class_entry_id)?.name ?? row.class_name;
+        const selectedClasses = new Map<
+          number,
+          {
+            class_entry_id: number;
+            class_level: number;
+            subclass_identifier: string;
           }
-        });
+        >();
+
+        for (const row of this.classLevels) {
+          if (!row.class_entry_id) {
+            continue;
+          }
+
+          const selected = selectedClasses.get(row.class_entry_id) ?? {
+            class_entry_id: row.class_entry_id,
+            class_level: 0,
+            subclass_identifier: "",
+          };
+          selected.class_level += 1;
+          selected.subclass_identifier ||= row.subclass_identifier;
+          selectedClasses.set(row.class_entry_id, selected);
+        }
         await saveCharacterBuilder(this.contextId, this.characterId, {
           fields: {
             ...this.form,
@@ -1134,20 +1190,10 @@ export default defineComponent({
               .map((language) => language.trim())
               .filter(Boolean),
           },
-          class_levels: this.classLevels,
-          choices: [
-            {
-              level: 1,
-              identifier: "starting_equipment",
-              kind: "equipment",
-              values: this.startingEquipment,
-              is_override: true,
-            },
-          ],
+          classes: [...selectedClasses.values()],
           is_override:
             this.raceOverride ||
-            this.backgroundOverride ||
-            this.classLevels.some((row) => row.is_override),
+            this.backgroundOverride,
         });
       } finally {
         this.busy = false;

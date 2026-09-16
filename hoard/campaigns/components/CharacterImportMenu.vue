@@ -338,6 +338,137 @@
               </div>
             </div>
           </section>
+          <section
+            v-if="classesCollectionEnabled && preview.classes.length"
+            class="mt-5"
+            aria-labelledby="import-classes-heading"
+          >
+            <h3 id="import-classes-heading" class="h5 mb-2">Resolve classes and levels</h3>
+            <p class="text-body-secondary">
+              Classes stay in this character's chosen rules lineage. Resolve each
+              imported class to an enabled native class before importing it.
+            </p>
+            <article
+              v-for="classRow in preview.classes"
+              :key="classRow.line_id"
+              class="border rounded-3 p-3 mb-3"
+            >
+              <header class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <strong>{{ classRow.name }} {{ classRow.class_level }}</strong>
+                <span v-if="classRow.archetype_name" class="text-body-secondary">
+                  · {{ classRow.archetype_name }}
+                </span>
+                <Tag
+                  :severity="classRow.selected_entry_id ? 'success' : 'warn'"
+                  :value="classResolutionLabel(classRow)"
+                />
+              </header>
+              <div class="d-flex flex-wrap gap-2">
+                <InputText
+                  v-model="classSearchQueries[classRow.line_id]"
+                  :aria-label="`Search for a match for ${classRow.name}`"
+                  placeholder="Search enabled classes"
+                  class="flex-grow-1"
+                  @keyup.enter.prevent="searchImportedClass(classRow)"
+                />
+                <Button label="Search" icon="mdi mdi-magnify" outlined @click="searchImportedClass(classRow)" />
+              </div>
+              <div v-if="classSearchResults[classRow.line_id]?.length" class="list-group mt-2">
+                <button
+                  v-for="result in classSearchResults[classRow.line_id]"
+                  :key="result.id"
+                  type="button"
+                  class="list-group-item list-group-item-action text-start"
+                  @click="selectImportedClass(classRow, result)"
+                >
+                  <strong>{{ result.name }}</strong>
+                  <span class="small text-body-secondary ms-2">{{ result.source }}</span>
+                </button>
+              </div>
+            </article>
+            <Message v-if="hasUnresolvedIncludedClasses" severity="warn">
+              Resolve every class above, or skip the Classes section, before importing.
+            </Message>
+          </section>
+          <section
+            v-if="spellsCollectionEnabled && preview.spells.length"
+            class="mt-5"
+            aria-labelledby="import-spells-heading"
+          >
+            <h3
+              id="import-spells-heading"
+              class="h5 mb-2"
+            >
+              Resolve spells
+            </h3>
+            <p class="text-body-secondary">
+              Every spell needs an enabled Compendium match. Automatic matches are
+              identified by the source ID first, then by a unique normalised name.
+            </p>
+            <article
+              v-for="spell in preview.spells"
+              :key="spell.line_id"
+              class="border rounded-3 p-3 mb-3"
+            >
+              <header class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <strong>{{ spell.name }}</strong>
+                <Tag
+                  :severity="spell.selected_entry_id ? 'success' : 'warn'"
+                  :value="spellResolutionLabel(spell)"
+                />
+              </header>
+              <p
+                v-if="spell.description"
+                class="small text-body-secondary spell-import-description"
+              >
+                {{ spell.description }}
+              </p>
+              <div class="d-flex flex-wrap gap-2">
+                <InputText
+                  v-model="spellSearchQueries[spell.line_id]"
+                  :aria-label="`Search for a match for ${spell.name}`"
+                  placeholder="Search enabled spells"
+                  class="flex-grow-1"
+                  @keyup.enter.prevent="searchImportedSpell(spell)"
+                />
+                <Button
+                  label="Search"
+                  icon="mdi mdi-magnify"
+                  outlined
+                  @click="searchImportedSpell(spell)"
+                />
+                <Button
+                  label="Create custom spell"
+                  icon="mdi mdi-plus"
+                  outlined
+                  @click="createImportedSpell(spell)"
+                />
+              </div>
+              <div
+                v-if="spellSearchResults[spell.line_id]?.length"
+                class="list-group mt-2"
+              >
+                <button
+                  v-for="result in spellSearchResults[spell.line_id]"
+                  :key="result.id"
+                  type="button"
+                  class="list-group-item list-group-item-action text-start"
+                  @click="selectImportedSpell(spell, result)"
+                >
+                  <strong>{{ result.name }}</strong>
+                  <span class="small text-body-secondary ms-2">
+                    {{ result.source }}
+                  </span>
+                </button>
+              </div>
+            </article>
+            <Message
+              v-if="hasUnresolvedIncludedSpells"
+              severity="warn"
+            >
+              Resolve every spell above, or skip the Spells section, before importing.
+            </Message>
+          </section>
           <section class="mt-5">
             <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
               <h3 class="h5 mb-0">Equipment</h3>
@@ -477,7 +608,13 @@
           Cancel
         </Button>
         <Button
-          :disabled="!preview || hasFieldErrors || busy"
+          :disabled="
+            !preview ||
+            hasFieldErrors ||
+            hasUnresolvedIncludedClasses ||
+            hasUnresolvedIncludedSpells ||
+            busy
+          "
           :loading="busy"
           @click="commit"
         >
@@ -502,9 +639,14 @@ import { defineComponent } from "vue";
 import {
   cancelCahImport,
   commitCahImport,
+  createCompendiumSpell,
   previewCahImport,
+  searchCompendiumEntries,
+  type CahClassResolution,
   type CahPreview,
+  type CahSpellResolution,
   type Calculation,
+  type CompendiumSearchEntry,
   type Item,
 } from "@/api";
 import { displayIdentifier } from "@/campaigns/display";
@@ -557,6 +699,10 @@ export default defineComponent({
       busy: false,
       fieldErrors: {} as Record<string, string>,
       jsonFieldValues: {} as Record<string, string>,
+      spellSearchQueries: {} as Record<string, string>,
+      spellSearchResults: {} as Record<string, CompendiumSearchEntry[]>,
+      classSearchQueries: {} as Record<string, string>,
+      classSearchResults: {} as Record<string, CompendiumSearchEntry[]>,
       skills: [
         "acrobatics",
         "animal_handling",
@@ -599,6 +745,32 @@ export default defineComponent({
         this.preview?.field_changes.some(
           (change) => change.enabled && Boolean(this.fieldErrors[change.field]),
         ),
+      );
+    },
+    spellsCollectionEnabled(): boolean {
+      return Boolean(
+        this.preview?.collection_changes.find(
+          (change) => change.collection === "spells",
+        )?.enabled,
+      );
+    },
+    classesCollectionEnabled(): boolean {
+      return Boolean(
+        this.preview?.collection_changes.find(
+          (change) => change.collection === "classes",
+        )?.enabled,
+      );
+    },
+    hasUnresolvedIncludedClasses(): boolean {
+      return Boolean(
+        this.classesCollectionEnabled &&
+          this.preview?.classes.some((classRow) => !classRow.selected_entry_id),
+      );
+    },
+    hasUnresolvedIncludedSpells(): boolean {
+      return Boolean(
+        this.spellsCollectionEnabled &&
+        this.preview?.spells.some((spell) => !spell.selected_entry_id),
       );
     },
     importChanges(): CalculationGroup[] {
@@ -680,6 +852,120 @@ export default defineComponent({
         return { severity: "success", text: "Automatically matched" };
       }
       return { severity: "info", text: "Manually matched" };
+    },
+
+    spellResolutionLabel(spell: CahSpellResolution): string {
+      if (spell.selected_entry_id && spell.resolution.by === "id") {
+        return "Matched by source ID";
+      }
+      if (spell.selected_entry_id && spell.resolution.by === "name") {
+        return "Matched by unique name";
+      }
+      if (spell.selected_entry_id) {
+        return "Manually resolved";
+      }
+      if (spell.resolution.state === "ambiguous") {
+        return "Choose from ambiguous matches";
+      }
+      return "Match required";
+    },
+
+    classResolutionLabel(classRow: CahClassResolution): string {
+      if (classRow.selected_entry_id && classRow.resolution.by === "id") {
+        return "Matched by source ID";
+      }
+      if (classRow.selected_entry_id && classRow.resolution.by === "name") {
+        return "Matched by unique name";
+      }
+      if (classRow.selected_entry_id) {
+        return "Manually resolved";
+      }
+      if (classRow.resolution.state === "ambiguous") {
+        return "Choose from ambiguous matches";
+      }
+      return "Match required";
+    },
+
+    async searchImportedClass(classRow: CahClassResolution): Promise<void> {
+      const query = this.classSearchQueries[classRow.line_id] || classRow.name;
+
+      try {
+        this.classSearchResults[classRow.line_id] = await searchCompendiumEntries(
+          this.contextId,
+          "class",
+          query,
+        );
+      } catch (exception) {
+        this.$emit(
+          "error",
+          exception instanceof Error ? exception.message : "Unable to search classes.",
+        );
+      }
+    },
+
+    selectImportedClass(
+      classRow: CahClassResolution,
+      entry: CompendiumSearchEntry,
+    ): void {
+      classRow.selected_entry_id = entry.id;
+      classRow.resolution = { state: "matched", entry_id: entry.id, by: null };
+      this.classSearchResults[classRow.line_id] = [];
+    },
+
+    async searchImportedSpell(spell: CahSpellResolution): Promise<void> {
+      const query = this.spellSearchQueries[spell.line_id] || spell.name;
+
+      try {
+        this.spellSearchResults[spell.line_id] = await searchCompendiumEntries(
+          this.contextId,
+          "spell",
+          query,
+        );
+      } catch (exception) {
+        this.$emit(
+          "error",
+          exception instanceof Error ? exception.message : "Unable to search spells.",
+        );
+      }
+    },
+
+    selectImportedSpell(spell: CahSpellResolution, entry: CompendiumSearchEntry): void {
+      spell.selected_entry_id = entry.id;
+      spell.resolution = { state: "matched", entry_id: entry.id, by: null };
+      this.spellSearchResults[spell.line_id] = [];
+    },
+
+    async createImportedSpell(spell: CahSpellResolution): Promise<void> {
+      this.busy = true;
+
+      try {
+        const entry = await createCompendiumSpell(this.contextId, {
+          name: spell.name,
+          level: spell.level,
+          school: spell.school,
+          casting_time: spell.casting_time,
+          range: spell.range,
+          target: spell.target,
+          components: spell.components,
+          materials: spell.materials,
+          duration: spell.duration,
+          concentration: spell.concentration,
+          ritual: spell.ritual,
+          classes: spell.classes,
+          description: spell.description,
+        });
+        spell.selected_entry_id = entry.id;
+        spell.resolution = { state: "matched", entry_id: entry.id, by: null };
+      } catch (exception) {
+        this.$emit(
+          "error",
+          exception instanceof Error
+            ? exception.message
+            : "Unable to create the custom spell.",
+        );
+      } finally {
+        this.busy = false;
+      }
     },
 
     formatValue(value: unknown): string {
@@ -910,6 +1196,16 @@ export default defineComponent({
         );
         nextPreview.field_changes.forEach((change) => (change.enabled = true));
         nextPreview.collection_changes.forEach((change) => (change.enabled = true));
+        nextPreview.spells.forEach((spell) => {
+          spell.selected_entry_id = spell.resolution.entry_id;
+          this.spellSearchQueries[spell.line_id] = spell.name;
+        });
+        nextPreview.classes.forEach((classRow) => {
+          classRow.selected_entry_id = classRow.resolution.entry_id;
+          this.classSearchQueries[classRow.line_id] = classRow.name;
+        });
+        this.spellSearchResults = {};
+        this.classSearchResults = {};
         this.fieldErrors = {};
         this.jsonFieldValues = Object.fromEntries(
           nextPreview.field_changes
@@ -947,6 +1243,18 @@ export default defineComponent({
           this.importFields(),
           this.excludedFields(),
           this.collectionChoices(),
+          Object.fromEntries(
+            this.preview.classes.flatMap((classRow) =>
+              classRow.selected_entry_id
+                ? [[classRow.line_id, classRow.selected_entry_id]]
+                : [],
+            ),
+          ),
+          Object.fromEntries(
+            this.preview.spells.flatMap((spell) =>
+              spell.selected_entry_id ? [[spell.line_id, spell.selected_entry_id]] : [],
+            ),
+          ),
         );
         this.open = false;
         this.preview = undefined;
