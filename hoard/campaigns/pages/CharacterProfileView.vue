@@ -188,34 +188,6 @@
     <div class="row g-3 mb-4">
       <div class="col-12">
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xxl-6 g-3">
-          <div
-            v-for="card in deferredCalculationCards"
-            :key="card"
-            class="col"
-          >
-            <ComingSoonBlock>
-              <CalculationCard :label="card" />
-            </ComingSoonBlock>
-          </div>
-          <div class="col">
-            <ComingSoonBlock>
-              <section class="border rounded-3 p-3 p-md-4 h-100">
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Movement speed
-                </div>
-                <div class="d-flex align-items-center gap-2 mt-3">
-                  <span
-                    class="mdi mdi-run fs-4"
-                    aria-hidden="true"
-                  />
-                  <Skeleton
-                    width="5rem"
-                    height="1.75rem"
-                  />
-                </div>
-              </section>
-            </ComingSoonBlock>
-          </div>
           <div class="col">
             <section class="border rounded-3 p-3 p-md-4 h-100">
               <Transition
@@ -285,6 +257,34 @@
                 </div>
               </Transition>
             </section>
+          </div>
+          <div
+            v-for="card in deferredCalculationCards"
+            :key="card"
+            class="col"
+          >
+            <ComingSoonBlock>
+              <CalculationCard :label="card" />
+            </ComingSoonBlock>
+          </div>
+          <div class="col">
+            <ComingSoonBlock>
+              <section class="border rounded-3 p-3 p-md-4 h-100">
+                <div class="text-uppercase fw-semibold small text-body-secondary">
+                  Movement speed
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-3">
+                  <span
+                    class="mdi mdi-run fs-4"
+                    aria-hidden="true"
+                  />
+                  <Skeleton
+                    width="5rem"
+                    height="1.75rem"
+                  />
+                </div>
+              </section>
+            </ComingSoonBlock>
           </div>
         </div>
       </div>
