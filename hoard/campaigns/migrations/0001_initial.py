@@ -7,7 +7,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -16,203 +15,774 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Campaign',
+            name="Campaign",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=200, verbose_name='Campaign Name')),
-                ('calendar_era_abbreviation', models.CharField(default='PD', max_length=20, verbose_name='Calendar Era Abbreviation')),
-                ('calendar_era_name', models.CharField(default='Powder Dynasty', max_length=100, verbose_name='Calendar Era Name')),
-                ('calendar_year', models.PositiveIntegerField(default=81, verbose_name='Calendar Year')),
-                ('calendar_day', models.PositiveSmallIntegerField(default=137, verbose_name='Calendar Day')),
-                ('shared_experience', models.PositiveIntegerField(default=0, verbose_name='Shared Experience')),
-                ('level', models.PositiveSmallIntegerField(default=1, verbose_name='Campaign Level')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "name",
+                    models.CharField(max_length=200, verbose_name="Campaign Name"),
+                ),
+                (
+                    "calendar_era_abbreviation",
+                    models.CharField(
+                        default="PD",
+                        max_length=20,
+                        verbose_name="Calendar Era Abbreviation",
+                    ),
+                ),
+                (
+                    "calendar_era_name",
+                    models.CharField(
+                        default="Powder Dynasty",
+                        max_length=100,
+                        verbose_name="Calendar Era Name",
+                    ),
+                ),
+                (
+                    "calendar_year",
+                    models.PositiveIntegerField(
+                        default=81, verbose_name="Calendar Year"
+                    ),
+                ),
+                (
+                    "calendar_day",
+                    models.PositiveSmallIntegerField(
+                        default=137, verbose_name="Calendar Day"
+                    ),
+                ),
+                (
+                    "shared_experience",
+                    models.PositiveIntegerField(
+                        default=0, verbose_name="Shared Experience"
+                    ),
+                ),
+                (
+                    "level",
+                    models.PositiveSmallIntegerField(
+                        default=1, verbose_name="Campaign Level"
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='CampaignContext',
+            name="CampaignContext",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('kind', models.CharField(choices=[('gm', 'Game master'), ('pc', 'Player character')], max_length=2)),
-                ('is_active', models.BooleanField(default=True)),
-                ('last_seen_at', models.DateTimeField(blank=True, null=True)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='contexts', to='campaigns.campaign')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='campaign_contexts', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "kind",
+                    models.CharField(
+                        choices=[("gm", "Game master"), ("pc", "Player character")],
+                        max_length=2,
+                    ),
+                ),
+                ("is_active", models.BooleanField(default=True)),
+                ("last_seen_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="contexts",
+                        to="campaigns.campaign",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="campaign_contexts",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='CampaignInvitation',
+            name="CampaignInvitation",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('token_digest', models.CharField(max_length=64, unique=True)),
-                ('delivery_email', models.EmailField(blank=True, max_length=254)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('expires_at', models.DateTimeField()),
-                ('revoked_at', models.DateTimeField(blank=True, null=True)),
-                ('accepted_at', models.DateTimeField(blank=True, null=True)),
-                ('accepted_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='accepted_campaign_invitations', to=settings.AUTH_USER_MODEL)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='invitations', to='campaigns.campaign')),
-                ('created_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_invitations', to='campaigns.campaigncontext')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("token_digest", models.CharField(max_length=64, unique=True)),
+                ("delivery_email", models.EmailField(blank=True, max_length=254)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("expires_at", models.DateTimeField()),
+                ("revoked_at", models.DateTimeField(blank=True, null=True)),
+                ("accepted_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "accepted_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="accepted_campaign_invitations",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="invitations",
+                        to="campaigns.campaign",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="created_invitations",
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Character',
+            name="Character",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('kind', models.CharField(choices=[('pc', 'Player character'), ('npc', 'Non-player character')], default='pc', max_length=3)),
-                ('is_active', models.BooleanField(default=False, verbose_name='Is Active')),
-                ('name', models.CharField(max_length=200, verbose_name='Character Name')),
-                ('portrait', models.FileField(blank=True, upload_to='character-portraits/')),
-                ('race', models.CharField(blank=True, max_length=100)),
-                ('character_class', models.CharField(blank=True, max_length=100, verbose_name='Class')),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='characters', to='campaigns.campaign')),
-                ('context', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='character', to='campaigns.campaigncontext')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "kind",
+                    models.CharField(
+                        choices=[
+                            ("pc", "Player character"),
+                            ("npc", "Non-player character"),
+                        ],
+                        default="pc",
+                        max_length=3,
+                    ),
+                ),
+                (
+                    "is_active",
+                    models.BooleanField(default=False, verbose_name="Is Active"),
+                ),
+                (
+                    "name",
+                    models.CharField(max_length=200, verbose_name="Character Name"),
+                ),
+                (
+                    "portrait",
+                    models.FileField(blank=True, upload_to="character-portraits/"),
+                ),
+                ("race", models.CharField(blank=True, max_length=100)),
+                (
+                    "character_class",
+                    models.CharField(blank=True, max_length=100, verbose_name="Class"),
+                ),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="characters",
+                        to="campaigns.campaign",
+                    ),
+                ),
+                (
+                    "context",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="character",
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='ExperienceAccount',
+            name="ExperienceAccount",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_system', models.BooleanField(default=False)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='experience_accounts', to='campaigns.campaign')),
-                ('character', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='experience_ledger_account', to='campaigns.character')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_system", models.BooleanField(default=False)),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="experience_accounts",
+                        to="campaigns.campaign",
+                    ),
+                ),
+                (
+                    "character",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="experience_ledger_account",
+                        to="campaigns.character",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='ExperienceTransaction',
+            name="ExperienceTransaction",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('occurred_at', models.DateTimeField(default=django.utils.timezone.now, editable=False, verbose_name='Occurred At')),
-                ('actor_username', models.CharField(blank=True, max_length=150, verbose_name='Actor Username')),
-                ('campaign_era_abbreviation', models.CharField(blank=True, max_length=20, null=True, verbose_name='Campaign Era Abbreviation')),
-                ('campaign_year', models.PositiveIntegerField(blank=True, null=True, verbose_name='Campaign Year')),
-                ('campaign_day', models.PositiveSmallIntegerField(blank=True, null=True, verbose_name='Campaign Day')),
-                ('description', models.TextField(blank=True, verbose_name='Description')),
-                ('reason', models.CharField(choices=[('shared_award', 'Shared award'), ('baseline', 'Activation baseline'), ('reversal', 'Reversal')], max_length=20)),
-                ('requested_amount', models.PositiveIntegerField(default=0)),
-                ('discarded_amount', models.PositiveIntegerField(default=0)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='campaigns.campaign', verbose_name='Campaign')),
-                ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='campaigns.campaigncontext')),
-                ('reversal_of', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='reversal', to='campaigns.experiencetransaction')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "occurred_at",
+                    models.DateTimeField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                        verbose_name="Occurred At",
+                    ),
+                ),
+                (
+                    "actor_username",
+                    models.CharField(
+                        blank=True, max_length=150, verbose_name="Actor Username"
+                    ),
+                ),
+                (
+                    "campaign_era_abbreviation",
+                    models.CharField(
+                        blank=True,
+                        max_length=20,
+                        null=True,
+                        verbose_name="Campaign Era Abbreviation",
+                    ),
+                ),
+                (
+                    "campaign_year",
+                    models.PositiveIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Year"
+                    ),
+                ),
+                (
+                    "campaign_day",
+                    models.PositiveSmallIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Day"
+                    ),
+                ),
+                (
+                    "description",
+                    models.TextField(blank=True, verbose_name="Description"),
+                ),
+                (
+                    "reason",
+                    models.CharField(
+                        choices=[
+                            ("shared_award", "Shared award"),
+                            ("baseline", "Activation baseline"),
+                            ("reversal", "Reversal"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("requested_amount", models.PositiveIntegerField(default=0)),
+                ("discarded_amount", models.PositiveIntegerField(default=0)),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="campaigns.campaign",
+                        verbose_name="Campaign",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
+                (
+                    "reversal_of",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="reversal",
+                        to="campaigns.experiencetransaction",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Experience',
-                'verbose_name_plural': 'Experience',
+                "verbose_name": "Experience",
+                "verbose_name_plural": "Experience",
             },
         ),
         migrations.CreateModel(
-            name='ExperienceEntry',
+            name="ExperienceEntry",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('amount', models.IntegerField()),
-                ('account', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='entries', to='campaigns.experienceaccount')),
-                ('transaction', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='entries', to='campaigns.experiencetransaction')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("amount", models.IntegerField()),
+                (
+                    "account",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="entries",
+                        to="campaigns.experienceaccount",
+                    ),
+                ),
+                (
+                    "transaction",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="entries",
+                        to="campaigns.experiencetransaction",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='InvitationEvent',
+            name="InvitationEvent",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('occurred_at', models.DateTimeField(default=django.utils.timezone.now, editable=False, verbose_name='Occurred At')),
-                ('actor_username', models.CharField(blank=True, max_length=150, verbose_name='Actor Username')),
-                ('campaign_era_abbreviation', models.CharField(blank=True, max_length=20, null=True, verbose_name='Campaign Era Abbreviation')),
-                ('campaign_year', models.PositiveIntegerField(blank=True, null=True, verbose_name='Campaign Year')),
-                ('campaign_day', models.PositiveSmallIntegerField(blank=True, null=True, verbose_name='Campaign Day')),
-                ('reason', models.CharField(choices=[('created', 'Created'), ('resent', 'Resent'), ('revoked', 'Revoked'), ('accepted', 'Accepted')], max_length=20)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='campaigns.campaign', verbose_name='Campaign')),
-                ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='campaigns.campaigncontext')),
-                ('invitation', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='events', to='campaigns.campaigninvitation')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "occurred_at",
+                    models.DateTimeField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                        verbose_name="Occurred At",
+                    ),
+                ),
+                (
+                    "actor_username",
+                    models.CharField(
+                        blank=True, max_length=150, verbose_name="Actor Username"
+                    ),
+                ),
+                (
+                    "campaign_era_abbreviation",
+                    models.CharField(
+                        blank=True,
+                        max_length=20,
+                        null=True,
+                        verbose_name="Campaign Era Abbreviation",
+                    ),
+                ),
+                (
+                    "campaign_year",
+                    models.PositiveIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Year"
+                    ),
+                ),
+                (
+                    "campaign_day",
+                    models.PositiveSmallIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Day"
+                    ),
+                ),
+                (
+                    "reason",
+                    models.CharField(
+                        choices=[
+                            ("created", "Created"),
+                            ("resent", "Resent"),
+                            ("revoked", "Revoked"),
+                            ("accepted", "Accepted"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="campaigns.campaign",
+                        verbose_name="Campaign",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
+                (
+                    "invitation",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="events",
+                        to="campaigns.campaigninvitation",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Invitation Change',
-                'verbose_name_plural': 'Invitation Changes',
+                "verbose_name": "Invitation Change",
+                "verbose_name_plural": "Invitation Changes",
             },
         ),
         migrations.CreateModel(
-            name='MembershipEvent',
+            name="MembershipEvent",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('occurred_at', models.DateTimeField(default=django.utils.timezone.now, editable=False, verbose_name='Occurred At')),
-                ('actor_username', models.CharField(blank=True, max_length=150, verbose_name='Actor Username')),
-                ('campaign_era_abbreviation', models.CharField(blank=True, max_length=20, null=True, verbose_name='Campaign Era Abbreviation')),
-                ('campaign_year', models.PositiveIntegerField(blank=True, null=True, verbose_name='Campaign Year')),
-                ('campaign_day', models.PositiveSmallIntegerField(blank=True, null=True, verbose_name='Campaign Day')),
-                ('reason', models.CharField(choices=[('deactivated', 'Deactivated')], max_length=20)),
-                ('before', models.JSONField(default=dict)),
-                ('after', models.JSONField(default=dict)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='campaigns.campaign', verbose_name='Campaign')),
-                ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='campaigns.campaigncontext')),
-                ('subject', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='membership_events', to='campaigns.campaigncontext')),
-                ('subject_user', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "occurred_at",
+                    models.DateTimeField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                        verbose_name="Occurred At",
+                    ),
+                ),
+                (
+                    "actor_username",
+                    models.CharField(
+                        blank=True, max_length=150, verbose_name="Actor Username"
+                    ),
+                ),
+                (
+                    "campaign_era_abbreviation",
+                    models.CharField(
+                        blank=True,
+                        max_length=20,
+                        null=True,
+                        verbose_name="Campaign Era Abbreviation",
+                    ),
+                ),
+                (
+                    "campaign_year",
+                    models.PositiveIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Year"
+                    ),
+                ),
+                (
+                    "campaign_day",
+                    models.PositiveSmallIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Day"
+                    ),
+                ),
+                (
+                    "reason",
+                    models.CharField(
+                        choices=[("deactivated", "Deactivated")], max_length=20
+                    ),
+                ),
+                ("before", models.JSONField(default=dict)),
+                ("after", models.JSONField(default=dict)),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="campaigns.campaign",
+                        verbose_name="Campaign",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
+                (
+                    "subject",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="membership_events",
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
+                (
+                    "subject_user",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Membership Change',
-                'verbose_name_plural': 'Membership Changes',
+                "verbose_name": "Membership Change",
+                "verbose_name_plural": "Membership Changes",
             },
         ),
         migrations.CreateModel(
-            name='MoneyAccount',
+            name="MoneyAccount",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_system', models.BooleanField(default=False)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='money_accounts', to='campaigns.campaign')),
-                ('character', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='money_ledger_account', to='campaigns.character')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_system", models.BooleanField(default=False)),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="money_accounts",
+                        to="campaigns.campaign",
+                    ),
+                ),
+                (
+                    "character",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="money_ledger_account",
+                        to="campaigns.character",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='MoneyTransaction',
+            name="MoneyTransaction",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('occurred_at', models.DateTimeField(default=django.utils.timezone.now, editable=False, verbose_name='Occurred At')),
-                ('actor_username', models.CharField(blank=True, max_length=150, verbose_name='Actor Username')),
-                ('campaign_era_abbreviation', models.CharField(blank=True, max_length=20, null=True, verbose_name='Campaign Era Abbreviation')),
-                ('campaign_year', models.PositiveIntegerField(blank=True, null=True, verbose_name='Campaign Year')),
-                ('campaign_day', models.PositiveSmallIntegerField(blank=True, null=True, verbose_name='Campaign Day')),
-                ('description', models.TextField(blank=True, verbose_name='Description')),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='campaigns.campaign', verbose_name='Campaign')),
-                ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='campaigns.campaigncontext')),
-                ('reversal_of', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='reversal', to='campaigns.moneytransaction')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "occurred_at",
+                    models.DateTimeField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                        verbose_name="Occurred At",
+                    ),
+                ),
+                (
+                    "actor_username",
+                    models.CharField(
+                        blank=True, max_length=150, verbose_name="Actor Username"
+                    ),
+                ),
+                (
+                    "campaign_era_abbreviation",
+                    models.CharField(
+                        blank=True,
+                        max_length=20,
+                        null=True,
+                        verbose_name="Campaign Era Abbreviation",
+                    ),
+                ),
+                (
+                    "campaign_year",
+                    models.PositiveIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Year"
+                    ),
+                ),
+                (
+                    "campaign_day",
+                    models.PositiveSmallIntegerField(
+                        blank=True, null=True, verbose_name="Campaign Day"
+                    ),
+                ),
+                (
+                    "description",
+                    models.TextField(blank=True, verbose_name="Description"),
+                ),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="campaigns.campaign",
+                        verbose_name="Campaign",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="campaigns.campaigncontext",
+                    ),
+                ),
+                (
+                    "reversal_of",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="reversal",
+                        to="campaigns.moneytransaction",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Coins',
-                'verbose_name_plural': 'Coins',
+                "verbose_name": "Coins",
+                "verbose_name_plural": "Coins",
             },
         ),
         migrations.CreateModel(
-            name='MoneyEntry',
+            name="MoneyEntry",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('amount', models.IntegerField()),
-                ('denomination', models.CharField(choices=[('cp', 'Copper'), ('sp', 'Silver'), ('ep', 'Electrum'), ('gp', 'Gold'), ('pp', 'Platinum')], max_length=2, verbose_name='Denomination')),
-                ('account', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='entries', to='campaigns.moneyaccount')),
-                ('transaction', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='entries', to='campaigns.moneytransaction')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("amount", models.IntegerField()),
+                (
+                    "denomination",
+                    models.CharField(
+                        choices=[
+                            ("cp", "Copper"),
+                            ("sp", "Silver"),
+                            ("ep", "Electrum"),
+                            ("gp", "Gold"),
+                            ("pp", "Platinum"),
+                        ],
+                        max_length=2,
+                        verbose_name="Denomination",
+                    ),
+                ),
+                (
+                    "account",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="entries",
+                        to="campaigns.moneyaccount",
+                    ),
+                ),
+                (
+                    "transaction",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="entries",
+                        to="campaigns.moneytransaction",
+                    ),
+                ),
             ],
         ),
         migrations.AddConstraint(
-            model_name='campaigncontext',
-            constraint=models.UniqueConstraint(fields=('campaign', 'user', 'kind'), name='unique_context_kind_per_user_per_campaign'),
+            model_name="campaigncontext",
+            constraint=models.UniqueConstraint(
+                fields=("campaign", "user", "kind"),
+                name="unique_context_kind_per_user_per_campaign",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='experienceaccount',
-            constraint=models.UniqueConstraint(condition=models.Q(('is_system', True)), fields=('campaign',), name='one_system_experience_account_per_campaign'),
+            model_name="experienceaccount",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("is_system", True)),
+                fields=("campaign",),
+                name="one_system_experience_account_per_campaign",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='experienceaccount',
-            constraint=models.CheckConstraint(condition=models.Q(models.Q(('character__isnull', True), ('is_system', True)), models.Q(('character__isnull', False), ('is_system', False)), _connector='OR'), name='experience_account_system_or_character'),
+            model_name="experienceaccount",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("character__isnull", True), ("is_system", True)),
+                    models.Q(("character__isnull", False), ("is_system", False)),
+                    _connector="OR",
+                ),
+                name="experience_account_system_or_character",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='experienceentry',
-            constraint=models.CheckConstraint(condition=models.Q(('amount', 0), _negated=True), name='experience_entry_nonzero_amount'),
+            model_name="experienceentry",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("amount", 0), _negated=True),
+                name="experience_entry_nonzero_amount",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='moneyaccount',
-            constraint=models.UniqueConstraint(condition=models.Q(('is_system', True)), fields=('campaign',), name='one_system_money_account_per_campaign'),
+            model_name="moneyaccount",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("is_system", True)),
+                fields=("campaign",),
+                name="one_system_money_account_per_campaign",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='moneyaccount',
-            constraint=models.CheckConstraint(condition=models.Q(models.Q(('character__isnull', True), ('is_system', True)), models.Q(('character__isnull', False), ('is_system', False)), _connector='OR'), name='money_account_system_or_character'),
+            model_name="moneyaccount",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("character__isnull", True), ("is_system", True)),
+                    models.Q(("character__isnull", False), ("is_system", False)),
+                    _connector="OR",
+                ),
+                name="money_account_system_or_character",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='moneyentry',
-            constraint=models.CheckConstraint(condition=models.Q(('amount', 0), _negated=True), name='money_entry_nonzero_amount'),
+            model_name="moneyentry",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("amount", 0), _negated=True),
+                name="money_entry_nonzero_amount",
+            ),
         ),
     ]

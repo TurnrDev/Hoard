@@ -217,7 +217,9 @@ class Character(models.Model):
         if self.context_id and self.context.kind != CampaignContext.Kind.PC:
             raise ValidationError({"context": "Only a PC context may own a character."})
         if self.kind == self.Kind.NPC and self.context_id:
-            raise ValidationError({"context": "NPCs cannot belong to a player context."})
+            raise ValidationError(
+                {"context": "NPCs cannot belong to a player context."}
+            )
 
     def save(self, *args, **kwargs) -> None:
         self.clean()

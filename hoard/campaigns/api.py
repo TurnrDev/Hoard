@@ -81,18 +81,14 @@ def character_for_context(
     return get_object_or_404(Character, pk=character_id, campaign=context.campaign)
 
 
-def is_character_owner(
-    context: CampaignContext, character: Character
-) -> bool:
+def is_character_owner(context: CampaignContext, character: Character) -> bool:
     return (
         character.context_id is not None
         and character.context.user_id == context.user_id
     )
 
 
-def editable_character(
-    context: CampaignContext, character_id: int
-) -> Character:
+def editable_character(context: CampaignContext, character_id: int) -> Character:
     character = character_for_context(context, character_id)
     if context.kind != CampaignContext.Kind.GM and not is_character_owner(
         context, character
@@ -266,9 +262,7 @@ def transaction_queryset(model, campaign: Campaign):
     )
 
 
-def money_transfer_create(
-    request, context_id: int, payload: MoneyTransferCreate
-):
+def money_transfer_create(request, context_id: int, payload: MoneyTransferCreate):
     context = context_access(request, context_id)
     source = (
         character_for_context(context, payload.from_character_id)
@@ -335,9 +329,7 @@ def money_transfer_create(
     return 201, transaction_data(posted)
 
 
-def money_exchange_create(
-    request, context_id: int, payload: MoneyExchangeCreate
-):
+def money_exchange_create(request, context_id: int, payload: MoneyExchangeCreate):
     context = context_access(request, context_id)
     character = character_for_context(context, payload.character_id)
     if not can_act_for(context, character):
@@ -357,9 +349,7 @@ def money_exchange_create(
     return 201, transaction_data(posted)
 
 
-def shared_xp_award_create(
-    request, context_id: int, payload: SharedXpAwardCreate
-):
+def shared_xp_award_create(request, context_id: int, payload: SharedXpAwardCreate):
     context = context_access(request, context_id)
     gm_context(context)
     try:

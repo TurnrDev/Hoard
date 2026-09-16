@@ -48,6 +48,7 @@ class CharacterAdmin(admin.ModelAdmin):
     )
     list_filter = ("campaign", "is_active")
     search_fields = ("name", "context__user__username")
+
     def save_model(
         self, request: HttpRequest, obj: Character, form: BaseModelForm, change: bool
     ) -> None:

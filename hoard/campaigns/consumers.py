@@ -387,8 +387,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 ).select_related("user")
             ],
             "characters": [
-                character_data(value, context)
-                for value in visible_characters(context)
+                character_data(value, context) for value in visible_characters(context)
             ],
             "invitations": (
                 [self._invitation_data(value) for value in campaign.invitations.all()]
@@ -614,16 +613,16 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import character_data, visible_characters
 
         context = self._context()
-        return [
-            character_data(value, context) for value in visible_characters(context)
-        ]
+        return [character_data(value, context) for value in visible_characters(context)]
 
     @database_sync_to_async
     def _character_get(self, content: dict[str, object]) -> dict[str, object]:
         from .api import character_data, character_for_context, visible_characters
 
         context = self._context()
-        character = character_for_context(context, self._integer(content, "character_id"))
+        character = character_for_context(
+            context, self._integer(content, "character_id")
+        )
         if not visible_characters(context).filter(pk=character.pk).exists():
             raise HttpError(404, "Character not found.")
         return character_data(character, context)
@@ -657,9 +656,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import character_data, editable_character
 
         context = self._context()
-        character = editable_character(
-            context, self._integer(content, "character_id")
-        )
+        character = editable_character(context, self._integer(content, "character_id"))
         fields = content.get("fields")
         if not isinstance(fields, dict):
             raise ValueError("fields must be an object.")
@@ -685,9 +682,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import character_data, editable_character
 
         context = self._context()
-        character = editable_character(
-            context, self._integer(content, "character_id")
-        )
+        character = editable_character(context, self._integer(content, "character_id"))
         character.portrait.delete(save=True)
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
@@ -698,9 +693,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import character_data, editable_character
 
         context = self._context()
-        character = editable_character(
-            context, self._integer(content, "character_id")
-        )
+        character = editable_character(context, self._integer(content, "character_id"))
         character = CharacterLifecycleService().archive(context, character)
         notify_campaign_event(
             context.campaign_id,
