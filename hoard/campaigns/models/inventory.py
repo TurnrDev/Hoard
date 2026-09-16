@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.db import models
 from django.db.models import Q
 
-from .ledger import ImmutableLedgerEntry, LedgerTransaction
+from .audit import ImmutableLedgerEntry, LedgerTransaction
 
 
 class InventoryAccount(models.Model):

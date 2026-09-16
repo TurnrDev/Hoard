@@ -89,3 +89,38 @@ class CampaignDatedEvent(models.Model):
 
     def delete(self, *args: Any, **kwargs: Any) -> None:
         raise ValidationError("Posted campaign events are immutable.")
+
+
+class LedgerTransaction(CampaignDatedEvent):
+    """A campaign audit event that records an immutable ledger transaction."""
+
+    description = models.TextField("Description", blank=True)
+
+    class Meta:
+        abstract = True
+
+    @property
+    def created_at(self):
+        """Compatibility alias while clients migrate to occurred_at."""
+        return self.occurred_at
+
+
+class ImmutableLedgerEntry(models.Model):
+    """An immutable amount recorded against one account in a ledger transaction."""
+
+    amount = models.IntegerField()
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self.pk:
+            raise ValidationError(
+                "Posted ledger entries are immutable; post a reversal instead."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> None:
+        raise ValidationError(
+            "Posted ledger entries are immutable; post a reversal instead."
+        )
