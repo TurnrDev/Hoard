@@ -68,19 +68,19 @@
     </Message>
 
     <section
-      class="border rounded-3 p-3 p-md-4 mb-5"
+      class="coin-pouch-card border rounded-3 p-3 p-md-4 mb-5"
       aria-label="Personal money"
     >
       <div
         v-if="canAct"
-        class="d-none d-sm-block float-end"
+        class="d-none d-md-block float-end"
       >
         <ActionMenu
           label="Coin actions"
           :items="coinActionItems"
         />
       </div>
-      <div class="d-sm-none">
+      <div class="d-md-none">
         <Transition
           name="money-card-flip"
           mode="out-in"
@@ -145,8 +145,8 @@
         </Transition>
       </div>
 
-      <div class="row g-0 h-100 d-none d-sm-flex">
-        <div class="col-12 col-sm-7">
+      <div class="row g-0 h-100 d-none d-md-flex">
+        <div class="col-12 col-md-7">
           <div>
             <div class="text-uppercase fw-semibold small text-body-secondary">
               Coin pouch
@@ -156,7 +156,7 @@
             </div>
           </div>
         </div>
-        <div class="col-12 col-sm-5 border-top coin-value-column p-3">
+        <div class="col-12 col-md-5 border-top coin-value-column p-3">
           <div>
             <div class="text-uppercase fw-semibold small text-body-secondary">
               Coin value
@@ -1250,7 +1250,11 @@ export default defineComponent({
   }
 }
 
-@media (min-width: 576px) {
+@media (min-width: 768px) {
+  .coin-pouch-card {
+    max-width: 64rem;
+  }
+
   .coin-value-column {
     border-top: 0 !important;
     border-left: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color) !important;
