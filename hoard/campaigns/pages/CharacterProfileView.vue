@@ -1105,7 +1105,7 @@ export default defineComponent({
         },
         {
           label: "Exchange coins",
-          icon: "mdi mdi-currency-exchange",
+          icon: "mdi mdi-cash-sync",
           command: () => this.openMoneyDialog("exchange"),
         },
       ];
