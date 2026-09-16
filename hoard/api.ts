@@ -12,6 +12,65 @@ export type User = {
   username: string;
 };
 
+export type Calculation = {
+  value: number;
+  base: number;
+  formula?: string;
+  numeric_formula?: string;
+  components: Array<{
+    label: string;
+    value: number;
+    formula?: string;
+    source?: string;
+  }>;
+};
+
+export type CharacterSheet = {
+  level: number;
+  rolled_hit_points: number;
+  hp_ability: string;
+  hp_adjustment: number;
+  initiative_adjustment: number;
+  proficiency_bonus_adjustment: number;
+  max_hp: number;
+  hp_calculation: Calculation;
+  current_hp: number;
+  temporary_hp: number;
+  initiative: Calculation;
+  proficiency_bonus: number;
+  proficiency_bonus_calculation: Calculation;
+  jack_of_all_trades: boolean;
+  remarkable_athlete: boolean;
+  abilities: Record<
+    string,
+    {
+      score: number;
+      raw: number;
+      ancestry_bonus: number;
+      background_bonus: number;
+      score_adjustment: number;
+      modifier: number;
+      check_bonus: number;
+      check_formula: Calculation;
+      formula: Calculation;
+    }
+  >;
+  saves: Record<
+    string,
+    { proficiency: string; adjustment: number; bonus: number; formula: Calculation }
+  >;
+  skills: Record<
+    string,
+    {
+      ability: string;
+      proficiency: string;
+      adjustment: number;
+      bonus: number;
+      formula: Calculation;
+    }
+  >;
+};
+
 export type CampaignSummary = {
   id: number;
   name: string;
@@ -56,7 +115,43 @@ export type Character = {
   race: string;
   class: string;
   experience: number;
+  sheet: CharacterSheet;
   money: Record<string, number | string>;
+};
+
+export type EncounterCombatant = {
+  id: number;
+  character_id: number | null;
+  is_player_character: boolean;
+  name: string;
+  portrait_url: string | null;
+  initiative: number;
+  initiative_position: number;
+  initiative_roll: number | null;
+  initiative_modifier: number;
+  can_roll_initiative: boolean;
+  can_end_turn: boolean;
+  tie_options: Array<{
+    combatant_id: number;
+    name: string;
+    vote_count: number;
+  }>;
+  tie_choice_id: number | null;
+  tie_votes_cast: number;
+  tie_votes_required: number;
+  tie_winner_id: number | null;
+  tie_resolution: "agreement" | "random" | null;
+  current_hp: number | null;
+  max_hp: number | null;
+  health_percentage: number | null;
+  show_hp_numbers: boolean;
+};
+
+export type Encounter = {
+  id: number;
+  started_at: string;
+  current_combatant_id: number | null;
+  combatants: EncounterCombatant[];
 };
 
 export type CampaignInvitation = {
@@ -78,6 +173,7 @@ export type Campaign = CampaignSummary & {
   members: CampaignMember[];
   characters: Character[];
   invitations: CampaignInvitation[];
+  encounter: Encounter | null;
 };
 
 export type LedgerEntry = {
@@ -349,6 +445,128 @@ export function updateCharacter(
   return contextRequest<void>(contextId, "characters.update", {
     character_id: characterId,
     fields: { ...fields, character_class: characterClass },
+  });
+}
+
+export function postHealth(
+  contextId: number,
+  payload: {
+    character_id: number;
+    reason: "damage" | "healing" | "temporary" | "correction";
+    current_hp_delta?: number;
+    temporary_hp_delta?: number;
+    current_hp?: number;
+    temporary_hp?: number;
+    description?: string;
+  },
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.health.post", payload);
+}
+
+export function takeRest(
+  contextId: number,
+  characterId: number,
+  kind: "short" | "long",
+  regainedHp = 0,
+): Promise<void> {
+  return contextRequest<void>(contextId, "characters.rest", {
+    character_id: characterId,
+    kind,
+    regained_hp: regainedHp,
+  });
+}
+
+export function updateEncounterCombatant(
+  contextId: number,
+  combatantId: number,
+  fields: {
+    name?: string;
+    initiative?: number;
+    current_hp?: number;
+    max_hp?: number;
+  },
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.update", {
+    combatant_id: combatantId,
+    ...fields,
+  });
+}
+
+export function reorderEncounterCombatants(
+  contextId: number,
+  combatantIds: number[],
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.reorder", {
+    combatant_ids: combatantIds,
+  });
+}
+
+export function setCurrentEncounterCombatant(
+  contextId: number,
+  combatantId: number | null,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.current.set", {
+    combatant_id: combatantId,
+  });
+}
+
+export function rollPlayerInitiative(contextId: number, roll: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.initiative.roll", {
+    roll,
+  });
+}
+
+export function chooseInitiativeTie(
+  contextId: number,
+  combatantId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.initiative.tie.choose", {
+    combatant_id: combatantId,
+  });
+}
+
+export function endPlayerTurn(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.turn.end");
+}
+
+export function startEncounter(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.start");
+}
+
+export function endEncounter(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.end");
+}
+
+export function addCharacterToEncounter(
+  contextId: number,
+  characterId: number,
+  initiative = 0,
+): Promise<void> {
+  return contextRequest<void>(
+    contextId,
+    "campaign.encounter.combatants.add_character",
+    { character_id: characterId, initiative },
+  );
+}
+
+export function addEncounterCombatant(
+  contextId: number,
+  payload: {
+    name: string;
+    initiative?: number;
+    current_hp?: number;
+    max_hp?: number;
+  },
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.add", payload);
+}
+
+export function removeEncounterCombatant(
+  contextId: number,
+  combatantId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.remove", {
+    combatant_id: combatantId,
   });
 }
 

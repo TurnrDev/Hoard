@@ -8,10 +8,23 @@ from .calendar import (
 from .campaign import CampaignStateChangedEvent
 from .characters import (
     CharacterCreateCommand,
+    CharacterHealthChangedEvent,
+    CharacterHealthCommand,
     CharacterIdentifierCommand,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
+    CharacterRestCommand,
     CharacterUpdateCommand,
+)
+from .combat import (
+    EncounterCharacterAddCommand,
+    EncounterCombatantAddCommand,
+    EncounterCombatantIdentifierCommand,
+    EncounterCombatantReorderCommand,
+    EncounterCombatantUpdateCommand,
+    EncounterCurrentCombatantCommand,
+    InitiativeTieChoiceCommand,
+    PlayerInitiativeRollCommand,
 )
 from .invitations import (
     CampaignInvitationChangedEvent,
@@ -35,11 +48,22 @@ __all__ = [
     "CampaignPresenceChangedEvent",
     "CampaignStateChangedEvent",
     "CharacterCreateCommand",
+    "CharacterHealthChangedEvent",
+    "CharacterHealthCommand",
     "CharacterIdentifierCommand",
     "CharacterLifecycleData",
     "CharacterLifecycleEvent",
+    "CharacterRestCommand",
     "CharacterUpdateCommand",
+    "EncounterCharacterAddCommand",
+    "EncounterCombatantAddCommand",
+    "EncounterCombatantIdentifierCommand",
+    "EncounterCombatantReorderCommand",
+    "EncounterCombatantUpdateCommand",
+    "EncounterCurrentCombatantCommand",
+    "InitiativeTieChoiceCommand",
     "InvitationCreateCommand",
     "InvitationIdentifierCommand",
     "MemberDeactivationCommand",
+    "PlayerInitiativeRollCommand",
 ]

@@ -31,6 +31,7 @@ from .payloads import (
     CampaignMemberData,
     CampaignMembershipChangedEvent,
     CampaignPresenceChangedEvent,
+    CharacterHealthChangedEvent,
     CharacterLifecycleData,
     CharacterLifecycleEvent,
 )
@@ -154,12 +155,27 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.invites.resend": self._invite_resend,
             "campaign.invites.revoke": self._invite_revoke,
             "campaign.presence.heartbeat": self._presence_heartbeat,
+            "campaign.encounter.start": self._encounter_start,
+            "campaign.encounter.end": self._encounter_end,
+            "campaign.encounter.combatants.add_character": (
+                self._combatant_add_character
+            ),
+            "campaign.encounter.combatants.add": self._combatant_add,
+            "campaign.encounter.combatants.update": self._combatant_update,
+            "campaign.encounter.combatants.reorder": self._combatant_reorder,
+            "campaign.encounter.combatants.remove": self._combatant_remove,
+            "campaign.encounter.current.set": self._encounter_current_set,
+            "campaign.encounter.initiative.roll": self._initiative_roll,
+            "campaign.encounter.initiative.tie.choose": self._initiative_tie_choose,
+            "campaign.encounter.turn.end": self._player_turn_end,
             "characters.list": self._character_list,
             "characters.get": self._character_get,
             "characters.create": self._character_create,
             "characters.update": self._character_update,
             "characters.portrait.remove": self._character_portrait_remove,
             "characters.archive": self._character_archive,
+            "characters.health.post": self._character_health_adjust,
+            "characters.rest": self._character_rest,
             "transactions.list": self._transaction_list,
             "money.transfers.create": self._money_transfer_create,
             "money.exchanges.create": self._money_exchange_create,
@@ -294,6 +310,19 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "characters.update",
             "characters.portrait.remove",
             "characters.archive",
+            "characters.health.post",
+            "characters.rest",
+            "campaign.encounter.start",
+            "campaign.encounter.end",
+            "campaign.encounter.combatants.add_character",
+            "campaign.encounter.combatants.add",
+            "campaign.encounter.combatants.update",
+            "campaign.encounter.combatants.reorder",
+            "campaign.encounter.combatants.remove",
+            "campaign.encounter.current.set",
+            "campaign.encounter.initiative.roll",
+            "campaign.encounter.initiative.tie.choose",
+            "campaign.encounter.turn.end",
         }:
             response = CommandAcknowledgementEnvelope(
                 request_id=envelope.request_id
@@ -349,6 +378,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             party_money,
             visible_characters,
         )
+        from .services.combat import encounter_data
 
         context = self._context()
         campaign = context.campaign
@@ -367,6 +397,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 mode="json"
             ),
             "party_money": party_money(campaign),
+            "encounter": encounter_data(context),
             "members": [
                 {
                     "id": candidate.pk,
@@ -435,6 +466,111 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 last_seen_at=last_seen_at.isoformat(),
             ),
         )
+
+    @database_sync_to_async
+    def _encounter_start(self, content: dict[str, object]) -> None:
+        from .services.combat import start_encounter
+
+        context = self._context()
+        start_encounter(context)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _encounter_end(self, content: dict[str, object]) -> None:
+        from .services.combat import finish_encounter
+
+        context = self._context()
+        finish_encounter(context)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _combatant_add_character(self, content: dict[str, object]) -> None:
+        from .payloads import EncounterCharacterAddCommand
+        from .services.combat import add_character_combatant
+
+        command = EncounterCharacterAddCommand.model_validate(content)
+        context = self._context()
+        add_character_combatant(context, command.character_id, command.initiative)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _combatant_add(self, content: dict[str, object]) -> None:
+        from .payloads import EncounterCombatantAddCommand
+        from .services.combat import add_encounter_combatant
+
+        command = EncounterCombatantAddCommand.model_validate(content)
+        context = self._context()
+        add_encounter_combatant(context, **command.model_dump())
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _combatant_update(self, content: dict[str, object]) -> None:
+        from .payloads import EncounterCombatantUpdateCommand
+        from .services.combat import update_combatant
+
+        command = EncounterCombatantUpdateCommand.model_validate(content)
+        fields = command.model_dump(exclude={"combatant_id"}, exclude_none=True)
+        context = self._context()
+        update_combatant(context, command.combatant_id, fields)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _combatant_reorder(self, content: dict[str, object]) -> None:
+        from .payloads import EncounterCombatantReorderCommand
+        from .services.combat import reorder_combatants
+
+        command = EncounterCombatantReorderCommand.model_validate(content)
+        context = self._context()
+        reorder_combatants(context, command.combatant_ids)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _combatant_remove(self, content: dict[str, object]) -> None:
+        from .payloads import EncounterCombatantIdentifierCommand
+        from .services.combat import remove_combatant
+
+        command = EncounterCombatantIdentifierCommand.model_validate(content)
+        context = self._context()
+        remove_combatant(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _encounter_current_set(self, content: dict[str, object]) -> None:
+        from .payloads import EncounterCurrentCombatantCommand
+        from .services.combat import set_current_combatant
+
+        command = EncounterCurrentCombatantCommand.model_validate(content)
+        context = self._context()
+        set_current_combatant(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _initiative_roll(self, content: dict[str, object]) -> None:
+        from .payloads import PlayerInitiativeRollCommand
+        from .services.combat import roll_player_initiative
+
+        command = PlayerInitiativeRollCommand.model_validate(content)
+        context = self._context()
+        roll_player_initiative(context, command.roll)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _initiative_tie_choose(self, content: dict[str, object]) -> None:
+        from .payloads import InitiativeTieChoiceCommand
+        from .services.combat import choose_initiative_tie
+
+        command = InitiativeTieChoiceCommand.model_validate(content)
+        context = self._context()
+        choose_initiative_tie(context, command.combatant_id)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _player_turn_end(self, content: dict[str, object]) -> None:
+        from .services.combat import end_player_turn
+
+        context = self._context()
+        end_player_turn(context)
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
     @database_sync_to_async
     def _member_list(self, content: dict[str, object]) -> list[dict[str, object]]:
@@ -708,6 +844,68 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             ),
         )
         return character_data(character, context)
+
+    @database_sync_to_async
+    def _character_health_adjust(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import CharacterHealthCommand
+        from .services.health import adjust_health
+
+        context = self._context()
+        command = CharacterHealthCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        amount = (
+            -command.current_hp_delta
+            if command.reason == "damage"
+            else command.current_hp_delta
+            if command.reason == "healing"
+            else command.temporary_hp_delta
+        )
+        updated = adjust_health(
+            character,
+            reason=command.reason,
+            amount=amount,
+            current_hp=command.current_hp,
+            temporary_hp=command.temporary_hp,
+            description=command.description,
+            created_by=context,
+        )
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterHealthChangedEvent(
+                character_id=updated.pk,
+                max_hp=updated.max_hp,
+                current_hp=updated.current_hp,
+                temporary_hp=updated.temporary_hp,
+                request_id=str(content["request_id"]),
+            ),
+        )
+
+    @database_sync_to_async
+    def _character_rest(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import CharacterRestCommand
+        from .services.health import take_rest
+
+        context = self._context()
+        command = CharacterRestCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        updated = take_rest(
+            character,
+            kind=command.kind,
+            regained_hp=command.regained_hp,
+            created_by=context,
+        )
+        notify_campaign_event(
+            context.campaign_id,
+            CharacterHealthChangedEvent(
+                character_id=updated.pk,
+                max_hp=updated.max_hp,
+                current_hp=updated.current_hp,
+                temporary_hp=updated.temporary_hp,
+                request_id=str(content["request_id"]),
+            ),
+        )
 
     @database_sync_to_async
     def _transaction_list(self, content: dict[str, object]) -> dict[str, object]:

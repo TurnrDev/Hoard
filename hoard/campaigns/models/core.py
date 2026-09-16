@@ -39,6 +39,67 @@ XP_LEVEL_THRESHOLDS = (
     355000,
 )
 
+ABILITY_NAMES = {
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma",
+}
+SKILL_NAMES = {
+    "acrobatics",
+    "animal_handling",
+    "arcana",
+    "athletics",
+    "deception",
+    "history",
+    "insight",
+    "intimidation",
+    "investigation",
+    "medicine",
+    "nature",
+    "perception",
+    "performance",
+    "persuasion",
+    "religion",
+    "sleight_of_hand",
+    "stealth",
+    "survival",
+}
+
+
+def validate_stat_map(
+    field: str,
+    values: object,
+    allowed_keys: set[str],
+    allowed_values: set[str] | None = None,
+    minimum: int = -32768,
+    maximum: int = 32767,
+) -> None:
+    if not isinstance(values, dict):
+        raise ValidationError({field: "Must be an object."})
+
+    unknown = set(values) - allowed_keys
+    if unknown:
+        raise ValidationError(
+            {field: f"Unknown statistics: {', '.join(sorted(unknown))}."}
+        )
+
+    if allowed_values is None:
+        invalid = [
+            key
+            for key, value in values.items()
+            if type(value) is not int or not minimum <= value <= maximum
+        ]
+    else:
+        invalid = [key for key, value in values.items() if value not in allowed_values]
+
+    if invalid:
+        raise ValidationError(
+            {field: f"Invalid values for: {', '.join(sorted(invalid))}."}
+        )
+
 
 class Campaign(models.Model):
     name = models.CharField("Campaign Name", max_length=200)
@@ -207,6 +268,28 @@ class Character(models.Model):
     portrait = models.FileField(upload_to="character-portraits/", blank=True)
     race = models.CharField(max_length=100, blank=True)
     character_class = models.CharField("Class", max_length=100, blank=True)
+    rolled_hit_points = models.PositiveIntegerField("Rolled Hit Points", default=1)
+    current_hp = models.PositiveIntegerField("Current HP", default=1)
+    temporary_hp = models.PositiveIntegerField("Temporary HP", default=0)
+    hp_ability = models.CharField(max_length=20, default="constitution")
+    hp_adjustment = models.SmallIntegerField(default=0)
+    initiative_adjustment = models.SmallIntegerField(default=0)
+    proficiency_bonus_adjustment = models.SmallIntegerField(default=0)
+    ability_bonuses = models.JSONField(default=dict, blank=True)
+    background_ability_bonuses = models.JSONField(default=dict, blank=True)
+    ability_score_adjustments = models.JSONField(default=dict, blank=True)
+    skill_proficiencies = models.JSONField(default=dict, blank=True)
+    skill_adjustments = models.JSONField(default=dict, blank=True)
+    save_proficiencies = models.JSONField(default=dict, blank=True)
+    save_adjustments = models.JSONField(default=dict, blank=True)
+    jack_of_all_trades = models.BooleanField(default=False)
+    remarkable_athlete = models.BooleanField(default=False)
+    strength = models.PositiveSmallIntegerField(default=10)
+    dexterity = models.PositiveSmallIntegerField(default=10)
+    constitution = models.PositiveSmallIntegerField(default=10)
+    intelligence = models.PositiveSmallIntegerField(default=10)
+    wisdom = models.PositiveSmallIntegerField(default=10)
+    charisma = models.PositiveSmallIntegerField(default=10)
 
     def clean(self) -> None:
         super().clean()
@@ -220,6 +303,56 @@ class Character(models.Model):
             raise ValidationError(
                 {"context": "NPCs cannot belong to a player context."}
             )
+        if self.hp_ability not in ABILITY_NAMES:
+            raise ValidationError({"hp_ability": "Choose a valid ability."})
+
+        validate_stat_map(
+            "ability_bonuses",
+            self.ability_bonuses,
+            ABILITY_NAMES,
+            minimum=-30,
+            maximum=30,
+        )
+        validate_stat_map(
+            "background_ability_bonuses",
+            self.background_ability_bonuses,
+            ABILITY_NAMES,
+            minimum=-30,
+            maximum=30,
+        )
+        validate_stat_map(
+            "ability_score_adjustments",
+            self.ability_score_adjustments,
+            ABILITY_NAMES,
+            minimum=-30,
+            maximum=30,
+        )
+        validate_stat_map(
+            "skill_adjustments",
+            self.skill_adjustments,
+            SKILL_NAMES,
+            minimum=-99,
+            maximum=99,
+        )
+        validate_stat_map(
+            "save_adjustments",
+            self.save_adjustments,
+            ABILITY_NAMES,
+            minimum=-99,
+            maximum=99,
+        )
+        validate_stat_map(
+            "skill_proficiencies",
+            self.skill_proficiencies,
+            SKILL_NAMES,
+            {"none", "proficient", "expertise"},
+        )
+        validate_stat_map(
+            "save_proficiencies",
+            self.save_proficiencies,
+            ABILITY_NAMES,
+            {"none", "proficient"},
+        )
 
     def save(self, *args, **kwargs) -> None:
         self.clean()
@@ -240,6 +373,74 @@ class Character(models.Model):
     @property
     def level(self) -> int:
         return self.campaign.level
+
+    @property
+    def proficiency_bonus(self) -> int:
+        return 2 + (self.level - 1) // 4 + self.proficiency_bonus_adjustment
+
+    def ability_score(self, ability: str) -> int:
+        return (
+            getattr(self, ability)
+            + int(self.ability_bonuses.get(ability, 0))
+            + int(self.background_ability_bonuses.get(ability, 0))
+            + int(self.ability_score_adjustments.get(ability, 0))
+        )
+
+    def ability_modifier(self, ability: str) -> int:
+        return (self.ability_score(ability) - 10) // 2
+
+    def half_proficiency(self, ability: str, proficiency: str) -> int:
+        if proficiency != "none":
+            return 0
+        down = self.proficiency_bonus // 2 if self.jack_of_all_trades else 0
+        up = (
+            (self.proficiency_bonus + 1) // 2
+            if self.remarkable_athlete
+            and ability in {"strength", "dexterity", "constitution"}
+            else 0
+        )
+        return max(down, up)
+
+    def saving_throw(self, ability: str) -> int:
+        proficiency = self.save_proficiencies.get(ability, "none")
+        contribution = self.proficiency_bonus if proficiency == "proficient" else 0
+        return (
+            self.ability_modifier(ability)
+            + contribution
+            + int(self.save_adjustments.get(ability, 0))
+        )
+
+    def ability_check(self, ability: str) -> int:
+        return self.ability_modifier(ability) + self.half_proficiency(ability, "none")
+
+    def skill_bonus(self, skill: str, ability: str) -> int:
+        proficiency = self.skill_proficiencies.get(skill, "none")
+        contribution = {
+            "proficient": self.proficiency_bonus,
+            "expertise": self.proficiency_bonus * 2,
+        }.get(proficiency, self.half_proficiency(ability, proficiency))
+        return (
+            self.ability_modifier(ability)
+            + contribution
+            + int(self.skill_adjustments.get(skill, 0))
+        )
+
+    @property
+    def max_hp(self) -> int:
+        return max(
+            1,
+            self.rolled_hit_points
+            + self.ability_modifier(self.hp_ability) * self.level
+            + self.hp_adjustment,
+        )
+
+    @property
+    def initiative_bonus(self) -> int:
+        return (
+            self.ability_modifier("dexterity")
+            + self.half_proficiency("dexterity", "none")
+            + self.initiative_adjustment
+        )
 
     @property
     def experience(self) -> int:

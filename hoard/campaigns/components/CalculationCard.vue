@@ -12,13 +12,27 @@
         <div class="text-uppercase fw-semibold small text-body-secondary">
           {{ label }}
         </div>
+        <div
+          v-if="$slots.actions"
+          @click.stop
+          @keydown.stop
+        >
+          <slot name="actions" />
+        </div>
       </header>
 
-      <Skeleton
-        class="mt-3"
-        width="4.5rem"
-        height="1.75rem"
-      />
+      <div
+        class="h4 mt-3 mb-0 tabular-nums"
+        :class="{ 'calculation-card__summary--interactive': interactive }"
+        :role="interactive ? 'button' : undefined"
+        :tabindex="interactive ? 0 : undefined"
+        :aria-label="interactive ? activationLabel : undefined"
+        @click="activate"
+        @keydown.enter="activate"
+        @keydown.space.prevent="activate"
+      >
+        <slot name="summary">{{ summary }}</slot>
+      </div>
 
       <Button
         class="mt-3"
@@ -28,6 +42,7 @@
         label="Show calculation"
         :aria-label="`Show ${label} calculation`"
         @click.stop="showCalculation"
+        @keydown.stop
       />
     </section>
 
@@ -53,11 +68,11 @@
         />
       </header>
 
-      <div class="d-grid gap-2">
-        <Skeleton width="70%" />
-        <Skeleton width="90%" />
-        <Skeleton width="55%" />
-      </div>
+      <CalculationBreakdown
+        :label="calculationLabel || label"
+        :calculation="calculation"
+        expanded
+      />
 
       <Button
         class="mt-3"
@@ -73,21 +88,32 @@
 
 <script lang="ts">
 import Button from "primevue/button";
-import Skeleton from "primevue/skeleton";
-import { defineComponent } from "vue";
+import { defineComponent, type PropType } from "vue";
+import type { Calculation } from "@/api";
+import CalculationBreakdown from "./CalculationBreakdown.vue";
 
 export default defineComponent({
-  name: "CalculationCard",
-  components: { Button, Skeleton },
+  components: { Button, CalculationBreakdown },
   props: {
     label: { type: String, required: true },
+    summary: { type: String, required: true },
+    calculation: { type: Object as PropType<Calculation>, required: true },
+    interactive: { type: Boolean, default: false },
+    activationLabel: { type: String, default: "" },
+    calculationLabel: { type: String, default: "" },
   },
+  emits: ["activate"],
   data() {
     return {
       calculationVisible: false,
     };
   },
   methods: {
+    activate(): void {
+      if (this.interactive) {
+        this.$emit("activate");
+      }
+    },
     showCalculation(): void {
       this.calculationVisible = true;
     },
@@ -99,6 +125,10 @@ export default defineComponent({
 </script>
 
 <style scoped>
+.calculation-card__summary--interactive {
+  cursor: pointer;
+}
+
 .ability-card-flip-enter-active,
 .ability-card-flip-leave-active {
   transition:

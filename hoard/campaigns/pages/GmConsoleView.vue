@@ -61,6 +61,14 @@
         </div>
       </div>
 
+      <GmEncounterControl
+        class="mb-5"
+        :campaign="campaign"
+        :characters="characters"
+        :context-id="contextId"
+        @completed="completed"
+      />
+
       <section aria-labelledby="gm-actions-heading">
         <header class="mb-3">
           <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
@@ -110,6 +118,7 @@ import { formatCoinPouch } from "@/campaigns/display";
 import { formatGoldValue } from "@/campaigns/money";
 import GmCalendarCard from "@/campaigns/components/GmCalendarCard.vue";
 import GmCoinForm from "@/campaigns/components/GmCoinForm.vue";
+import GmEncounterControl from "@/campaigns/components/GmEncounterControl.vue";
 import GmSharedXpForm from "@/campaigns/components/GmSharedXpForm.vue";
 import { getCampaign, type Campaign, type Character } from "@/api";
 import { campaignRefreshRevision } from "@/realtime";
@@ -118,6 +127,7 @@ export default defineComponent({
   components: {
     GmCalendarCard,
     GmCoinForm,
+    GmEncounterControl,
     GmSharedXpForm,
     Message,
     ProgressBar,

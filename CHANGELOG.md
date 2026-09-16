@@ -5,6 +5,36 @@ All notable changes to Hoard are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Restored calculated character statistics for hit points, initiative, proficiency,
+  abilities, saving throws, and skills, with labelled calculation breakdowns.
+- Added editable rolled, ancestry, background, and custom ability components;
+  proficiency and custom skill/save adjustments; and separate Jack of All Trades and
+  Remarkable Athlete options with their correct half-proficiency rounding rules.
+- Restored current and temporary HP tracking, audited damage and healing, short rests
+  that apply entered Hit Die recovery, and long rests that restore maximum HP. Both
+  rest types now clear temporary HP.
+- Added party-rail HP bars and initiative ordering for active encounters.
+- Restored encounter management and initiative tracking, including character and
+  custom combatants, player rolls, natural-20 bonus turns, tie resolution, turn
+  advancement, hidden-health handling, and the combat-mode Party Rail.
+
+### Changed
+
+- Improved the give coins the UI on the GM screen
+- Restored the historical calculation cards, ability cards, proficiency picker, HP
+  controls, and skill/save presentation on character profiles. Armor Class remains a
+  blocked **Coming soon** card.
+- Character profile edits and health changes now use validated WebSocket commands and
+  authoritative events so connected clients refresh from the same state.
+- Short and long rests are disabled during active combat and rejected by the server
+  if submitted directly.
+- Encounter and Party Rail HP bars now share the same health thresholds, colours, and
+  colour-blind palette variants.
+
 ## [0.1.0] - 2026-09-16
 
 ### Added

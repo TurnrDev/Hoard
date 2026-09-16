@@ -3,6 +3,14 @@
     v-if="character && campaign"
     aria-labelledby="character-title"
   >
+    <PlayerEncounterActions
+      v-if="canAct && campaign.encounter"
+      :context-id="campaignId"
+      :character-id="character.id"
+      :current-combatant-id="campaign.encounter.current_combatant_id"
+      :combatants="campaign.encounter.combatants"
+    />
+
     <header
       class="position-relative mb-4"
       :class="{ 'pe-5': canEdit }"
@@ -258,14 +266,68 @@
               </Transition>
             </section>
           </div>
-          <div
-            v-for="card in deferredCalculationCards"
-            :key="card"
-            class="col"
-          >
+          <div class="col">
+            <CalculationCard
+              label="HP"
+              :summary="`${character.sheet.current_hp} / ${character.sheet.max_hp}`"
+              :calculation="character.sheet.hp_calculation"
+              :interactive="canEdit"
+              activation-label="Adjust hit points"
+              calculation-label="Maximum HP"
+              @activate="openHpAdjustment"
+            >
+              <template #actions>
+                <ActionMenu
+                  v-if="canEdit"
+                  label="More HP options"
+                  :items="hpActionItems"
+                />
+              </template>
+              <template #summary>
+                {{ character.sheet.current_hp }}
+                <template v-if="character.sheet.temporary_hp">
+                  + {{ character.sheet.temporary_hp }}
+                </template>
+                <span aria-hidden="true">/</span>
+                {{ character.sheet.max_hp }}
+              </template>
+            </CalculationCard>
+          </div>
+          <div class="col">
             <ComingSoonBlock>
-              <CalculationCard :label="card" />
+              <section class="border rounded-3 p-3 p-md-4 h-100">
+                <div class="text-uppercase fw-semibold small text-body-secondary">
+                  Armor class
+                </div>
+                <Skeleton
+                  class="mt-3"
+                  width="4.5rem"
+                  height="1.75rem"
+                />
+                <Button
+                  class="mt-3"
+                  size="small"
+                  text
+                  icon="mdi mdi-rotate-3d-variant"
+                  label="Show calculation"
+                  aria-label="Show Armor class calculation"
+                />
+              </section>
             </ComingSoonBlock>
+          </div>
+          <div class="col">
+            <CalculationCard
+              label="Initiative bonus"
+              :summary="signed(character.sheet.initiative.value)"
+              :calculation="character.sheet.initiative"
+            />
+          </div>
+          <div class="col">
+            <CalculationCard
+              label="Proficiency bonus"
+              :summary="signed(character.sheet.proficiency_bonus)"
+              :calculation="character.sheet.proficiency_bonus_calculation"
+            />
           </div>
           <div class="col">
             <ComingSoonBlock>
@@ -406,44 +468,12 @@
             :key="ability.label"
             class="col"
           >
-            <ComingSoonBlock>
-              <article class="border rounded-3 p-3 h-100 text-center">
-                <header class="mb-3">
-                  <h3 class="h5 mb-0">{{ ability.label }}</h3>
-                  <span class="small text-uppercase text-body-secondary">
-                    {{ ability.abbreviation }} ·
-                    <Skeleton
-                      class="d-inline-block"
-                      width="2rem"
-                    />
-                  </span>
-                </header>
-                <div class="row row-cols-2 g-2 align-items-start tabular-nums">
-                  <div class="col d-flex flex-column align-items-center">
-                    <span class="small text-body-secondary d-block mb-1">Modifier</span>
-                    <Skeleton
-                      width="3rem"
-                      height="2rem"
-                    />
-                  </div>
-                  <div class="col d-flex flex-column align-items-center">
-                    <span class="small text-body-secondary d-block mb-1">Save</span>
-                    <Skeleton
-                      width="3rem"
-                      height="2rem"
-                    />
-                  </div>
-                </div>
-                <Button
-                  class="mt-3"
-                  size="small"
-                  text
-                  icon="mdi mdi-rotate-3d-variant"
-                  label="Show calculation"
-                  :aria-label="`Show ${ability.label} calculation`"
-                />
-              </article>
-            </ComingSoonBlock>
+            <AbilityCard
+              :label="ability.label"
+              :abbreviation="ability.abbreviation"
+              :ability="character.sheet.abilities[ability.key]"
+              :save="character.sheet.saves[ability.key]"
+            />
           </div>
         </div>
       </section>
@@ -463,42 +493,80 @@
             Bonuses are grouped by the ability used for each check.
           </p>
         </header>
-        <ComingSoonBlock>
-          <div class="border rounded-3 p-2">
-            <div class="row g-0">
-              <div
-                v-for="(column, columnIndex) in deferredSkillColumns"
-                :key="columnIndex"
-                class="col-6"
+        <div class="border rounded-3 p-2">
+          <div class="row g-0">
+            <div
+              v-for="(column, columnIndex) in deferredSkillColumns"
+              :key="columnIndex"
+              class="col-6"
+            >
+              <section
+                class="h-100"
+                :class="columnIndex === 0 ? 'pe-2' : 'ps-2 border-start'"
               >
-                <section
-                  class="h-100"
-                  :class="columnIndex === 0 ? 'pe-2' : 'ps-2 border-start'"
+                <div
+                  v-for="(group, groupIndex) in column"
+                  :key="group.label"
+                  :class="{ 'mt-4': groupIndex > 0 }"
                 >
-                  <div
-                    v-for="(group, groupIndex) in column"
-                    :key="group.label"
-                    :class="{ 'mt-4': groupIndex > 0 }"
-                  >
-                    <h3 class="h6 text-uppercase text-body-secondary mb-1">
-                      {{ group.label }}
-                    </h3>
-                    <ul class="list-group list-group-flush">
-                      <li
-                        v-for="skill in group.skills"
-                        :key="skill"
-                        class="list-group-item bg-transparent px-0 py-2 d-flex align-items-center justify-content-between gap-3"
+                  <h3 class="h6 text-uppercase text-body-secondary mb-1">
+                    {{ group.label }}
+                  </h3>
+                  <ul class="list-group list-group-flush">
+                    <li
+                      v-for="skill in group.skills"
+                      :key="skill"
+                      class="list-group-item bg-transparent px-0 py-2 d-flex align-items-center justify-content-between gap-3"
+                    >
+                      <span class="skill-name">{{ skill }}</span>
+                      <span
+                        class="d-inline-flex flex-shrink-0 align-items-center gap-1 tabular-nums"
                       >
-                        <span class="skill-name">{{ skill }}</span>
-                        <Skeleton width="2rem" />
-                      </li>
-                    </ul>
-                  </div>
-                </section>
-              </div>
+                        <span
+                          v-if="
+                            proficiencyIcon(
+                              character.sheet.skills[skillKey(skill)].proficiency,
+                            )
+                          "
+                          :class="[
+                            'mdi',
+                            proficiencyIcon(
+                              character.sheet.skills[skillKey(skill)].proficiency,
+                            ),
+                            'skill-proficiency-icon',
+                          ]"
+                          role="img"
+                          :aria-label="
+                            proficiencyLabel(
+                              character.sheet.skills[skillKey(skill)].proficiency,
+                            )
+                          "
+                          :title="
+                            proficiencyLabel(
+                              character.sheet.skills[skillKey(skill)].proficiency,
+                            )
+                          "
+                        />
+                        <strong
+                          :class="
+                            character.sheet.skills[skillKey(skill)].proficiency !==
+                            'none'
+                              ? proficiencyClass(
+                                  character.sheet.skills[skillKey(skill)].proficiency,
+                                )
+                              : undefined
+                          "
+                        >
+                          {{ signed(character.sheet.skills[skillKey(skill)].bonus) }}
+                        </strong>
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </section>
             </div>
           </div>
-        </ComingSoonBlock>
+        </div>
       </section>
 
       <ComingSoonBlock class="mt-4">
@@ -833,7 +901,7 @@
       :header="
         profileSetupRequired ? 'Set up your character' : 'Edit character profile'
       "
-      :style="{ width: 'min(34rem, calc(100vw - 2rem))' }"
+      :style="{ width: 'min(72rem, calc(100vw - 2rem))' }"
     >
       <form
         class="d-grid gap-3"
@@ -873,6 +941,194 @@
             fluid
           />
         </label>
+        <section class="border-top pt-3">
+          <h3 class="h5">HP</h3>
+          <div class="row g-3">
+            <label class="col-12 col-md-4 d-grid gap-2">
+              <span class="fw-semibold">Rolled Hit Points</span>
+              <InputNumber
+                v-model.number="draft.rolledHitPoints"
+                :min="1"
+                :max="99999"
+                show-buttons
+                fluid
+              />
+            </label>
+            <label class="col-12 col-md-4 d-grid gap-2">
+              <span class="fw-semibold">HP custom modifier</span>
+              <InputNumber
+                v-model.number="draft.hpAdjustment"
+                :min="-32768"
+                :max="32767"
+                show-buttons
+                fluid
+              />
+            </label>
+            <div class="col-12 col-md-4 border rounded-3 p-3">
+              <strong>Maximum HP: {{ draftMaxHp }}</strong>
+              <div class="small text-body-secondary tabular-nums mt-1">
+                {{ draft.rolledHitPoints }} + ({{
+                  draftAbilityModifier("constitution")
+                }}
+                × {{ campaign.level }}) + {{ draft.hpAdjustment }} = {{ draftMaxHp }}
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="border-top pt-3">
+          <h3 class="h5">Initiative and proficiency</h3>
+          <div class="row g-3 align-items-end">
+            <label class="col-12 col-md-4 d-grid gap-2">
+              <span class="fw-semibold">Initiative custom modifier</span>
+              <InputNumber
+                v-model.number="draft.initiativeAdjustment"
+                :min="-32768"
+                :max="32767"
+                show-buttons
+                fluid
+              />
+              <small class="text-body-secondary tabular-nums">
+                DEX {{ signed(draftAbilityModifier("dexterity")) }} + feature
+                {{ signed(draftInitiativeFeature) }} + custom
+                {{ signed(draft.initiativeAdjustment) }} =
+                <strong>{{ signed(draftInitiative) }}</strong>
+              </small>
+            </label>
+            <label class="col-12 col-md-4 d-grid gap-2">
+              <span class="fw-semibold">Proficiency custom modifier</span>
+              <InputNumber
+                v-model.number="draft.proficiencyAdjustment"
+                :min="-32768"
+                :max="32767"
+                show-buttons
+                fluid
+              />
+              <small class="text-body-secondary tabular-nums">
+                Level {{ campaign.level }} base {{ signed(draftBaseProficiency) }} +
+                custom {{ signed(draft.proficiencyAdjustment) }} =
+                <strong>{{ signed(draftProficiency) }}</strong>
+              </small>
+            </label>
+          </div>
+          <fieldset class="border rounded-3 p-3 mt-3">
+            <legend class="float-none w-auto h6 mb-2">Non-proficient checks</legend>
+            <label class="d-flex align-items-start gap-2 mb-3">
+              <input
+                v-model="draft.jackOfAllTrades"
+                type="checkbox"
+              />
+              <span>
+                <strong class="d-block">Jack of All Trades</strong>
+                <small class="text-body-secondary">
+                  Half proficiency, rounded down, on otherwise non-proficient ability
+                  checks.
+                </small>
+              </span>
+            </label>
+            <label class="d-flex align-items-start gap-2">
+              <input
+                v-model="draft.remarkableAthlete"
+                type="checkbox"
+              />
+              <span>
+                <strong class="d-block">Remarkable Athlete</strong>
+                <small class="text-body-secondary">
+                  Half proficiency, rounded up, on otherwise non-proficient Strength,
+                  Dexterity, and Constitution checks. Contributions never stack.
+                </small>
+              </span>
+            </label>
+          </fieldset>
+        </section>
+        <section class="border-top pt-3">
+          <h3 class="h5">Abilities and saving throws</h3>
+          <div class="row g-3">
+            <fieldset
+              v-for="ability in deferredAbilities"
+              :key="ability.key"
+              class="col-12 border rounded-3 p-3"
+            >
+              <legend class="float-none w-auto h6 mb-2">{{ ability.label }}</legend>
+              <div class="row g-2">
+                <label
+                  v-for="field in abilityFields"
+                  :key="field.key"
+                  class="col-6 col-lg-3 d-grid gap-1"
+                >
+                  <span class="small fw-semibold">{{ field.label }}</span>
+                  <InputNumber
+                    v-model.number="draft.abilities[ability.key][field.key]"
+                    :min="field.key === 'rolled' ? 1 : -30"
+                    :max="field.key === 'rolled' ? 30 : 30"
+                    show-buttons
+                    fluid
+                  />
+                </label>
+              </div>
+              <div class="small text-body-secondary tabular-nums mt-2">
+                Score {{ draftAbilityScore(ability.key) }} · modifier
+                {{ signed(draftAbilityModifier(ability.key)) }} · ability check
+                {{ signed(draftAbilityCheck(ability.key)) }}
+              </div>
+              <div class="row g-2 mt-2 align-items-end">
+                <SkillProficiencyPicker
+                  v-model="draft.saves[ability.key].proficiency"
+                  class="col-8"
+                  :input-id="`save-${ability.key}`"
+                  label="Saving throw"
+                  :allow-expertise="false"
+                />
+                <label class="col-4 d-grid gap-1">
+                  <span class="small fw-semibold">Custom</span>
+                  <InputNumber
+                    v-model.number="draft.saves[ability.key].adjustment"
+                    :min="-99"
+                    :max="99"
+                    show-buttons
+                    fluid
+                  />
+                </label>
+              </div>
+              <div class="small text-body-secondary tabular-nums mt-2">
+                Saving throw:
+                <strong>{{ signed(draftSaveBonus(ability.key)) }}</strong>
+              </div>
+            </fieldset>
+          </div>
+        </section>
+        <section class="border-top pt-3">
+          <h3 class="h5">Skills</h3>
+          <div class="row g-3">
+            <div
+              v-for="(skill, name) in draft.skills"
+              :key="name"
+              class="col-12 col-md-6 border rounded-3 p-3"
+            >
+              <SkillProficiencyPicker
+                v-model="skill.proficiency"
+                :input-id="`skill-${name}`"
+                :label="displayIdentifier(String(name))"
+              />
+              <div class="small text-body-secondary mt-1">
+                {{ displayIdentifier(skillAbility(String(name))) }} check
+              </div>
+              <label class="d-grid gap-1 mt-2">
+                <span class="small fw-semibold">Custom modifier</span>
+                <InputNumber
+                  v-model.number="skill.adjustment"
+                  :min="-99"
+                  :max="99"
+                  show-buttons
+                  fluid
+                />
+              </label>
+              <div class="small text-body-secondary tabular-nums mt-2">
+                Result:
+                <strong>{{ signed(draftSkillBonus(String(name))) }}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
         <footer class="d-flex justify-content-end gap-2 mt-2">
           <Button
             type="button"
@@ -888,6 +1144,186 @@
           />
         </footer>
       </form>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="hpAdjustmentOpen"
+      modal
+      :style="{ width: 'min(26rem, calc(100vw - 2rem))' }"
+    >
+      <section
+        class="d-grid gap-3"
+        aria-labelledby="adjust-hp-heading"
+      >
+        <h2
+          id="adjust-hp-heading"
+          class="h3 mb-0"
+        >
+          Adjust HP
+        </h2>
+        <p class="mb-0">
+          Current HP: {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }}
+        </p>
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Hit points</span>
+          <InputNumber
+            v-model.number="healthAmount"
+            :min="1"
+            :step="1"
+            show-buttons
+            fluid
+          />
+        </label>
+        <footer class="d-flex justify-content-end gap-2 flex-wrap">
+          <Button
+            label="Cancel"
+            severity="secondary"
+            outlined
+            @click="hpAdjustmentOpen = false"
+          />
+          <Button
+            label="Damage"
+            severity="danger"
+            :disabled="healthAmount < 1"
+            @click="submitHpAdjustment('damage')"
+          />
+          <Button
+            label="Heal"
+            :disabled="healthAmount < 1"
+            @click="submitHpAdjustment('healing')"
+          />
+        </footer>
+      </section>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="healthOpen"
+      modal
+      :style="{ width: 'min(33rem, calc(100vw - 2rem))' }"
+    >
+      <section
+        class="d-grid gap-3"
+        aria-labelledby="health-heading"
+      >
+        <h2
+          id="health-heading"
+          class="h3 mb-0"
+        >
+          Record HP change
+        </h2>
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Action</span>
+          <Select
+            v-model="healthReason"
+            :options="healthReasonOptions"
+            option-label="title"
+            option-value="value"
+            fluid
+          />
+        </label>
+        <label
+          v-if="healthReason !== 'correction'"
+          class="d-grid gap-2"
+        >
+          <span class="fw-semibold">Amount</span>
+          <InputNumber
+            v-model.number="healthAmount"
+            :min="1"
+            :step="1"
+            show-buttons
+            fluid
+          />
+        </label>
+        <template v-else>
+          <label class="d-grid gap-2">
+            <span class="fw-semibold">Correct current HP</span>
+            <InputNumber
+              v-model.number="healthCurrent"
+              :min="0"
+              show-buttons
+              fluid
+            />
+          </label>
+          <label class="d-grid gap-2">
+            <span class="fw-semibold">Correct temporary HP</span>
+            <InputNumber
+              v-model.number="healthTemporary"
+              :min="0"
+              show-buttons
+              fluid
+            />
+          </label>
+        </template>
+        <Message severity="info">
+          {{ healthPreview }}
+        </Message>
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Reason (optional)</span>
+          <Textarea
+            v-model="healthDescription"
+            rows="2"
+            fluid
+          />
+        </label>
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            label="Cancel"
+            severity="secondary"
+            outlined
+            @click="healthOpen = false"
+          />
+          <Button
+            label="Apply"
+            :loading="busy"
+            @click="saveHealth"
+          />
+        </footer>
+      </section>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="shortRestOpen"
+      modal
+      :style="{ width: 'min(30rem, calc(100vw - 2rem))' }"
+    >
+      <section
+        class="d-grid gap-3"
+        aria-labelledby="short-rest-heading"
+      >
+        <h2
+          id="short-rest-heading"
+          class="h3 mb-0"
+        >
+          Short rest
+        </h2>
+        <p class="mb-0">
+          Enter the HP regained from Hit Die rolls. Temporary HP is cleared.
+        </p>
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">HP regained</span>
+          <InputNumber
+            v-model.number="shortRestRecovery"
+            :min="0"
+            :step="1"
+            show-buttons
+            fluid
+          />
+        </label>
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            label="Cancel"
+            severity="secondary"
+            outlined
+            @click="shortRestOpen = false"
+          />
+          <Button
+            label="Take short rest"
+            :loading="busy"
+            :disabled="inCombat"
+            @click="takeShortRest"
+          />
+        </footer>
+      </section>
     </Dialog>
   </section>
 
@@ -917,6 +1353,8 @@ import {
   getCampaign,
   getTransactions,
   removeCharacterPortrait,
+  postHealth,
+  takeRest,
   updateCharacter,
   uploadCharacterPortrait,
   type Campaign,
@@ -925,11 +1363,14 @@ import {
 } from "@/api";
 import { exchangedCoinAmount } from "@/campaigns/coinExchange";
 import ActionMenu from "@/campaigns/components/ActionMenu.vue";
+import AbilityCard from "@/campaigns/components/AbilityCard.vue";
 import CalculationCard from "@/campaigns/components/CalculationCard.vue";
 import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
 import CoinAmountPicker from "@/campaigns/components/CoinAmountPicker.vue";
 import ComingSoonBlock from "@/campaigns/components/ComingSoonBlock.vue";
+import PlayerEncounterActions from "@/campaigns/components/PlayerEncounterActions.vue";
 import SheetDisclosure from "@/campaigns/components/SheetDisclosure.vue";
+import SkillProficiencyPicker from "@/campaigns/components/SkillProficiencyPicker.vue";
 import {
   readCoinDisplayMode,
   storeCoinDisplayMode,
@@ -952,6 +1393,7 @@ const denominationOptions = ["cp", "sp", "ep", "gp", "pp"].map((value) => ({
 
 export default defineComponent({
   components: {
+    AbilityCard,
     ActionMenu,
     Button,
     CalculationCard,
@@ -963,9 +1405,11 @@ export default defineComponent({
     InputText,
     Message,
     ProgressBar,
+    PlayerEncounterActions,
     RelativeTime,
     Select,
     SheetDisclosure,
+    SkillProficiencyPicker,
     Skeleton,
     Textarea,
   },
@@ -989,24 +1433,48 @@ export default defineComponent({
       activity: [] as LedgerTransaction[],
       busy: false,
       error: "",
+      healthOpen: false,
+      hpAdjustmentOpen: false,
+      healthReason: "damage" as "damage" | "healing" | "temporary" | "correction",
+      healthAmount: 1,
+      healthCurrent: 0,
+      healthTemporary: 0,
+      healthDescription: "",
+      healthReasonOptions: [
+        { title: "Damage", value: "damage" },
+        { title: "Healing", value: "healing" },
+        { title: "Temporary HP change", value: "temporary" },
+        { title: "Correction", value: "correction" },
+      ],
+      shortRestOpen: false,
+      shortRestRecovery: 0,
       draft: {
         name: "",
         race: "",
         characterClass: "",
+        rolledHitPoints: 1,
+        hpAdjustment: 0,
+        initiativeAdjustment: 0,
+        proficiencyAdjustment: 0,
+        jackOfAllTrades: false,
+        remarkableAthlete: false,
+        abilities: {} as Record<string, Record<string, number>>,
+        saves: {} as Record<string, { proficiency: string; adjustment: number }>,
+        skills: {} as Record<string, { proficiency: string; adjustment: number }>,
       },
-      deferredCalculationCards: [
-        "HP",
-        "Armor class",
-        "Initiative bonus",
-        "Proficiency bonus",
+      abilityFields: [
+        { key: "rolled", label: "Rolled" },
+        { key: "ancestry", label: "Ancestry" },
+        { key: "background", label: "Background" },
+        { key: "custom", label: "Custom" },
       ],
       deferredAbilities: [
-        { label: "Strength", abbreviation: "STR" },
-        { label: "Dexterity", abbreviation: "DEX" },
-        { label: "Constitution", abbreviation: "CON" },
-        { label: "Intelligence", abbreviation: "INT" },
-        { label: "Wisdom", abbreviation: "WIS" },
-        { label: "Charisma", abbreviation: "CHA" },
+        { key: "strength", label: "Strength", abbreviation: "STR" },
+        { key: "dexterity", label: "Dexterity", abbreviation: "DEX" },
+        { key: "constitution", label: "Constitution", abbreviation: "CON" },
+        { key: "intelligence", label: "Intelligence", abbreviation: "INT" },
+        { key: "wisdom", label: "Wisdom", abbreviation: "WIS" },
+        { key: "charisma", label: "Charisma", abbreviation: "CHA" },
       ],
       deferredSkillColumns: [
         [
@@ -1076,6 +1544,9 @@ export default defineComponent({
         !this.character.is_active,
       );
     },
+    inCombat(): boolean {
+      return Boolean(this.campaign?.encounter);
+    },
     characterActionItems(): MenuItem[] {
       const items: MenuItem[] = [
         {
@@ -1126,6 +1597,36 @@ export default defineComponent({
           label: "Exchange coins",
           icon: "mdi mdi-cash-sync",
           command: () => this.openMoneyDialog("exchange"),
+        },
+      ];
+    },
+    hpActionItems(): MenuItem[] {
+      return [
+        {
+          label: "Add temporary HP",
+          icon: "mdi mdi-shield-plus-outline",
+          command: () => this.openHealthFor("temporary"),
+        },
+        {
+          label: "Advanced HP adjustment",
+          icon: "mdi mdi-tune-variant",
+          command: () => this.openHealthFor("damage"),
+        },
+        { separator: true },
+        {
+          label: "Short rest",
+          icon: "mdi mdi-weather-sunset",
+          disabled: this.inCombat,
+          command: () => {
+            this.shortRestRecovery = 0;
+            this.shortRestOpen = true;
+          },
+        },
+        {
+          label: "Long rest",
+          icon: "mdi mdi-weather-night",
+          disabled: this.inCombat,
+          command: () => void this.takeLongRest(),
         },
       ];
     },
@@ -1212,6 +1713,61 @@ export default defineComponent({
     campaignRefresh(): number {
       return campaignRefreshRevision.value;
     },
+    draftBaseProficiency(): number {
+      return 2 + Math.floor(((this.campaign?.level ?? 1) - 1) / 4);
+    },
+    draftProficiency(): number {
+      return this.draftBaseProficiency + this.draft.proficiencyAdjustment;
+    },
+    draftInitiativeFeature(): number {
+      return this.draftHalfProficiency("dexterity");
+    },
+    draftInitiative(): number {
+      return (
+        this.draftAbilityModifier("dexterity") +
+        this.draftInitiativeFeature +
+        this.draft.initiativeAdjustment
+      );
+    },
+    draftMaxHp(): number {
+      return Math.max(
+        1,
+        this.draft.rolledHitPoints +
+          this.draftAbilityModifier("constitution") * (this.campaign?.level ?? 1) +
+          this.draft.hpAdjustment,
+      );
+    },
+    healthPreview(): string {
+      if (!this.character) {
+        return "";
+      }
+
+      const current = this.character.sheet.current_hp;
+      const temporary = this.character.sheet.temporary_hp;
+
+      if (this.healthReason === "correction") {
+        return `Current ${current} → ${this.healthCurrent}; temporary ${temporary} → ${this.healthTemporary}`;
+      }
+
+      if (this.healthReason === "damage") {
+        const absorbed = Math.min(temporary, this.healthAmount);
+        const nextTemporary = temporary - absorbed;
+        const nextCurrent = Math.max(0, current - (this.healthAmount - absorbed));
+
+        return `Current ${current} → ${nextCurrent}; temporary ${temporary} → ${nextTemporary}`;
+      }
+
+      if (this.healthReason === "healing") {
+        const nextCurrent = Math.min(
+          this.character.sheet.max_hp,
+          current + this.healthAmount,
+        );
+
+        return `Current ${current} → ${nextCurrent}`;
+      }
+
+      return `Temporary HP ${temporary} → ${Math.max(0, temporary + this.healthAmount)}`;
+    },
   },
   watch: {
     campaignRefresh(): void {
@@ -1222,10 +1778,198 @@ export default defineComponent({
     void this.load();
   },
   methods: {
+    displayIdentifier,
     formatCoinPouch,
     formatGoldValue,
     formatXp(value: number): string {
       return `${value.toLocaleString()} XP`;
+    },
+    signed(value: number): string {
+      return value >= 0 ? `+${value}` : `−${Math.abs(value)}`;
+    },
+    skillKey(value: string): string {
+      return value.toLowerCase().replaceAll(" ", "_");
+    },
+    proficiencyLabel(proficiency: string): string {
+      return (
+        {
+          proficient: "Proficient",
+          expertise: "Expertise",
+        }[proficiency] ?? ""
+      );
+    },
+    proficiencyClass(proficiency: string): string {
+      return `proficiency-bonus proficiency-bonus--${proficiency}`;
+    },
+    proficiencyIcon(proficiency: string): string {
+      return (
+        {
+          proficient: "mdi-shield-check",
+          expertise: "mdi-star-four-points",
+        }[proficiency] ?? ""
+      );
+    },
+    draftAbilityScore(ability: string): number {
+      const values = this.draft.abilities[ability];
+
+      if (!values) {
+        return 10;
+      }
+
+      return values.rolled + values.ancestry + values.background + values.custom;
+    },
+    draftAbilityModifier(ability: string): number {
+      return Math.floor((this.draftAbilityScore(ability) - 10) / 2);
+    },
+    draftAbilityCheck(ability: string): number {
+      return this.draftAbilityModifier(ability) + this.draftHalfProficiency(ability);
+    },
+    draftHalfProficiency(ability: string): number {
+      const jackOfAllTrades = this.draft.jackOfAllTrades
+        ? Math.floor(this.draftProficiency / 2)
+        : 0;
+      const remarkableAthlete =
+        this.draft.remarkableAthlete &&
+        ["strength", "dexterity", "constitution"].includes(ability)
+          ? Math.ceil(this.draftProficiency / 2)
+          : 0;
+
+      return Math.max(jackOfAllTrades, remarkableAthlete);
+    },
+    draftSaveBonus(ability: string): number {
+      const save = this.draft.saves[ability];
+      const proficiency =
+        save?.proficiency === "proficient" ? this.draftProficiency : 0;
+
+      return this.draftAbilityModifier(ability) + proficiency + (save?.adjustment ?? 0);
+    },
+    skillAbility(skill: string): string {
+      const abilities: Record<string, string> = {
+        acrobatics: "dexterity",
+        animal_handling: "wisdom",
+        arcana: "intelligence",
+        athletics: "strength",
+        deception: "charisma",
+        history: "intelligence",
+        insight: "wisdom",
+        intimidation: "charisma",
+        investigation: "intelligence",
+        medicine: "wisdom",
+        nature: "intelligence",
+        perception: "wisdom",
+        performance: "charisma",
+        persuasion: "charisma",
+        religion: "intelligence",
+        sleight_of_hand: "dexterity",
+        stealth: "dexterity",
+        survival: "wisdom",
+      };
+
+      return abilities[skill] ?? "strength";
+    },
+    draftSkillBonus(skillName: string): number {
+      const skill = this.draft.skills[skillName];
+      const ability = this.skillAbility(skillName);
+      let proficiency: number;
+
+      if (skill?.proficiency === "proficient") {
+        proficiency = this.draftProficiency;
+      } else if (skill?.proficiency === "expertise") {
+        proficiency = this.draftProficiency * 2;
+      } else {
+        proficiency = this.draftHalfProficiency(ability);
+      }
+
+      return (
+        this.draftAbilityModifier(ability) + proficiency + (skill?.adjustment ?? 0)
+      );
+    },
+    openHealthFor(reason: "damage" | "healing" | "temporary" | "correction"): void {
+      this.healthReason = reason;
+      this.healthAmount = 1;
+      this.healthCurrent = this.character?.sheet.current_hp ?? 0;
+      this.healthTemporary = this.character?.sheet.temporary_hp ?? 0;
+      this.healthDescription = "";
+      this.healthOpen = true;
+    },
+    openHpAdjustment(): void {
+      this.healthAmount = 1;
+      this.hpAdjustmentOpen = true;
+    },
+    async submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
+      this.healthReason = reason;
+      await this.saveHealth();
+      this.hpAdjustmentOpen = false;
+    },
+    async saveHealth(): Promise<void> {
+      if (!this.character) {
+        return;
+      }
+      this.busy = true;
+      try {
+        await postHealth(this.campaignId, {
+          character_id: this.character.id,
+          reason: this.healthReason,
+          description: this.healthDescription,
+          ...(this.healthReason === "correction"
+            ? {
+                current_hp: this.healthCurrent,
+                temporary_hp: this.healthTemporary,
+              }
+            : this.healthReason === "damage"
+              ? { current_hp_delta: -Math.abs(this.healthAmount) }
+              : this.healthReason === "healing"
+                ? { current_hp_delta: Math.abs(this.healthAmount) }
+                : { temporary_hp_delta: this.healthAmount }),
+        });
+        this.healthOpen = false;
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error ? exception.message : "Unable to update HP.";
+      } finally {
+        this.busy = false;
+      }
+    },
+    async takeShortRest(): Promise<void> {
+      if (!this.character || this.inCombat) {
+        return;
+      }
+      this.busy = true;
+      try {
+        await takeRest(
+          this.campaignId,
+          this.character.id,
+          "short",
+          this.shortRestRecovery,
+        );
+        this.shortRestOpen = false;
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to take a short rest.";
+      } finally {
+        this.busy = false;
+      }
+    },
+    async takeLongRest(): Promise<void> {
+      if (!this.character || this.inCombat) {
+        return;
+      }
+      this.busy = true;
+      try {
+        await takeRest(this.campaignId, this.character.id, "long");
+        await this.load();
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : "Unable to take a long rest.";
+      } finally {
+        this.busy = false;
+      }
     },
     activityAmount(transaction: LedgerTransaction): string {
       return transaction.entries
@@ -1355,6 +2099,41 @@ export default defineComponent({
         name: this.character.name,
         race: this.character.race,
         characterClass: this.character.class,
+        rolledHitPoints: this.character.sheet.rolled_hit_points,
+        hpAdjustment: this.character.sheet.hp_adjustment,
+        initiativeAdjustment: this.character.sheet.initiative_adjustment,
+        proficiencyAdjustment: this.character.sheet.proficiency_bonus_adjustment,
+        jackOfAllTrades: this.character.sheet.jack_of_all_trades,
+        remarkableAthlete: this.character.sheet.remarkable_athlete,
+        abilities: Object.fromEntries(
+          Object.entries(this.character.sheet.abilities).map(([name, ability]) => [
+            name,
+            {
+              rolled: ability.raw,
+              ancestry: ability.ancestry_bonus,
+              background: ability.background_bonus,
+              custom: ability.score_adjustment,
+            },
+          ]),
+        ),
+        saves: Object.fromEntries(
+          Object.entries(this.character.sheet.saves).map(([name, save]) => [
+            name,
+            {
+              proficiency: save.proficiency,
+              adjustment: save.adjustment,
+            },
+          ]),
+        ),
+        skills: Object.fromEntries(
+          Object.entries(this.character.sheet.skills).map(([name, skill]) => [
+            name,
+            {
+              proficiency: skill.proficiency,
+              adjustment: skill.adjustment,
+            },
+          ]),
+        ),
       };
       this.editorOpen = true;
     },
@@ -1370,6 +2149,60 @@ export default defineComponent({
           name: this.draft.name.trim(),
           race: this.draft.race.trim(),
           class: this.draft.characterClass.trim(),
+          rolled_hit_points: this.draft.rolledHitPoints,
+          hp_adjustment: this.draft.hpAdjustment,
+          initiative_adjustment: this.draft.initiativeAdjustment,
+          proficiency_bonus_adjustment: this.draft.proficiencyAdjustment,
+          jack_of_all_trades: this.draft.jackOfAllTrades,
+          remarkable_athlete: this.draft.remarkableAthlete,
+          ...Object.fromEntries(
+            Object.entries(this.draft.abilities).map(([name, value]) => [
+              name,
+              value.rolled,
+            ]),
+          ),
+          ability_bonuses: Object.fromEntries(
+            Object.entries(this.draft.abilities).map(([name, value]) => [
+              name,
+              value.ancestry,
+            ]),
+          ),
+          background_ability_bonuses: Object.fromEntries(
+            Object.entries(this.draft.abilities).map(([name, value]) => [
+              name,
+              value.background,
+            ]),
+          ),
+          ability_score_adjustments: Object.fromEntries(
+            Object.entries(this.draft.abilities).map(([name, value]) => [
+              name,
+              value.custom,
+            ]),
+          ),
+          save_proficiencies: Object.fromEntries(
+            Object.entries(this.draft.saves).map(([name, value]) => [
+              name,
+              value.proficiency,
+            ]),
+          ),
+          save_adjustments: Object.fromEntries(
+            Object.entries(this.draft.saves).map(([name, value]) => [
+              name,
+              value.adjustment,
+            ]),
+          ),
+          skill_proficiencies: Object.fromEntries(
+            Object.entries(this.draft.skills).map(([name, value]) => [
+              name,
+              value.proficiency,
+            ]),
+          ),
+          skill_adjustments: Object.fromEntries(
+            Object.entries(this.draft.skills).map(([name, value]) => [
+              name,
+              value.adjustment,
+            ]),
+          ),
         });
         this.editorOpen = false;
         this.$toast.add({

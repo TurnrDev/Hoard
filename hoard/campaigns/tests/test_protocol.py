@@ -62,11 +62,9 @@ class WebSocketProtocolTests(SimpleTestCase):
     def test_deferred_operations_are_not_registered(self) -> None:
         operations = operation_definitions()
         deferred_prefixes = (
-            "campaign.encounter.",
             "compendium.",
             "characters.builder.",
             "characters.conditions.",
-            "characters.health.",
             "characters.imports.",
             "characters.level_up.",
             "characters.notes.",
@@ -85,6 +83,9 @@ class WebSocketProtocolTests(SimpleTestCase):
         }
 
         self.assertEqual(exposed, set())
-        self.assertNotIn("characters.rest", operations)
+        self.assertIn("characters.health.post", operations)
+        self.assertIn("characters.rest", operations)
+        self.assertIn("campaign.encounter.start", operations)
+        self.assertIn("campaign.encounter.initiative.roll", operations)
         self.assertNotIn("campaign.level.approve", operations)
         self.assertNotIn("campaign.level.status", operations)

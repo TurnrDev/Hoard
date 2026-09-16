@@ -19,22 +19,15 @@
       :characters="characters"
       @selected="characterId = $event"
     />
-    <div
-      class="d-flex gap-2 my-3"
+    <SelectButton
+      v-model="action"
+      class="my-3"
+      :allow-empty="false"
       aria-label="Coin transfer direction"
-    >
-      <Button
-        :outlined="action !== 'give'"
-        label="Give"
-        @click="action = 'give'"
-      />
-      <Button
-        severity="danger"
-        :outlined="action !== 'take'"
-        label="Take"
-        @click="action = 'take'"
-      />
-    </div>
+      :options="actionOptions"
+      option-label="label"
+      option-value="value"
+    />
     <CoinAmountPicker v-model="amounts" />
     <label class="d-grid gap-2 mt-3">
       <span class="fw-semibold">Reason</span>
@@ -65,6 +58,7 @@
 import { defineComponent, type PropType } from "vue";
 import Button from "primevue/button";
 import Message from "primevue/message";
+import SelectButton from "primevue/selectbutton";
 import Textarea from "primevue/textarea";
 import { createMoneyTransfer, type Character } from "@/api";
 import CoinAmountPicker from "./CoinAmountPicker.vue";
@@ -73,6 +67,7 @@ export default defineComponent({
   components: {
     Button,
     Message,
+    SelectButton,
     Textarea,
     CoinAmountPicker,
     GmCharacterSelect,
@@ -86,6 +81,10 @@ export default defineComponent({
     return {
       characterId: undefined as number | undefined,
       action: "give" as "give" | "take",
+      actionOptions: [
+        { label: "Give", value: "give" },
+        { label: "Take", value: "take" },
+      ],
       amounts: { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 } as Record<string, number>,
       description: "",
       error: "",

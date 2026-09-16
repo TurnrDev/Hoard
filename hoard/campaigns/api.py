@@ -51,7 +51,7 @@ class SharedXpAwardCreate(Schema):
     description: str = ""
 
 
-api = NinjaAPI(title="Hoard API", version="0.1.0", auth=django_auth)
+api = NinjaAPI(title="Hoard API", version="0.1.1", auth=django_auth)
 
 
 def unprocessable(error: DjangoValidationError) -> HttpError:
@@ -129,6 +129,216 @@ def money_data(character: Character) -> dict[str, int | str]:
     }
 
 
+ABILITIES = (
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma",
+)
+SKILL_ABILITIES = {
+    "acrobatics": "dexterity",
+    "animal_handling": "wisdom",
+    "arcana": "intelligence",
+    "athletics": "strength",
+    "deception": "charisma",
+    "history": "intelligence",
+    "insight": "wisdom",
+    "intimidation": "charisma",
+    "investigation": "intelligence",
+    "medicine": "wisdom",
+    "nature": "intelligence",
+    "perception": "wisdom",
+    "performance": "charisma",
+    "persuasion": "charisma",
+    "religion": "intelligence",
+    "sleight_of_hand": "dexterity",
+    "stealth": "dexterity",
+    "survival": "wisdom",
+}
+
+
+def calculation(
+    value: int, base: int, components: list[dict[str, object]]
+) -> dict[str, object]:
+    return {"value": value, "base": base, "components": components}
+
+
+def character_sheet_data(character: Character) -> dict[str, object]:
+    hp_modifier = character.ability_modifier(character.hp_ability)
+    initiative_half = character.half_proficiency("dexterity", "none")
+    base_proficiency = 2 + (character.level - 1) // 4
+    return {
+        "level": character.level,
+        "rolled_hit_points": character.rolled_hit_points,
+        "hp_ability": character.hp_ability,
+        "hp_adjustment": character.hp_adjustment,
+        "initiative_adjustment": character.initiative_adjustment,
+        "proficiency_bonus_adjustment": character.proficiency_bonus_adjustment,
+        "max_hp": character.max_hp,
+        "hp_calculation": calculation(
+            character.max_hp,
+            character.rolled_hit_points,
+            [
+                {
+                    "label": f"{character.hp_ability.title()} modifier × level",
+                    "value": hp_modifier * character.level,
+                    "formula": f"{hp_modifier} × {character.level}",
+                    "source": "ability",
+                },
+                {
+                    "label": "Custom modifier",
+                    "value": character.hp_adjustment,
+                    "source": "override",
+                },
+            ],
+        ),
+        "current_hp": character.current_hp,
+        "temporary_hp": character.temporary_hp,
+        "initiative": calculation(
+            character.initiative_bonus,
+            character.ability_modifier("dexterity"),
+            [
+                {
+                    "label": "Half proficiency",
+                    "value": initiative_half,
+                    "source": "feature",
+                },
+                {
+                    "label": "Custom modifier",
+                    "value": character.initiative_adjustment,
+                    "source": "override",
+                },
+            ],
+        ),
+        "proficiency_bonus": character.proficiency_bonus,
+        "proficiency_bonus_calculation": calculation(
+            character.proficiency_bonus,
+            base_proficiency,
+            [
+                {
+                    "label": "Level progression",
+                    "value": base_proficiency,
+                    "source": "rules",
+                },
+                {
+                    "label": "Custom modifier",
+                    "value": character.proficiency_bonus_adjustment,
+                    "source": "override",
+                },
+            ],
+        ),
+        "jack_of_all_trades": character.jack_of_all_trades,
+        "remarkable_athlete": character.remarkable_athlete,
+        "abilities": {
+            ability: {
+                "score": character.ability_score(ability),
+                "raw": getattr(character, ability),
+                "ancestry_bonus": int(character.ability_bonuses.get(ability, 0)),
+                "background_bonus": int(
+                    character.background_ability_bonuses.get(ability, 0)
+                ),
+                "score_adjustment": int(
+                    character.ability_score_adjustments.get(ability, 0)
+                ),
+                "modifier": character.ability_modifier(ability),
+                "check_bonus": character.ability_check(ability),
+                "check_formula": calculation(
+                    character.ability_check(ability),
+                    character.ability_modifier(ability),
+                    [
+                        {
+                            "label": "Half proficiency",
+                            "value": character.half_proficiency(ability, "none"),
+                            "source": "feature",
+                        }
+                    ],
+                ),
+                "formula": calculation(
+                    character.ability_score(ability),
+                    getattr(character, ability),
+                    [
+                        {
+                            "label": "Ancestry modifier",
+                            "value": int(character.ability_bonuses.get(ability, 0)),
+                            "source": "ancestry",
+                        },
+                        {
+                            "label": "Background modifier",
+                            "value": int(
+                                character.background_ability_bonuses.get(ability, 0)
+                            ),
+                            "source": "background",
+                        },
+                        {
+                            "label": "Custom modifier",
+                            "value": int(
+                                character.ability_score_adjustments.get(ability, 0)
+                            ),
+                            "source": "override",
+                        },
+                    ],
+                ),
+            }
+            for ability in ABILITIES
+        },
+        "saves": {
+            ability: {
+                "proficiency": character.save_proficiencies.get(ability, "none"),
+                "adjustment": int(character.save_adjustments.get(ability, 0)),
+                "bonus": character.saving_throw(ability),
+                "formula": calculation(
+                    character.saving_throw(ability),
+                    character.ability_modifier(ability),
+                    [
+                        {
+                            "label": "Proficiency bonus",
+                            "value": character.proficiency_bonus
+                            if character.save_proficiencies.get(ability) == "proficient"
+                            else 0,
+                            "source": "proficiency",
+                        },
+                        {
+                            "label": "Custom modifier",
+                            "value": int(character.save_adjustments.get(ability, 0)),
+                            "source": "override",
+                        },
+                    ],
+                ),
+            }
+            for ability in ABILITIES
+        },
+        "skills": {
+            skill: {
+                "ability": ability,
+                "proficiency": character.skill_proficiencies.get(skill, "none"),
+                "adjustment": int(character.skill_adjustments.get(skill, 0)),
+                "bonus": character.skill_bonus(skill, ability),
+                "formula": calculation(
+                    character.skill_bonus(skill, ability),
+                    character.ability_modifier(ability),
+                    [
+                        {
+                            "label": "Proficiency contribution",
+                            "value": character.skill_bonus(skill, ability)
+                            - character.ability_modifier(ability)
+                            - int(character.skill_adjustments.get(skill, 0)),
+                            "source": "proficiency",
+                        },
+                        {
+                            "label": "Custom modifier",
+                            "value": int(character.skill_adjustments.get(skill, 0)),
+                            "source": "override",
+                        },
+                    ],
+                ),
+            }
+            for skill, ability in SKILL_ABILITIES.items()
+        },
+    }
+
+
 def character_data(
     character: Character, viewing_context: CampaignContext | None = None
 ) -> dict[str, object]:
@@ -143,6 +353,7 @@ def character_data(
         "race": character.race,
         "class": character.character_class,
         "experience": character.experience,
+        "sheet": character_sheet_data(character),
         "money": money_data(character),
     }
 
