@@ -32,6 +32,12 @@
   <div
     v-else
     class="campaign-shell min-vh-100"
+    :class="{
+      'campaign-shell--with-context': activeContext,
+      'campaign-shell--contextless': !activeContext,
+      'campaign-shell--navigation-expanded': navigationExpanded,
+      'campaign-shell--party-expanded': partyRailExpanded,
+    }"
   >
     <a
       class="visually-hidden-focusable skip-link border bg-body text-body px-3 py-2"
@@ -40,8 +46,113 @@
       Skip to main content
     </a>
 
+    <aside
+      v-if="activeContext"
+      class="campaign-navigation-panel d-none d-lg-flex flex-column border-end bg-body-tertiary"
+      :class="{ 'campaign-navigation-panel--expanded': navigationExpanded }"
+      aria-label="Campaign sidebar"
+    >
+      <header class="campaign-navigation-panel__header d-flex align-items-center gap-2">
+        <Button
+          :icon="navigationExpanded ? 'mdi mdi-menu-open' : 'mdi mdi-menu'"
+          text
+          rounded
+          :aria-label="
+            navigationExpanded ? 'Collapse campaign sidebar' : 'Expand campaign sidebar'
+          "
+          :aria-expanded="navigationExpanded"
+          @click="toggleNavigationRail"
+        />
+        <RouterLink
+          v-if="navigationExpanded"
+          class="campaign-navigation-panel__wordmark fw-bold text-decoration-none text-nowrap"
+          :to="contextPath(activeContext)"
+        >
+          HOARD
+          <span class="campaign-navigation-panel__version">v{{ version }}</span>
+        </RouterLink>
+      </header>
+
+      <CampaignNavigation
+        :context-id="contextId"
+        :active-context="activeContext"
+        :expanded="navigationExpanded"
+      />
+
+      <div class="campaign-navigation-panel__account d-grid gap-1 mt-auto border-top">
+        <button
+          type="button"
+          class="campaign-navigation-panel__account-control"
+          aria-label="Switch campaign or character"
+          aria-haspopup="menu"
+          aria-controls="desktop-context-menu"
+          @click="toggleContextMenu"
+        >
+          <CharacterAvatar
+            v-if="activeCharacter"
+            :character="activeCharacter"
+            size="menu"
+          />
+          <span
+            v-else
+            class="mdi mdi-account-switch-outline campaign-navigation-panel__account-icon"
+            aria-hidden="true"
+          />
+          <span
+            v-if="navigationExpanded"
+            class="text-truncate"
+          >
+            {{ contextLabel }}
+          </span>
+        </button>
+        <TieredMenu
+          id="desktop-context-menu"
+          ref="contextMenu"
+          :model="contextSwitcherItems"
+          popup
+        />
+
+        <button
+          type="button"
+          class="campaign-navigation-panel__account-control"
+          aria-label="Choose appearance"
+          aria-haspopup="menu"
+          aria-controls="desktop-appearance-menu"
+          @click="toggleAppearanceMenu"
+        >
+          <span
+            class="mdi mdi-palette-outline campaign-navigation-panel__account-icon"
+            aria-hidden="true"
+          />
+          <span v-if="navigationExpanded">Appearance</span>
+        </button>
+        <TieredMenu
+          id="desktop-appearance-menu"
+          ref="appearanceMenu"
+          :model="appearanceMenuItems"
+          popup
+        />
+
+        <button
+          type="button"
+          class="campaign-navigation-panel__account-control"
+          :disabled="busy"
+          :aria-label="busy ? 'Signing out' : 'Sign out'"
+          @click="signOut"
+        >
+          <span
+            class="mdi mdi-logout campaign-navigation-panel__account-icon"
+            aria-hidden="true"
+          />
+          <span v-if="navigationExpanded">
+            {{ busy ? "Signing out…" : "Sign out" }}
+          </span>
+        </button>
+      </div>
+    </aside>
+
     <header class="campaign-header border-bottom bg-body-tertiary">
-      <div class="d-flex align-items-center gap-2">
+      <div class="campaign-header__brand d-flex align-items-center gap-2">
         <Button
           class="d-lg-none"
           icon="mdi mdi-menu"
@@ -69,7 +180,10 @@
         <span>{{ formatCampaignDate(campaign.calendar) }}</span>
       </p>
 
-      <div class="d-flex align-items-center justify-content-end gap-2">
+      <div
+        class="campaign-header__account d-flex align-items-center justify-content-end gap-2"
+        :class="{ 'd-lg-none': activeContext }"
+      >
         <Button
           class="p-1"
           text
@@ -112,23 +226,7 @@
       />
     </Drawer>
 
-    <div
-      class="campaign-layout"
-      :class="{
-        'campaign-layout--contextless': !activeContext,
-        'campaign-layout--rail-expanded': partyRailExpanded,
-      }"
-    >
-      <aside
-        v-if="activeContext"
-        class="campaign-navigation-panel d-none d-lg-block border-end bg-body-tertiary p-3"
-      >
-        <CampaignNavigation
-          :context-id="contextId"
-          :active-context="activeContext"
-        />
-      </aside>
-
+    <div class="campaign-layout">
       <section
         v-if="campaign && activeContext"
         class="campaign-rail-panel border-start bg-body-tertiary"
@@ -199,6 +297,16 @@ import {
   type ThemePreferences,
 } from "./theme";
 
+const NAVIGATION_RAIL_STORAGE_KEY = "hoard-navigation-rail-expanded";
+
+function readNavigationRailExpanded(): boolean {
+  try {
+    return window.localStorage.getItem(NAVIGATION_RAIL_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
 export default defineComponent({
   components: {
     CampaignNavigation,
@@ -216,6 +324,7 @@ export default defineComponent({
     return {
       version: __HOARD_VERSION__,
       navigationOpen: false,
+      navigationExpanded: readNavigationRailExpanded(),
       partyRailExpanded: false,
       busy: false,
       colourMode: themePreferences.colourMode,
@@ -274,7 +383,22 @@ export default defineComponent({
 
       return `${this.activeContext.campaign_name} · ${this.activeContext.character_name}`;
     },
-    accountMenuItems(): MenuItem[] {
+    contextSwitcherItems(): MenuItem[] {
+      return this.availableContexts.map((context) => ({
+        label:
+          context.kind === "gm"
+            ? `${context.campaign_name} · Game Master`
+            : `${context.campaign_name} · ${context.character_name}`,
+        icon:
+          context.id === this.contextId
+            ? "mdi mdi-check"
+            : context.kind === "gm"
+              ? "mdi mdi-shield-account-outline"
+              : "mdi mdi-account-outline",
+        command: () => void this.selectContext(context),
+      }));
+    },
+    appearanceMenuItems(): MenuItem[] {
       const colourModes: Array<{
         label: string;
         value: ThemePreferences["colourMode"];
@@ -293,52 +417,43 @@ export default defineComponent({
 
       return [
         {
+          label: "Colour mode",
+          icon: "mdi mdi-theme-light-dark",
+          items: colourModes.map((option) => ({
+            label: option.label,
+            icon:
+              option.value === this.colourMode
+                ? "mdi mdi-check"
+                : "mdi mdi-circle-outline",
+            command: () => this.setColourMode(option.value),
+          })),
+        },
+        {
+          label: "Colour palette",
+          icon: "mdi mdi-format-color-fill",
+          items: palettes.map((option) => ({
+            label: option.label,
+            icon:
+              option.value === this.palette
+                ? "mdi mdi-check"
+                : "mdi mdi-circle-outline",
+            command: () => this.setPalette(option.value),
+          })),
+        },
+      ];
+    },
+    accountMenuItems(): MenuItem[] {
+      return [
+        {
           label: "Campaign and character",
           icon: "mdi mdi-account-switch-outline",
-          items: this.availableContexts.map((context) => ({
-            label:
-              context.kind === "gm"
-                ? `${context.campaign_name} · Game Master`
-                : `${context.campaign_name} · ${context.character_name}`,
-            icon:
-              context.id === this.contextId
-                ? "mdi mdi-check"
-                : context.kind === "gm"
-                  ? "mdi mdi-shield-account-outline"
-                  : "mdi mdi-account-outline",
-            command: () => void this.selectContext(context),
-          })),
+          items: this.contextSwitcherItems,
         },
         { separator: true },
         {
           label: "Appearance",
           icon: "mdi mdi-palette-outline",
-          items: [
-            {
-              label: "Colour mode",
-              icon: "mdi mdi-theme-light-dark",
-              items: colourModes.map((option) => ({
-                label: option.label,
-                icon:
-                  option.value === this.colourMode
-                    ? "mdi mdi-check"
-                    : "mdi mdi-circle-outline",
-                command: () => this.setColourMode(option.value),
-              })),
-            },
-            {
-              label: "Colour palette",
-              icon: "mdi mdi-format-color-fill",
-              items: palettes.map((option) => ({
-                label: option.label,
-                icon:
-                  option.value === this.palette
-                    ? "mdi mdi-check"
-                    : "mdi mdi-circle-outline",
-                command: () => this.setPalette(option.value),
-              })),
-            },
-          ],
+          items: this.appearanceMenuItems,
         },
         { separator: true },
         {
@@ -405,6 +520,28 @@ export default defineComponent({
       const menu = this.$refs.accountMenu as { toggle: (event: Event) => void };
 
       menu.toggle(event);
+    },
+    toggleContextMenu(event: Event): void {
+      const menu = this.$refs.contextMenu as { toggle: (event: Event) => void };
+
+      menu.toggle(event);
+    },
+    toggleAppearanceMenu(event: Event): void {
+      const menu = this.$refs.appearanceMenu as { toggle: (event: Event) => void };
+
+      menu.toggle(event);
+    },
+    toggleNavigationRail(): void {
+      this.navigationExpanded = !this.navigationExpanded;
+
+      try {
+        window.localStorage.setItem(
+          NAVIGATION_RAIL_STORAGE_KEY,
+          String(this.navigationExpanded),
+        );
+      } catch {
+        // Storage may be unavailable in a privacy-restricted browser.
+      }
     },
     setColourMode(colourMode: ThemePreferences["colourMode"]): void {
       this.colourMode = colourMode;

@@ -7,6 +7,7 @@
   --hoard-gold-highlight: #d6a33f;
   --hoard-accent: var(--hoard-gold);
   --hoard-focus: var(--hoard-gold);
+  --hoard-navigation-width: 4.5rem;
   --hoard-rail-width: 5.75rem;
   --bs-body-bg: #eee6d5;
   --bs-body-bg-rgb: 238, 230, 213;
@@ -97,6 +98,39 @@ select:focus-visible {
   color: var(--hoard-ink);
 }
 
+.campaign-shell--with-context {
+  display: grid;
+  grid-template-columns:
+    var(--hoard-navigation-width)
+    minmax(0, 1fr)
+    var(--hoard-rail-width);
+  grid-template-rows: 4.5rem minmax(0, 1fr);
+  grid-template-areas:
+    "navigation header rail"
+    "navigation main rail";
+  height: 100vh;
+  overflow: hidden;
+}
+
+.campaign-shell--contextless {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 4.5rem minmax(0, 1fr);
+  grid-template-areas:
+    "header"
+    "main";
+  height: 100vh;
+  overflow: hidden;
+}
+
+.campaign-shell--navigation-expanded {
+  --hoard-navigation-width: 16rem;
+}
+
+.campaign-shell--party-expanded {
+  --hoard-rail-width: 18rem;
+}
+
 .connection-screen {
   inset: 0;
   z-index: 2000;
@@ -114,6 +148,7 @@ select:focus-visible {
 }
 
 .campaign-header {
+  grid-area: header;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
@@ -145,31 +180,97 @@ select:focus-visible {
 }
 
 .campaign-layout {
-  display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr) var(--hoard-rail-width);
-  grid-template-areas: "navigation main rail";
-  min-height: calc(100vh - 4.5rem);
-}
-
-.campaign-layout--rail-expanded {
-  --hoard-rail-width: 18rem;
-}
-
-.campaign-layout--contextless {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "main";
+  display: contents;
 }
 
 .campaign-navigation-panel {
   grid-area: navigation;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.campaign-navigation-panel__header {
+  flex: 0 0 auto;
+  min-height: 4.5rem;
+  padding: 0.75rem;
+}
+
+.campaign-navigation-panel__wordmark {
+  color: var(--hoard-brand-gold);
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+}
+
+.campaign-navigation-panel__version {
+  font-size: 0.7em;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.campaign-navigation-panel .campaign-navigation-container {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.campaign-navigation-panel__account {
+  flex: 0 0 auto;
+  padding: 0.5rem;
+}
+
+.campaign-navigation-panel__account-control {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.25rem;
+  border: 0;
+  border-radius: var(--bs-border-radius);
+  background: transparent;
+  color: var(--bs-body-color);
+  text-align: left;
+}
+
+.campaign-navigation-panel__account-control:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--hoard-accent) 16%, transparent);
+}
+
+.campaign-navigation-panel__account-control:disabled {
+  color: var(--bs-secondary-color);
+}
+
+.campaign-navigation-panel__account-icon {
+  width: 2.75rem;
+  font-size: 1.35rem;
+  text-align: center;
+}
+
+.campaign-navigation-panel:not(.campaign-navigation-panel--expanded)
+  .campaign-navigation-panel__header {
+  justify-content: center;
+}
+
+.campaign-navigation-panel:not(.campaign-navigation-panel--expanded)
+  .campaign-navigation-panel__account-control {
+  display: flex;
+  justify-content: center;
+  justify-self: center;
+  width: 3rem;
 }
 
 .campaign-main {
   grid-area: main;
   width: 100%;
+  height: 100%;
   min-width: 0;
   max-width: 100rem;
   margin: 0 auto;
+  overflow-y: auto;
 }
 
 .campaign-rail-panel {
@@ -177,9 +278,13 @@ select:focus-visible {
   position: relative;
   z-index: 1;
   min-width: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .campaign-navigation__item {
+  width: 100%;
+  min-height: 3rem;
   padding: 0.65rem 0.75rem;
   border-radius: var(--bs-border-radius);
   color: var(--bs-body-color);
@@ -198,10 +303,16 @@ select:focus-visible {
 
 .campaign-navigation__coming-soon {
   width: fit-content;
-  margin-left: 2rem;
   padding: 0.1rem 0.4rem;
   font-size: 0.65rem;
   font-weight: 600;
+}
+
+.campaign-navigation-container--collapsed .campaign-navigation__item {
+  justify-content: center;
+  width: 3rem;
+  margin-inline: auto;
+  padding-inline: 0.5rem;
 }
 
 .proficiency-bonus {
@@ -395,11 +506,19 @@ select:focus-visible {
 }
 
 @media (min-width: 992px) {
+  .campaign-shell--with-context .campaign-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .campaign-shell--with-context .campaign-header__brand {
+    display: none !important;
+  }
+
   .party-rail {
     position: sticky;
     top: 0;
     overflow-y: auto;
-    height: calc(100vh - 4.5rem) !important;
+    height: 100vh !important;
   }
 
   .party-rail:not(.party-rail--expanded) .party-rail__content {
@@ -442,6 +561,13 @@ select:focus-visible {
 }
 
 @media (max-width: 991.98px) {
+  .campaign-shell--with-context,
+  .campaign-shell--contextless {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
   .campaign-header {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -451,6 +577,7 @@ select:focus-visible {
   }
 
   .campaign-layout {
+    display: grid;
     grid-template-columns: 1fr;
     grid-template-areas:
       "rail"
@@ -459,11 +586,15 @@ select:focus-visible {
   }
 
   .campaign-rail-panel {
+    height: auto;
+    overflow: visible;
     border-bottom: 1px solid var(--bs-border-color);
     border-left: 0 !important;
   }
 
   .party-rail {
+    position: static;
+    height: auto !important;
     padding-block: 0.25rem 0.5rem;
     min-height: 5.75rem;
   }
