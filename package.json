@@ -1,7 +1,7 @@
 {
   "name": "hoard",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "lint:fix": "eslint \"hoard/**/*.{ts,vue}\" --fix",
     "format": "prettier --write \"hoard/**/*.{ts,vue,css}\"",
     "format:check": "prettier --check \"hoard/**/*.{ts,vue,css}\"",
-    "fix": "npm run lint:fix && npm run format"
+    "fix": "npm run lint:fix && npm run format",
+    "version:bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",

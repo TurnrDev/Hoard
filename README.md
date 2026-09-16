@@ -42,6 +42,15 @@ not part of this release.
 
 ## Development
 
+To bump the release version consistently across the frontend and Python metadata:
+
+```sh
+npm run version:bump -- patch
+```
+
+Replace `patch` with `minor` or `major` as appropriate. The command refuses to run
+if the existing version declarations do not agree.
+
 Docker Compose is the supported full-stack development workflow. It starts Daphne,
 Vite with live reload, PostgreSQL, and Redis with persistent local volumes:
 
