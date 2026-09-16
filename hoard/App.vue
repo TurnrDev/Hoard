@@ -170,16 +170,6 @@
         </RouterLink>
       </div>
 
-      <p
-        v-if="campaign"
-        class="campaign-header__campaign mb-0 text-center"
-        :title="campaign.calendar.era_name"
-      >
-        <span>{{ campaign.name }}</span>
-        <span aria-hidden="true">{{ " · " }}</span>
-        <span>{{ formatCampaignDate(campaign.calendar) }}</span>
-      </p>
-
       <div
         class="campaign-header__account d-flex align-items-center justify-content-end gap-2"
         :class="{ 'd-lg-none': activeContext }"
@@ -266,7 +256,6 @@ import {
   type CampaignMember,
   type Character,
 } from "./api";
-import { formatCampaignDate } from "@/campaigns/calendar";
 import {
   markConnectionAvailable,
   markConnectionUnavailable,
@@ -512,7 +501,6 @@ export default defineComponent({
   },
   methods: {
     contextPath,
-    formatCampaignDate,
     updateViewportMode(): void {
       this.phoneViewport = window.matchMedia("(max-width: 767.98px)").matches;
     },

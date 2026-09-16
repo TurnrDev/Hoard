@@ -12,7 +12,7 @@
         <h2 class="visually-hidden">Party Rail</h2>
         <Button
           class="d-none d-lg-inline-flex"
-          :icon="expanded ? 'mdi mdi-chevron-right' : 'mdi mdi-chevron-left'"
+          :icon="expanded ? 'mdi mdi-menu-open' : 'mdi mdi-menu'"
           text
           rounded
           :aria-label="expanded ? 'Collapse Party Rail' : 'Expand Party Rail'"
@@ -20,8 +20,8 @@
           @click="$emit('toggle')"
         />
         <Button
-          class="d-lg-none"
-          :icon="expanded ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'"
+          class="party-rail__mobile-toggle d-lg-none"
+          :icon="expanded ? 'mdi mdi-chevron-up' : 'mdi mdi-account-group-outline'"
           text
           rounded
           :aria-label="expanded ? 'Collapse Party Rail' : 'Expand Party Rail'"
