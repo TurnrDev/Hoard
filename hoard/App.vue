@@ -1,6 +1,14 @@
 <template>
   <Toast :position="toastPosition" />
 
+  <InitiativeRollDialog
+    v-if="pendingInitiativeCombatant"
+    :key="pendingInitiativeCombatant.id"
+    :context-id="contextId"
+    :combatant="pendingInitiativeCombatant"
+    :bonus-roll="pendingInitiativeIsBonus"
+  />
+
   <div
     v-if="showReconnectingScreen"
     class="connection-screen position-fixed d-flex flex-column align-items-center justify-content-center gap-3 p-4 text-center bg-body"
@@ -265,6 +273,7 @@ import {
   type Campaign,
   type CampaignMember,
   type Character,
+  type EncounterCombatant,
 } from "./api";
 import {
   markConnectionAvailable,
@@ -273,6 +282,7 @@ import {
 } from "./connection";
 import CampaignNavigation from "@/campaigns/components/CampaignNavigation.vue";
 import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
+import InitiativeRollDialog from "@/campaigns/components/InitiativeRollDialog.vue";
 import PartyRail from "@/campaigns/components/PartyRail.vue";
 import {
   contextPath,
@@ -310,6 +320,7 @@ export default defineComponent({
   components: {
     CampaignNavigation,
     CharacterAvatar,
+    InitiativeRollDialog,
     Drawer,
     PartyRail,
     ProgressSpinner,
@@ -369,6 +380,31 @@ export default defineComponent({
 
       return this.campaign?.characters.find(
         (character) => character.id === this.activeContext?.character_id,
+      );
+    },
+    pendingInitiativeCombatant(): EncounterCombatant | undefined {
+      if (this.activeContext?.kind !== "pc") {
+        return undefined;
+      }
+
+      return this.campaign?.encounter?.combatants.find(
+        (combatant) =>
+          combatant.character_id === this.activeContext?.character_id &&
+          combatant.can_roll_initiative,
+      );
+    },
+    pendingInitiativeIsBonus(): boolean {
+      if (!this.pendingInitiativeCombatant) {
+        return false;
+      }
+
+      return Boolean(
+        this.campaign?.encounter?.combatants.some(
+          (combatant) =>
+            combatant.character_id === this.pendingInitiativeCombatant?.character_id &&
+            combatant.id !== this.pendingInitiativeCombatant.id &&
+            combatant.initiative_roll === 20,
+        ),
       );
     },
     contextLabel(): string {

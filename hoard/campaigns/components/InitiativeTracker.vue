@@ -18,6 +18,7 @@
         :key="combatant.id"
         :combatant="combatant"
         :active-context="activeContext"
+        :connected="combatantConnected(combatant)"
         :expanded="expanded"
         :can-view-hidden-health="canViewHiddenHealth"
         :current="combatant.id === currentCombatantId"
@@ -28,7 +29,7 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import type { EncounterCombatant } from "@/api";
+import type { CampaignMember, Character, EncounterCombatant } from "@/api";
 import type { ActingContext } from "@/campaigns/context";
 import InitiativeCombatant from "./InitiativeCombatant.vue";
 
@@ -36,6 +37,8 @@ export default defineComponent({
   components: { InitiativeCombatant },
   props: {
     combatants: { type: Array as PropType<EncounterCombatant[]>, required: true },
+    characters: { type: Array as PropType<Character[]>, required: true },
+    members: { type: Array as PropType<CampaignMember[]>, required: true },
     activeContext: { type: Object as PropType<ActingContext>, required: true },
     expanded: { type: Boolean, default: false },
     canViewHiddenHealth: { type: Boolean, default: false },
@@ -46,7 +49,27 @@ export default defineComponent({
   },
   computed: {
     orderedCombatants(): EncounterCombatant[] {
-      return [...this.combatants].sort((left, right) => left.position - right.position);
+      return [...this.combatants].sort(
+        (left, right) => left.initiative_position - right.initiative_position,
+      );
+    },
+  },
+  methods: {
+    combatantConnected(combatant: EncounterCombatant): boolean {
+      if (combatant.character_id === null) {
+        return false;
+      }
+
+      const character = this.characters.find(
+        (candidate) => candidate.id === combatant.character_id,
+      );
+      if (!character?.context_id) {
+        return false;
+      }
+
+      return Boolean(
+        this.members.find((member) => member.id === character.context_id)?.connected,
+      );
     },
   },
 });

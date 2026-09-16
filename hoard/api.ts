@@ -122,12 +122,25 @@ export type Character = {
 export type EncounterCombatant = {
   id: number;
   character_id: number | null;
+  is_player_character: boolean;
   name: string;
   portrait_url: string | null;
   initiative: number;
+  initiative_position: number;
   initiative_roll: number | null;
   initiative_modifier: number;
-  position: number;
+  can_roll_initiative: boolean;
+  can_end_turn: boolean;
+  tie_options: Array<{
+    combatant_id: number;
+    name: string;
+    vote_count: number;
+  }>;
+  tie_choice_id: number | null;
+  tie_votes_cast: number;
+  tie_votes_required: number;
+  tie_winner_id: number | null;
+  tie_resolution: "agreement" | "random" | null;
   current_hp: number | null;
   max_hp: number | null;
   health_percentage: number | null;
@@ -136,6 +149,7 @@ export type EncounterCombatant = {
 
 export type Encounter = {
   id: number;
+  started_at: string;
   current_combatant_id: number | null;
   combatants: EncounterCombatant[];
 };
@@ -459,6 +473,100 @@ export function takeRest(
     character_id: characterId,
     kind,
     regained_hp: regainedHp,
+  });
+}
+
+export function updateEncounterCombatant(
+  contextId: number,
+  combatantId: number,
+  fields: {
+    name?: string;
+    initiative?: number;
+    current_hp?: number;
+    max_hp?: number;
+  },
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.update", {
+    combatant_id: combatantId,
+    ...fields,
+  });
+}
+
+export function reorderEncounterCombatants(
+  contextId: number,
+  combatantIds: number[],
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.reorder", {
+    combatant_ids: combatantIds,
+  });
+}
+
+export function setCurrentEncounterCombatant(
+  contextId: number,
+  combatantId: number | null,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.current.set", {
+    combatant_id: combatantId,
+  });
+}
+
+export function rollPlayerInitiative(contextId: number, roll: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.initiative.roll", {
+    roll,
+  });
+}
+
+export function chooseInitiativeTie(
+  contextId: number,
+  combatantId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.initiative.tie.choose", {
+    combatant_id: combatantId,
+  });
+}
+
+export function endPlayerTurn(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.turn.end");
+}
+
+export function startEncounter(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.start");
+}
+
+export function endEncounter(contextId: number): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.end");
+}
+
+export function addCharacterToEncounter(
+  contextId: number,
+  characterId: number,
+  initiative = 0,
+): Promise<void> {
+  return contextRequest<void>(
+    contextId,
+    "campaign.encounter.combatants.add_character",
+    { character_id: characterId, initiative },
+  );
+}
+
+export function addEncounterCombatant(
+  contextId: number,
+  payload: {
+    name: string;
+    initiative?: number;
+    current_hp?: number;
+    max_hp?: number;
+  },
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.add", payload);
+}
+
+export function removeEncounterCombatant(
+  contextId: number,
+  combatantId: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.encounter.combatants.remove", {
+    combatant_id: combatantId,
   });
 }
 

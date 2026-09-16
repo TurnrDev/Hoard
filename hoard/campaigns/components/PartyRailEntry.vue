@@ -1,7 +1,6 @@
 <template>
   <li
     class="party-rail__entry align-items-center"
-    :class="`party-rail__entry--${healthState}`"
     :aria-current="current ? 'step' : undefined"
   >
     <OverlayBadge
@@ -54,35 +53,33 @@
         />
         Current turn
       </span>
-      <ProgressBar
+      <HealthBar
         v-if="healthPercentage !== null"
-        :value="healthPercentage"
-        :show-value="false"
-        :aria-label="healthLabel"
+        :percentage="healthPercentage"
+        :label="healthLabel"
       />
       <slot />
     </div>
-    <ProgressBar
+    <HealthBar
       v-else-if="healthPercentage !== null"
       class="party-rail__compact-health"
-      :value="healthPercentage"
-      :show-value="false"
-      :aria-label="healthLabel"
+      :percentage="healthPercentage"
+      :label="healthLabel"
     />
   </li>
 </template>
 
 <script lang="ts">
 import OverlayBadge from "primevue/overlaybadge";
-import ProgressBar from "primevue/progressbar";
 import { defineComponent, type PropType } from "vue";
 import CharacterAvatar from "./CharacterAvatar.vue";
+import HealthBar from "./HealthBar.vue";
 
 export default defineComponent({
   components: {
     CharacterAvatar,
+    HealthBar,
     OverlayBadge,
-    ProgressBar,
   },
   props: {
     name: { type: String, required: true },
@@ -108,21 +105,6 @@ export default defineComponent({
       }
 
       return `${this.name} health bar`;
-    },
-    healthState(): "critical" | "wounded" | "healthy" | "unknown" {
-      if (this.healthPercentage === null) {
-        return "unknown";
-      }
-
-      if (this.healthPercentage <= 25) {
-        return "critical";
-      }
-
-      if (this.healthPercentage <= 60) {
-        return "wounded";
-      }
-
-      return "healthy";
     },
   },
 });

@@ -18,6 +18,9 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that apply entered Hit Die recovery, and long rests that restore maximum HP. Both
   rest types now clear temporary HP.
 - Added party-rail HP bars and initiative ordering for active encounters.
+- Restored encounter management and initiative tracking, including character and
+  custom combatants, player rolls, natural-20 bonus turns, tie resolution, turn
+  advancement, hidden-health handling, and the combat-mode Party Rail.
 
 ### Changed
 
@@ -27,6 +30,10 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   blocked **Coming soon** card.
 - Character profile edits and health changes now use validated WebSocket commands and
   authoritative events so connected clients refresh from the same state.
+- Short and long rests are disabled during active combat and rejected by the server
+  if submitted directly.
+- Encounter and Party Rail HP bars now share the same health thresholds, colours, and
+  colour-blind palette variants.
 
 ## [0.1.0] - 2026-09-16
 

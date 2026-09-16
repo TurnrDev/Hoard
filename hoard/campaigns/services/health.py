@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from ..models import Character, HealthTransaction
+from ..models import Character, Encounter, HealthTransaction
 
 
 def adjust_health(
@@ -69,6 +69,11 @@ def take_rest(
     """Apply the agreed short- and long-rest health rules."""
     with transaction.atomic():
         locked = Character.objects.select_for_update().get(pk=character.pk)
+        if Encounter.objects.filter(
+            campaign_id=locked.campaign_id,
+            is_active=True,
+        ).exists():
+            raise ValidationError("You cannot rest during combat.")
 
         before_current = locked.current_hp
         before_temporary = locked.temporary_hp

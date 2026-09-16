@@ -118,6 +118,17 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.invites.resend",
         "campaign.invites.revoke",
         "campaign.presence.heartbeat",
+        "campaign.encounter.start",
+        "campaign.encounter.end",
+        "campaign.encounter.combatants.add_character",
+        "campaign.encounter.combatants.add",
+        "campaign.encounter.combatants.reorder",
+        "campaign.encounter.combatants.update",
+        "campaign.encounter.combatants.remove",
+        "campaign.encounter.current.set",
+        "campaign.encounter.initiative.roll",
+        "campaign.encounter.initiative.tie.choose",
+        "campaign.encounter.turn.end",
         "characters.create",
         "characters.update",
         "characters.portrait.remove",
@@ -144,9 +155,17 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         CharacterIdentifierCommand,
         CharacterRestCommand,
         CharacterUpdateCommand,
+        EncounterCharacterAddCommand,
+        EncounterCombatantAddCommand,
+        EncounterCombatantIdentifierCommand,
+        EncounterCombatantReorderCommand,
+        EncounterCombatantUpdateCommand,
+        EncounterCurrentCombatantCommand,
+        InitiativeTieChoiceCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
         MemberDeactivationCommand,
+        PlayerInitiativeRollCommand,
     )
 
     definitions = {
@@ -171,6 +190,29 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         payload_model=CalendarAdjustmentCommand,
         result_model=CampaignCalendarData,
     )
+    for name in ("campaign.encounter.start", "campaign.encounter.end"):
+        definitions[name] = OperationDefinition(
+            name=name,
+            kind=OperationKind.COMMAND,
+            payload_model=EmptyPayload,
+        )
+    encounter_commands = {
+        "campaign.encounter.combatants.add_character": EncounterCharacterAddCommand,
+        "campaign.encounter.combatants.add": EncounterCombatantAddCommand,
+        "campaign.encounter.combatants.update": EncounterCombatantUpdateCommand,
+        "campaign.encounter.combatants.reorder": EncounterCombatantReorderCommand,
+        "campaign.encounter.combatants.remove": EncounterCombatantIdentifierCommand,
+        "campaign.encounter.current.set": EncounterCurrentCombatantCommand,
+        "campaign.encounter.initiative.roll": PlayerInitiativeRollCommand,
+        "campaign.encounter.initiative.tie.choose": InitiativeTieChoiceCommand,
+        "campaign.encounter.turn.end": EmptyPayload,
+    }
+    for name, payload_model in encounter_commands.items():
+        definitions[name] = OperationDefinition(
+            name=name,
+            kind=OperationKind.COMMAND,
+            payload_model=payload_model,
+        )
     definitions["campaign.members.deactivate"] = OperationDefinition(
         name="campaign.members.deactivate",
         kind=OperationKind.COMMAND,

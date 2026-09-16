@@ -473,27 +473,27 @@ select:focus-visible {
   line-height: 1;
 }
 
-.party-rail__entry--critical .p-progressbar-value {
+.health-bar--critical .p-progressbar-value {
   background: #c73737;
 }
 
-.party-rail__entry--wounded .p-progressbar-value {
+.health-bar--wounded .p-progressbar-value {
   background: #d97706;
 }
 
-.party-rail__entry--healthy .p-progressbar-value {
+.health-bar--healthy .p-progressbar-value {
   background: #86a83d;
 }
 
-[data-hoard-palette="colourblind"] .party-rail__entry--critical .p-progressbar-value {
+[data-hoard-palette="colourblind"] .health-bar--critical .p-progressbar-value {
   background: #d6508f;
 }
 
-[data-hoard-palette="colourblind"] .party-rail__entry--wounded .p-progressbar-value {
+[data-hoard-palette="colourblind"] .health-bar--wounded .p-progressbar-value {
   background: #d99a19;
 }
 
-[data-hoard-palette="colourblind"] .party-rail__entry--healthy .p-progressbar-value {
+[data-hoard-palette="colourblind"] .health-bar--healthy .p-progressbar-value {
   background: #287fce;
 }
 

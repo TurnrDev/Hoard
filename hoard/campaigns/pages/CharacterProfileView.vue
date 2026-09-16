@@ -3,6 +3,14 @@
     v-if="character && campaign"
     aria-labelledby="character-title"
   >
+    <PlayerEncounterActions
+      v-if="canAct && campaign.encounter"
+      :context-id="campaignId"
+      :character-id="character.id"
+      :current-combatant-id="campaign.encounter.current_combatant_id"
+      :combatants="campaign.encounter.combatants"
+    />
+
     <header
       class="position-relative mb-4"
       :class="{ 'pe-5': canEdit }"
@@ -1311,6 +1319,7 @@
           <Button
             label="Take short rest"
             :loading="busy"
+            :disabled="inCombat"
             @click="takeShortRest"
           />
         </footer>
@@ -1359,6 +1368,7 @@ import CalculationCard from "@/campaigns/components/CalculationCard.vue";
 import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
 import CoinAmountPicker from "@/campaigns/components/CoinAmountPicker.vue";
 import ComingSoonBlock from "@/campaigns/components/ComingSoonBlock.vue";
+import PlayerEncounterActions from "@/campaigns/components/PlayerEncounterActions.vue";
 import SheetDisclosure from "@/campaigns/components/SheetDisclosure.vue";
 import SkillProficiencyPicker from "@/campaigns/components/SkillProficiencyPicker.vue";
 import {
@@ -1395,6 +1405,7 @@ export default defineComponent({
     InputText,
     Message,
     ProgressBar,
+    PlayerEncounterActions,
     RelativeTime,
     Select,
     SheetDisclosure,
@@ -1533,6 +1544,9 @@ export default defineComponent({
         !this.character.is_active,
       );
     },
+    inCombat(): boolean {
+      return Boolean(this.campaign?.encounter);
+    },
     characterActionItems(): MenuItem[] {
       const items: MenuItem[] = [
         {
@@ -1602,6 +1616,7 @@ export default defineComponent({
         {
           label: "Short rest",
           icon: "mdi mdi-weather-sunset",
+          disabled: this.inCombat,
           command: () => {
             this.shortRestRecovery = 0;
             this.shortRestOpen = true;
@@ -1610,6 +1625,7 @@ export default defineComponent({
         {
           label: "Long rest",
           icon: "mdi mdi-weather-night",
+          disabled: this.inCombat,
           command: () => void this.takeLongRest(),
         },
       ];
@@ -1916,7 +1932,7 @@ export default defineComponent({
       }
     },
     async takeShortRest(): Promise<void> {
-      if (!this.character) {
+      if (!this.character || this.inCombat) {
         return;
       }
       this.busy = true;
@@ -1939,7 +1955,7 @@ export default defineComponent({
       }
     },
     async takeLongRest(): Promise<void> {
-      if (!this.character) {
+      if (!this.character || this.inCombat) {
         return;
       }
       this.busy = true;

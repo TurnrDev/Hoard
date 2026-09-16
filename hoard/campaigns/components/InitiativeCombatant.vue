@@ -3,6 +3,8 @@
     class="party-rail__entry--combatant"
     :name="displayName"
     :portrait-url="combatant.portrait_url"
+    :connected="connected"
+    :show-presence="combatant.is_player_character"
     :expanded="expanded"
     :current-hp="showHealthNumbers ? combatant.current_hp : null"
     :max-hp="showHealthNumbers ? combatant.max_hp : null"
@@ -34,6 +36,7 @@ export default defineComponent({
     combatant: { type: Object as PropType<EncounterCombatant>, required: true },
     activeContext: { type: Object as PropType<ActingContext>, required: true },
     expanded: { type: Boolean, default: false },
+    connected: { type: Boolean, default: false },
     canViewHiddenHealth: { type: Boolean, default: false },
     current: { type: Boolean, default: false },
   },

@@ -1,6 +1,7 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from hoard.campaigns.models import Campaign, Character, HealthTransaction
+from hoard.campaigns.models import Campaign, Character, Encounter, HealthTransaction
 from hoard.campaigns.services.health import adjust_health, take_rest
 
 
@@ -44,3 +45,21 @@ class HealthServiceTests(TestCase):
 
         self.assertEqual(updated.current_hp, 20)
         self.assertEqual(updated.temporary_hp, 0)
+
+    def test_rests_are_rejected_during_combat(self) -> None:
+        Encounter.objects.create(campaign=self.character.campaign)
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "You cannot rest during combat.",
+        ):
+            take_rest(self.character, kind="short", regained_hp=6)
+        with self.assertRaisesMessage(
+            ValidationError,
+            "You cannot rest during combat.",
+        ):
+            take_rest(self.character, kind="long")
+
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.current_hp, 12)
+        self.assertEqual(self.character.temporary_hp, 5)

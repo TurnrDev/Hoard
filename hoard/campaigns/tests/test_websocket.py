@@ -44,7 +44,12 @@ class ContextSocketTests(TransactionTestCase):
         await communicator.send_json_to(message)
         while True:
             response = await communicator.receive_json_from(timeout=2)
-            if response.get("request_id") == message.get("request_id"):
+            if response.get("type") in {
+                "query.result",
+                "query.error",
+                "command.ack",
+                "command.error",
+            } and response.get("request_id") == message.get("request_id"):
                 break
         await communicator.disconnect()
         return response
@@ -131,15 +136,15 @@ class ContextSocketTests(TransactionTestCase):
         self.assertEqual(response["type"], "query.error")
         self.assertEqual(response["code"], "invalid_request_id")
 
-    def test_removed_operation_is_unsupported(self) -> None:
+    def test_game_master_can_start_an_encounter(self) -> None:
         message = {
             "type": "campaign.encounter.start",
             "request_id": request_id(),
         }
         response = async_to_sync(self.context_request)(message)
 
-        self.assertEqual(response["type"], "error")
-        self.assertEqual(response["code"], "unsupported_message")
+        self.assertEqual(response["type"], "command.ack")
+        self.assertTrue(self.campaign.encounters.filter(is_active=True).exists())
 
 
 @override_settings(

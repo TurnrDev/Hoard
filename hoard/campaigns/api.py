@@ -358,68 +358,6 @@ def character_data(
     }
 
 
-def encounter_data(campaign: Campaign) -> dict[str, object] | None:
-    encounter = (
-        campaign.encounters.filter(is_active=True)
-        .prefetch_related("combatants__character")
-        .first()
-    )
-    if encounter is None:
-        return None
-
-    return {
-        "id": encounter.pk,
-        "current_combatant_id": encounter.current_combatant_id,
-        "combatants": [
-            {
-                "id": combatant.pk,
-                "character_id": combatant.character_id,
-                "name": combatant.display_name,
-                "portrait_url": (
-                    combatant.character.portrait.url
-                    if combatant.character_id and combatant.character.portrait
-                    else None
-                ),
-                "initiative": combatant.initiative,
-                "initiative_roll": combatant.initiative_roll,
-                "initiative_modifier": combatant.initiative_modifier,
-                "position": combatant.position,
-                "current_hp": (
-                    combatant.character.current_hp
-                    if combatant.character_id
-                    else combatant.current_hp
-                ),
-                "max_hp": (
-                    combatant.character.max_hp
-                    if combatant.character_id
-                    else combatant.max_hp
-                ),
-                "health_percentage": (
-                    max(
-                        0,
-                        min(
-                            100,
-                            round(
-                                100
-                                * combatant.character.current_hp
-                                / combatant.character.max_hp
-                            ),
-                        ),
-                    )
-                    if combatant.character_id
-                    else (
-                        round(100 * combatant.current_hp / combatant.max_hp)
-                        if combatant.current_hp is not None and combatant.max_hp
-                        else None
-                    )
-                ),
-                "show_hp_numbers": combatant.show_hp_numbers,
-            }
-            for combatant in encounter.combatants.all()
-        ],
-    }
-
-
 def party_money(campaign: Campaign) -> dict[str, int | str]:
     totals: dict[str, int | str] = {
         "cp": 0,

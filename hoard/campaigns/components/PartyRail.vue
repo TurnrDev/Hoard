@@ -69,6 +69,8 @@
       <InitiativeTracker
         v-if="inCombat"
         :combatants="campaign.encounter?.combatants ?? []"
+        :characters="campaign.characters"
+        :members="members"
         :active-context="activeContext"
         :expanded="expanded"
         :can-view-hidden-health="activeContext.kind === 'gm'"
