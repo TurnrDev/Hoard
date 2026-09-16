@@ -27,7 +27,6 @@ class CampaignAdmin(admin.ModelAdmin):
         "calendar_era_abbreviation",
         "calendar_year",
         "calendar_day",
-        "use_shared_exp",
         "shared_experience",
     )
     search_fields = ("name",)

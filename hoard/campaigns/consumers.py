@@ -797,7 +797,6 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "id": campaign.pk,
             "name": campaign.name,
             "is_game_master": context.kind == CampaignContext.Kind.GM,
-            "use_shared_exp": campaign.use_shared_exp,
             "shared_experience": campaign.shared_experience,
             "level": campaign.level,
             "eligible_level": Character.level_for_experience(

@@ -1044,7 +1044,6 @@ def context_detail(request, context_id: int):
         "id": context.campaign_id,
         "name": context.campaign.name,
         "is_game_master": context.kind == CampaignContext.Kind.GM,
-        "use_shared_exp": context.campaign.use_shared_exp,
         "shared_experience": context.campaign.shared_experience,
         "calendar": _calendar_data(context.campaign),
         "party_money": _party_money(context.campaign),

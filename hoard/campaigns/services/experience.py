@@ -68,8 +68,6 @@ def award_shared_experience(
 
     with transaction.atomic():
         campaign = Campaign.objects.select_for_update().get(pk=campaign.pk)
-        if not campaign.use_shared_exp:
-            raise ValidationError("Individual XP awards are not implemented.")
         recipients = list(
             Character.objects.select_for_update()
             .filter(campaign=campaign, is_active=True, context__isnull=False)

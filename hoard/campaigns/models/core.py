@@ -53,7 +53,6 @@ class Campaign(models.Model):
     )
     calendar_year = models.PositiveIntegerField("Calendar Year", default=81)
     calendar_day = models.PositiveSmallIntegerField("Calendar Day", default=137)
-    use_shared_exp = models.BooleanField("Use Shared Experience", default=True)
     shared_experience = models.PositiveIntegerField("Shared Experience", default=0)
     level = models.PositiveSmallIntegerField("Campaign Level", default=1)
     compendium_sources = models.ManyToManyField(

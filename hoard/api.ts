@@ -356,7 +356,6 @@ export type IncompleteLevelUp = {
 };
 
 export type Campaign = CampaignSummary & {
-  use_shared_exp: boolean;
   shared_experience: number;
   level: number;
   eligible_level: number;

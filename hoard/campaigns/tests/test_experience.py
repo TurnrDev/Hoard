@@ -49,13 +49,6 @@ class SharedExperienceTests(TestCase):
         character.activate()
         with self.assertRaises(ValidationError):
             self.campaign.award_shared_experience(0)
-        self.campaign.use_shared_exp = False
-        self.campaign.save()
-        with self.assertRaises(ValidationError):
-            self.campaign.award_shared_experience(10)
-
-        self.campaign.use_shared_exp = True
-        self.campaign.save()
         self.campaign.award_shared_experience(10)
         award = ExperienceTransaction.objects.get()
         reverse_experience_transaction(award)
