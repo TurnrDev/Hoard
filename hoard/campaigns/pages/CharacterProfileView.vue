@@ -1,37 +1,31 @@
 <template>
   <section
-    class="container-fluid px-0"
-    v-if="character"
+    v-if="character && campaign"
+    aria-labelledby="character-title"
   >
-    <PlayerEncounterActions
-      v-if="ownCharacter && campaign?.encounter"
-      :context-id="campaignId"
-      :character-id="character.id"
-      :current-combatant-id="campaign.encounter.current_combatant_id"
-      :combatants="campaign.encounter.combatants"
-      :movement-speed="character.sheet.speed"
-    />
-
     <header
       class="position-relative mb-4"
       :class="{ 'pe-5': canEdit }"
     >
-      <div class="d-flex flex-wrap align-items-center gap-3">
+      <div class="d-flex align-items-center gap-3">
         <CharacterAvatar
           :character="character"
           size="profile"
         />
         <div>
-          <h1 :class="{ 'inspired-name': character.has_inspiration }">
+          <p class="text-uppercase fw-semibold small text-body-secondary mb-1">
+            {{ character.kind === "pc" ? "Player character" : "Non-player character" }}
+          </p>
+          <h1
+            id="character-title"
+            class="display-5 mb-1"
+          >
             {{ character.name }}
-            <span
-              v-if="character.has_inspiration"
-              class="visually-hidden"
-            >
-              — Inspired
-            </span>
           </h1>
-          <p class="mb-1">{{ character.race }} · {{ character.class }}</p>
+          <p class="mb-0 text-body-secondary">
+            {{ character.race || "Race not set" }} ·
+            {{ character.class || "Class not set" }}
+          </p>
           <p class="mb-0 text-body-secondary tabular-nums">
             Level {{ experienceProgress.level }} ·
             {{ formatXp(experienceProgress.current) }} ·
@@ -45,14 +39,15 @@
           </p>
         </div>
       </div>
-      <div class="position-absolute top-0 end-0 d-flex gap-2">
+      <div
+        v-if="canEdit"
+        class="position-absolute top-0 end-0"
+      >
         <ActionMenu
-          v-if="canEdit"
           label="Character actions"
           :items="characterActionItems"
         />
         <input
-          v-if="canEdit"
           ref="portraitInput"
           class="d-none"
           type="file"
@@ -61,6 +56,7 @@
         />
       </div>
     </header>
+
     <Message
       v-if="error"
       severity="error"
@@ -70,1254 +66,10 @@
     >
       {{ error }}
     </Message>
-    <Message
-      v-if="character && !character.level_up_complete"
-      severity="error"
-      class="mb-4"
-      title="Level-up incomplete"
-    >
-      The GM has approved level {{ character.sheet.level }}, but this character still
-      has unfinished choices.
-      <template>
-        <Button
-          :as="'router-link'"
-          severity="danger"
-          :to="'/c/' + campaignId + '/characters/' + characterId + '/level-up'"
-          label="Complete level-up"
-        />
-      </template>
-    </Message>
-    <div class="row g-3 mb-4">
-      <div class="col-12">
-        <section class="border rounded-3 p-3 p-md-4 h-100">
-          <div
-            v-if="canAct"
-            class="d-none d-sm-block float-end"
-          >
-            <ActionMenu
-              label="Coin actions"
-              :items="coinActionItems"
-            />
-          </div>
-          <div class="d-sm-none">
-            <Transition
-              name="ability-card-flip"
-              mode="out-in"
-            >
-              <div
-                v-if="!moneyValueVisible"
-                key="coin-pouch"
-              >
-                <header class="d-flex align-items-start justify-content-between gap-2">
-                  <div class="text-uppercase fw-semibold small text-body-secondary">
-                    Coin pouch
-                  </div>
-                  <div class="d-flex align-items-center gap-1">
-                    <Button
-                      icon="mdi mdi-rotate-3d-variant"
-                      text
-                      rounded
-                      size="small"
-                      aria-label="Show coin value"
-                      @click="toggleMoneyCard"
-                    />
-                    <ActionMenu
-                      v-if="canAct"
-                      label="Coin actions"
-                      :items="coinActionItems"
-                    />
-                  </div>
-                </header>
-                <div class="fs-5 tabular-nums mt-3">
-                  {{ formatCoinPouch(character.money) }}
-                </div>
-              </div>
-
-              <div
-                v-else
-                key="coin-value"
-              >
-                <header class="d-flex align-items-start justify-content-between gap-2">
-                  <div class="text-uppercase fw-semibold small text-body-secondary">
-                    Coin value
-                  </div>
-                  <div class="d-flex align-items-center gap-1">
-                    <Button
-                      icon="mdi mdi-rotate-3d-variant"
-                      text
-                      rounded
-                      size="small"
-                      aria-label="Show coin pouch"
-                      @click="toggleMoneyCard"
-                    />
-                    <ActionMenu
-                      v-if="canAct"
-                      label="Coin actions"
-                      :items="coinActionItems"
-                    />
-                  </div>
-                </header>
-                <div class="h3 mt-3 mb-0">
-                  {{ formatGoldValue(character.money.gold_value) }} ¤
-                </div>
-              </div>
-            </Transition>
-          </div>
-          <div class="row g-0 h-100 d-none d-sm-flex">
-            <div class="col-12 col-sm-7">
-              <div>
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Coin pouch
-                </div>
-                <div class="fs-5 tabular-nums mt-3">
-                  {{ formatCoinPouch(character.money) }}
-                </div>
-              </div>
-            </div>
-            <div class="col-12 col-sm-5 border-top coin-value-column p-3">
-              <div>
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Coin value
-                </div>
-                <div class="h3 mt-3">
-                  {{ formatGoldValue(character.money.gold_value) }} ¤
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-      <div class="col-12">
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5 g-3">
-          <div class="col">
-            <CalculationCard
-              label="HP"
-              :summary="`${character.sheet.current_hp} / ${character.sheet.max_hp}`"
-              :calculation="character.sheet.hp_calculation"
-              :interactive="canEdit"
-              activation-label="Adjust hit points"
-              calculation-label="Maximum HP"
-              @activate="openHpAdjustment"
-            >
-              <template #actions>
-                <ActionMenu
-                  v-if="canEdit"
-                  label="More HP options"
-                  :items="hpActionItems"
-                />
-              </template>
-              <template #summary>
-                {{ character.sheet.current_hp }}
-                <template v-if="character.sheet.temporary_hp">
-                  + {{ character.sheet.temporary_hp }}
-                </template>
-                <span aria-hidden="true">/</span>
-                {{ character.sheet.max_hp }}
-              </template>
-            </CalculationCard>
-          </div>
-          <div class="col">
-            <CalculationCard
-              label="Armor class"
-              :summary="String(character.sheet.armor_class_calculation.value)"
-              :calculation="character.sheet.armor_class_calculation"
-            />
-          </div>
-          <div class="col">
-            <CalculationCard
-              label="Initiative bonus"
-              :summary="signed(character.sheet.initiative.value)"
-              :calculation="character.sheet.initiative"
-            />
-          </div>
-          <div class="col">
-            <CalculationCard
-              label="Proficiency bonus"
-              :summary="signed(character.sheet.proficiency_bonus)"
-              :calculation="character.sheet.proficiency_bonus_calculation"
-            />
-          </div>
-          <div class="col">
-            <section class="border rounded-3 p-3 p-md-4 h-100">
-              <div class="d-flex align-items-start justify-content-between gap-2">
-                <div class="text-uppercase fw-semibold small text-body-secondary">
-                  Movement speed
-                </div>
-                <Button
-                  v-if="canEdit"
-                  icon="mdi mdi-pencil-outline"
-                  text
-                  rounded
-                  size="small"
-                  aria-label="Edit movement speed"
-                  @click="openSpeedEditor"
-                />
-              </div>
-              <div class="h4 mt-3 mb-0 tabular-nums">
-                <span
-                  class="mdi mdi-run me-1"
-                  aria-hidden="true"
-                />
-                {{ movementSpeedLabel }}
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-      <div
-        class="col-12"
-        :class="{ 'd-none': character.conditions.length === 0 }"
-      >
-        <ConditionManager
-          ref="conditionManager"
-          :trigger-only="character.conditions.length === 0"
-          :show-trigger="false"
-          :conditions="character.conditions"
-          :target-name="character.name"
-          :target-id="`character-${character.id}`"
-          :can-edit="canEdit"
-          @apply="applyCondition"
-          @remove="removeCondition"
-        />
-      </div>
-      <div class="col-12">
-        <section class="mb-4">
-          <header>Resources</header>
-          <div>
-            <p class="mb-3">
-              Inspiration:
-              <strong>
-                {{ character.has_inspiration ? "Available" : "Not available" }}
-              </strong>
-              <template
-                v-if="character.has_inspiration && character.inspiration_expires_at"
-              >
-                {{ " · " }}expires
-                <RelativeTime :value="character.inspiration_expires_at" />
-              </template>
-              <span class="ms-4">
-                Spell attack:
-                <strong>{{ signed(character.sheet.spell_attack) }}</strong>
-              </span>
-              <span class="ms-4">
-                Spell save DC:
-                <strong>{{ character.sheet.spell_save_dc }}</strong>
-              </span>
-            </p>
-            <div class="table-responsive">
-              <table class="table table-striped">
-                <caption class="visually-hidden">Spell slot availability</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Slot</th>
-                    <th
-                      scope="col"
-                      class="text-end tabular-nums"
-                    >
-                      Current
-                    </th>
-                    <th
-                      scope="col"
-                      class="text-end tabular-nums"
-                    >
-                      Maximum
-                    </th>
-                    <th scope="col">Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(pool, level) in character.sheet.spell_slot_pools"
-                    :key="level"
-                  >
-                    <th scope="row">
-                      {{
-                        String(level).startsWith("pact-")
-                          ? `Pact level ${String(level).slice(5)}`
-                          : `Level ${level}`
-                      }}
-                    </th>
-                    <td class="text-end tabular-nums">{{ pool.current }}</td>
-                    <td class="text-end tabular-nums">{{ pool.maximum }}</td>
-                    <td>
-                      {{
-                        pool.adjustment
-                          ? `Class ${pool.calculated}, adjustment ${signed(pool.adjustment)}`
-                          : `Class ${pool.calculated}`
-                      }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-        <section aria-labelledby="abilities-heading">
-          <header class="mb-3">
-            <h2
-              id="abilities-heading"
-              class="h4 mb-1"
-            >
-              Abilities and saving throws
-            </h2>
-            <p class="small text-body-secondary mb-0">
-              Flip a card to see how its totals are calculated.
-            </p>
-          </header>
-
-          <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
-            <div
-              v-for="ability in abilityGroups"
-              :key="ability.key"
-              class="col"
-            >
-              <Transition
-                name="ability-card-flip"
-                mode="out-in"
-              >
-                <article
-                  v-if="flippedAbilityKey !== ability.key"
-                  :key="`${ability.key}-front`"
-                  class="border rounded-3 p-3 h-100 text-center"
-                >
-                  <header class="mb-3">
-                    <h3 class="h5 mb-0">{{ ability.label }}</h3>
-                    <span class="small text-uppercase text-body-secondary">
-                      {{ ability.abbreviation }} · {{ ability.score }}
-                    </span>
-                  </header>
-
-                  <div class="row row-cols-2 g-2 align-items-start tabular-nums">
-                    <div class="col">
-                      <span class="small text-body-secondary d-block mb-1">
-                        Modifier
-                      </span>
-                      <strong class="fs-3 lh-1">
-                        {{ signed(ability.modifier) }}
-                      </strong>
-                    </div>
-                    <div class="col">
-                      <span class="small text-body-secondary d-block mb-1">Save</span>
-                      <div
-                        class="d-flex align-items-center justify-content-center gap-1"
-                      >
-                        <span
-                          v-if="ability.save.proficient"
-                          class="mdi mdi-shield-check proficiency-bonus"
-                          role="img"
-                          aria-label="Proficient saving throw"
-                          title="Proficient saving throw"
-                        />
-                        <strong
-                          class="fs-3 lh-1"
-                          :class="
-                            ability.save.proficient
-                              ? proficiencyClass('proficient')
-                              : undefined
-                          "
-                        >
-                          {{ signed(ability.save.bonus) }}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                  <Button
-                    class="mt-3"
-                    size="small"
-                    text
-                    icon="mdi mdi-rotate-3d-variant"
-                    label="Show calculation"
-                    :aria-label="`Show ${ability.label} calculation`"
-                    @click="showAbilityCalculation(ability.key)"
-                  />
-                </article>
-
-                <article
-                  v-else
-                  :key="`${ability.key}-back`"
-                  class="border rounded-3 p-3 h-100"
-                >
-                  <header
-                    class="d-flex align-items-start justify-content-between gap-3 mb-3"
-                  >
-                    <div>
-                      <h3 class="h5 mb-0">{{ ability.label }}</h3>
-                      <span class="small text-body-secondary">Calculation</span>
-                    </div>
-                    <Button
-                      size="small"
-                      text
-                      rounded
-                      icon="mdi mdi-rotate-3d-variant"
-                      :aria-label="`Show ${ability.label} summary`"
-                      @click="hideAbilityCalculation"
-                    />
-                  </header>
-
-                  <CalculationBreakdown
-                    :label="`${ability.label} score`"
-                    :calculation="ability.calculation"
-                    expanded
-                  />
-
-                  <dl class="small mb-3 mt-3 pt-3 border-top">
-                    <div class="d-flex justify-content-between gap-3">
-                      <dt class="text-body-secondary fw-normal">Modifier from score</dt>
-                      <dd class="mb-1 fw-semibold tabular-nums">
-                        {{ signed(ability.modifierFromScore) }}
-                      </dd>
-                    </div>
-                    <div class="d-flex justify-content-between gap-3">
-                      <dt class="text-body-secondary fw-normal">Adjustment</dt>
-                      <dd class="mb-0 fw-semibold tabular-nums">
-                        {{ signed(ability.modifierAdjustment) }}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <div class="pt-3 border-top">
-                    <CalculationBreakdown
-                      :label="`${ability.label} saving throw`"
-                      :calculation="ability.save.formula"
-                      expanded
-                    />
-                  </div>
-
-                  <Button
-                    class="mt-3"
-                    size="small"
-                    text
-                    icon="mdi mdi-arrow-u-left-top"
-                    label="Back to summary"
-                    @click="hideAbilityCalculation"
-                  />
-                </article>
-              </Transition>
-            </div>
-          </div>
-        </section>
-
-        <section
-          class="mt-4"
-          aria-labelledby="skills-heading"
-        >
-          <header class="mb-3">
-            <h2
-              id="skills-heading"
-              class="h4 mb-1"
-            >
-              Skills
-            </h2>
-            <p class="small text-body-secondary mb-0">
-              Bonuses are grouped by the ability used for each check.
-            </p>
-          </header>
-
-          <div class="border rounded-3 p-2">
-            <div class="row g-0">
-              <div
-                v-for="(column, columnIndex) in skillColumns"
-                :key="columnIndex"
-                class="col-6"
-              >
-                <section
-                  class="h-100"
-                  :class="columnIndex === 0 ? 'pe-2' : 'ps-2 border-start'"
-                >
-                  <div
-                    v-for="(ability, abilityIndex) in column"
-                    :key="ability.key"
-                    :class="{ 'mt-4': abilityIndex > 0 }"
-                  >
-                    <h3 class="h6 text-uppercase text-body-secondary mb-1">
-                      {{ ability.label }}
-                    </h3>
-                    <ul class="list-group list-group-flush">
-                      <li
-                        v-for="skill in ability.skills"
-                        :key="skill.name"
-                        class="list-group-item bg-transparent px-0 py-2 d-flex align-items-center justify-content-between gap-3"
-                      >
-                        <span class="skill-name">{{ displayName(skill.name) }}</span>
-                        <span
-                          class="d-inline-flex flex-shrink-0 align-items-center gap-1 tabular-nums"
-                        >
-                          <span
-                            v-if="proficiencyIcon(skill.proficiency)"
-                            :class="[
-                              'mdi',
-                              proficiencyIcon(skill.proficiency),
-                              'skill-proficiency-icon',
-                              {
-                                'text-body-secondary': skill.proficiency === 'half',
-                              },
-                            ]"
-                            role="img"
-                            :aria-label="proficiencyLabel(skill.proficiency)"
-                            :title="proficiencyLabel(skill.proficiency)"
-                          />
-                          <strong
-                            :class="
-                              skill.proficiency !== 'none'
-                                ? proficiencyClass(skill.proficiency)
-                                : undefined
-                            "
-                          >
-                            {{ signed(skill.bonus) }}
-                          </strong>
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-                </section>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="mt-4 border rounded-3 p-3 p-md-4">
-          <header class="d-flex align-items-center gap-2 flex-wrap">
-            Inventory
-            <span class="small text-body-secondary ms-2">
-              {{ character.inventory.length }} items
-            </span>
-            <span class="flex-grow-1" />
-            <Button
-              v-if="canAct"
-              size="small"
-              icon="mdi mdi-plus"
-              @click="addItemOpen = true"
-            >
-              Add item
-            </Button>
-          </header>
-          <div class="table-responsive">
-            <table
-              v-if="character.inventory.length"
-              class="table table-striped"
-            >
-              <caption class="visually-hidden">{{ character.name }} inventory</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Item</th>
-                  <th
-                    scope="col"
-                    class="text-end tabular-nums"
-                  >
-                    Quantity
-                  </th>
-                  <th
-                    scope="col"
-                    class="text-end tabular-nums"
-                  >
-                    Weight
-                  </th>
-                  <th
-                    scope="col"
-                    class="text-end tabular-nums"
-                  >
-                    Value
-                  </th>
-                  <th
-                    scope="col"
-                    class="text-end"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="entry in inventoryRows"
-                  :key="entry.item_id"
-                >
-                  <th scope="row">{{ entry.name }}</th>
-                  <td class="text-end tabular-nums">
-                    {{ entry.quantity.toLocaleString() }}
-                  </td>
-                  <td class="text-end tabular-nums">
-                    {{ formatItemWeight(entry.item) }}
-                  </td>
-                  <td class="text-end tabular-nums">
-                    {{
-                      entry.item?.equipment.cost_amount
-                        ? `${formatMoneyValue(entry.item.equipment.cost_amount)} ${displayCoin(entry.item.equipment.cost_currency)}`
-                        : "—"
-                    }}
-                  </td>
-                  <td class="text-end">
-                    <ActionMenu
-                      v-if="canAct"
-                      :label="`Actions for ${entry.name}`"
-                      :items="inventoryActionItems(entry)"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <span
-              v-else
-              class="text-body-secondary"
-            >
-              No inventory recorded.
-            </span>
-          </div>
-        </section>
-        <section
-          class="mt-4 border rounded-3 p-3 p-md-4"
-          aria-labelledby="equipment-heading"
-        >
-          <header class="d-flex align-items-center gap-2 flex-wrap mb-3">
-            <h2
-              id="equipment-heading"
-              class="h4 mb-0"
-            >
-              Equipment and effects
-            </h2>
-            <span class="flex-grow-1" />
-            <Button
-              v-if="canEdit"
-              size="small"
-              icon="mdi mdi-plus"
-              @click="openEffect"
-            >
-              Add effect
-            </Button>
-          </header>
-
-          <div class="d-grid gap-4">
-            <section v-if="character.loadout.length">
-              <h3 class="h6 mb-2">
-                Equipment
-                <span class="fw-normal text-body-secondary">
-                  {{ character.loadout.length }}
-                </span>
-              </h3>
-              <div
-                class="table-responsive"
-                tabindex="0"
-                aria-label="Character equipment table"
-              >
-                <table class="table table-striped mb-0">
-                  <caption class="visually-hidden">
-                    Equipment carried by {{ character.name }}
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Item</th>
-                      <th scope="col">Slot</th>
-                      <th scope="col">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="item in character.loadout"
-                      :key="item.id"
-                    >
-                      <th scope="row">{{ item.name }}</th>
-                      <td>{{ displayName(item.slot) }}</td>
-                      <td>{{ item.equipped ? "Equipped" : "Carried" }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section v-if="character.effects.length">
-              <h3 class="h6 mb-2">
-                Active effects
-                <span class="fw-normal text-body-secondary">
-                  {{ character.effects.length }}
-                </span>
-              </h3>
-              <div
-                class="table-responsive"
-                tabindex="0"
-                aria-label="Character active effects table"
-              >
-                <table class="table table-striped mb-0">
-                  <caption class="visually-hidden">
-                    Effects applied to {{ character.name }}
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Effect</th>
-                      <th scope="col">Duration</th>
-                      <th scope="col">Modifiers and reminder</th>
-                      <th
-                        v-if="canEdit"
-                        scope="col"
-                        class="text-end"
-                      >
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="effect in character.effects"
-                      :key="effect.id"
-                    >
-                      <th scope="row">
-                        {{ effect.name }}
-                        <span
-                          v-if="effect.source"
-                          class="d-block small fw-normal text-body-secondary"
-                        >
-                          {{ effect.source }}
-                        </span>
-                      </th>
-                      <td>
-                        {{ effect.duration || displayName(effect.expires_on_rest) }}
-                      </td>
-                      <td>
-                        {{
-                          effect.modifiers
-                            .map(
-                              (modifier) =>
-                                `${modifier.label || displayName(modifier.target)} ${signed(modifier.value)}`,
-                            )
-                            .join(" · ") ||
-                          effect.reminder ||
-                          "—"
-                        }}
-                      </td>
-                      <td
-                        v-if="canEdit"
-                        class="text-end text-nowrap"
-                      >
-                        <Button
-                          size="small"
-                          text
-                          :aria-label="`${effect.enabled ? 'Deactivate' : 'Activate'} ${effect.name}`"
-                          @click="toggleEffect(effect)"
-                        >
-                          {{ effect.enabled ? "Deactivate" : "Activate" }}
-                        </Button>
-                        <Button
-                          size="small"
-                          text
-                          severity="danger"
-                          :aria-label="`Remove ${effect.name}`"
-                          @click="deleteEffect(effect)"
-                        >
-                          Remove
-                        </Button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <p
-              v-if="!character.loadout.length && !character.effects.length"
-              class="text-body-secondary mb-0"
-            >
-              No equipment is equipped and no effects are tracked.
-            </p>
-          </div>
-        </section>
-        <section
-          class="mt-4"
-          aria-labelledby="character-reference-heading"
-        >
-          <h2
-            id="character-reference-heading"
-            class="h4 mb-3"
-          >
-            Character details
-          </h2>
-
-          <div class="d-grid gap-2">
-            <SheetDisclosure title="Background and personality">
-              <dl
-                v-if="biographyFields.length"
-                class="row g-3 mb-0"
-              >
-                <div
-                  v-for="field in biographyFields"
-                  :key="field.label"
-                  :class="field.wide ? 'col-12' : 'col-12 col-md-6'"
-                >
-                  <dt class="small text-body-secondary mb-1">{{ field.label }}</dt>
-                  <dd class="mb-0 sheet-copy">{{ field.value }}</dd>
-                </div>
-              </dl>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No background or personality details recorded.
-              </p>
-            </SheetDisclosure>
-
-            <SheetDisclosure title="Languages and proficiencies">
-              <div
-                v-if="character.languages.length || equipmentProficiencyGroups.length"
-                class="row g-4"
-              >
-                <section
-                  v-if="character.languages.length"
-                  class="col-12 col-md-6"
-                  aria-labelledby="languages-heading"
-                >
-                  <h3
-                    id="languages-heading"
-                    class="h6 mb-2"
-                  >
-                    Languages
-                  </h3>
-                  <p class="mb-0">{{ character.languages.join(", ") }}</p>
-                </section>
-                <section
-                  v-if="equipmentProficiencyGroups.length"
-                  class="col-12 col-md-6"
-                  aria-labelledby="equipment-proficiencies-heading"
-                >
-                  <h3
-                    id="equipment-proficiencies-heading"
-                    class="h6 mb-2"
-                  >
-                    Equipment proficiencies
-                  </h3>
-                  <dl class="mb-0">
-                    <div
-                      v-for="group in equipmentProficiencyGroups"
-                      :key="group.label"
-                      class="mb-2"
-                    >
-                      <dt class="small text-body-secondary">{{ group.label }}</dt>
-                      <dd class="mb-0">{{ group.values.join(", ") }}</dd>
-                    </div>
-                  </dl>
-                </section>
-              </div>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No languages or equipment proficiencies recorded.
-              </p>
-            </SheetDisclosure>
-
-            <SheetDisclosure
-              v-if="ownCharacter"
-              title="Notes"
-              :count="character.notes.length"
-            >
-              <div
-                v-if="!noteEditorOpen"
-                class="d-flex justify-content-end mb-3"
-              >
-                <Button
-                  label="Add note"
-                  icon="mdi mdi-note-plus-outline"
-                  size="small"
-                  @click="startAddingNote"
-                />
-              </div>
-
-              <form
-                v-if="noteEditorOpen"
-                class="border rounded p-3 mb-3"
-                @submit.prevent="saveNote"
-              >
-                <h3 class="h6 mb-3">
-                  {{ editingNoteId === undefined ? "Add note" : "Edit note" }}
-                </h3>
-
-                <div class="mb-3">
-                  <Textarea
-                    id="note-body"
-                    v-model="noteBody"
-                    class="w-100"
-                    rows="5"
-                    auto-resize
-                    aria-label="Note body"
-                  />
-                  <div class="form-text">Markdown formatting is supported.</div>
-                </div>
-
-                <div class="d-flex flex-wrap justify-content-end gap-2">
-                  <Button
-                    type="button"
-                    label="Cancel"
-                    severity="secondary"
-                    outlined
-                    :disabled="noteBusy"
-                    @click="closeNoteEditor"
-                  />
-                  <Button
-                    type="submit"
-                    :label="editingNoteId === undefined ? 'Add note' : 'Save note'"
-                    icon="mdi mdi-content-save-outline"
-                    :loading="noteBusy"
-                    :disabled="noteIsEmpty"
-                  />
-                </div>
-              </form>
-
-              <ul
-                v-if="character.notes.length"
-                class="list-group list-group-flush"
-              >
-                <li
-                  v-for="(note, noteIndex) in character.notes"
-                  :key="note.id"
-                  class="list-group-item bg-transparent px-0 py-3"
-                >
-                  <article>
-                    <div class="d-flex align-items-start justify-content-between gap-3">
-                      <MarkdownContent
-                        :source="note.body"
-                        class="flex-grow-1 overflow-hidden"
-                      />
-                      <div
-                        v-if="ownCharacter"
-                        class="d-flex flex-shrink-0 gap-1"
-                      >
-                        <Button
-                          icon="mdi mdi-pencil-outline"
-                          severity="secondary"
-                          text
-                          rounded
-                          size="small"
-                          :aria-label="`Edit note ${noteIndex + 1}`"
-                          :disabled="noteEditorOpen || noteBusy"
-                          @click="startEditingNote(note)"
-                        />
-                        <Button
-                          icon="mdi mdi-delete-outline"
-                          severity="danger"
-                          text
-                          rounded
-                          size="small"
-                          :aria-label="`Remove note ${noteIndex + 1}`"
-                          :disabled="noteEditorOpen || noteBusy"
-                          @click="askToRemoveNote(note)"
-                        />
-                      </div>
-                    </div>
-                  </article>
-                </li>
-              </ul>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No notes recorded.
-              </p>
-            </SheetDisclosure>
-
-            <SheetDisclosure
-              title="Features and feats"
-              :count="character.features.length"
-            >
-              <ul
-                v-if="character.features.length"
-                class="list-group list-group-flush"
-              >
-                <li
-                  v-for="feature in character.features"
-                  :key="feature.id"
-                  class="list-group-item bg-transparent px-0 py-3"
-                >
-                  <article>
-                    <div class="d-flex align-items-start gap-2 flex-wrap mb-2">
-                      <h3 class="h6 mb-0">{{ feature.name }}</h3>
-                      <span class="small text-body-secondary">
-                        {{ displayName(feature.kind) }}
-                      </span>
-                    </div>
-                    <p
-                      v-if="feature.description"
-                      class="mb-2 sheet-copy"
-                    >
-                      {{ feature.description }}
-                    </p>
-                    <p
-                      v-if="feature.notes"
-                      class="small text-body-secondary mb-0 sheet-copy"
-                    >
-                      <strong>Notes:</strong>
-                      {{ feature.notes }}
-                    </p>
-                  </article>
-                </li>
-              </ul>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No features or feats recorded.
-              </p>
-            </SheetDisclosure>
-
-            <SheetDisclosure
-              title="Spells"
-              :count="character.spells.length"
-            >
-              <ul
-                v-if="character.spells.length"
-                class="list-group list-group-flush"
-              >
-                <li
-                  v-for="spell in character.spells"
-                  :key="spell.id"
-                  class="list-group-item bg-transparent px-0 py-3"
-                >
-                  <article class="d-flex align-items-start gap-3">
-                    <div class="flex-grow-1">
-                      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                        <h3 class="h6 mb-0">{{ spell.name }}</h3>
-                        <span class="small text-body-secondary">
-                          {{ spell.level === 0 ? "Cantrip" : `Level ${spell.level}` }}
-                        </span>
-                        <span
-                          v-if="spell.level > 0"
-                          class="small"
-                        >
-                          {{ spell.prepared ? "Prepared" : "Not prepared" }}
-                        </span>
-                      </div>
-                      <p
-                        v-if="spell.description"
-                        class="mb-2 sheet-copy"
-                      >
-                        {{ spell.description }}
-                      </p>
-                      <p
-                        v-if="spell.notes"
-                        class="small text-body-secondary mb-0 sheet-copy"
-                      >
-                        <strong>Notes:</strong>
-                        {{ spell.notes }}
-                      </p>
-                    </div>
-                    <Button
-                      v-if="canEdit"
-                      size="small"
-                      text
-                      class="flex-shrink-0"
-                      :disabled="spell.level > 0 && !spell.prepared"
-                      :aria-label="`Record casting ${spell.name}`"
-                      @click="openSpellCast(spell)"
-                    >
-                      Cast
-                    </Button>
-                  </article>
-                </li>
-              </ul>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No spells recorded.
-              </p>
-            </SheetDisclosure>
-
-            <SheetDisclosure
-              title="Companions"
-              :count="character.companions.length"
-            >
-              <ul
-                v-if="character.companions.length"
-                class="list-group list-group-flush"
-              >
-                <li
-                  v-for="companion in character.companions"
-                  :key="companion.id"
-                  class="list-group-item bg-transparent px-0 py-3"
-                >
-                  <article>
-                    <h3 class="h6 mb-3">{{ companion.name }}</h3>
-                    <dl class="row g-2 mb-0">
-                      <div class="col-4 col-md-auto me-md-4">
-                        <dt class="small text-body-secondary">Armor class</dt>
-                        <dd class="fs-5 tabular-nums mb-0">
-                          {{ companion.armor_class }}
-                        </dd>
-                      </div>
-                      <div class="col-4 col-md-auto me-md-4">
-                        <dt class="small text-body-secondary">Hit points</dt>
-                        <dd class="fs-5 tabular-nums mb-0">
-                          {{ companion.current_hp }} / {{ companion.max_hp }}
-                        </dd>
-                      </div>
-                      <div class="col-4 col-md-auto">
-                        <dt class="small text-body-secondary">Speed</dt>
-                        <dd class="fs-5 tabular-nums mb-0">
-                          {{ companion.speed || "—" }}
-                        </dd>
-                      </div>
-                    </dl>
-                    <p
-                      v-if="companion.notes"
-                      class="small text-body-secondary mt-3 mb-0 sheet-copy"
-                    >
-                      <strong>Notes:</strong>
-                      {{ companion.notes }}
-                    </p>
-                  </article>
-                </li>
-              </ul>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No companions recorded.
-              </p>
-            </SheetDisclosure>
-          </div>
-        </section>
-        <section
-          class="mt-4 border rounded-3 p-3 p-md-4"
-          aria-labelledby="activity-heading"
-        >
-          <header class="d-flex align-items-center gap-2 flex-wrap mb-3">
-            <h2
-              id="activity-heading"
-              class="h4 mb-0"
-            >
-              Recent activity
-            </h2>
-            <span class="flex-grow-1" />
-            <Button
-              :as="'router-link'"
-              :to="`/c/${campaignId}/ledger`"
-              size="small"
-              text
-              label="View full ledger"
-            />
-          </header>
-
-          <div
-            v-if="activity.length"
-            class="table-responsive"
-            tabindex="0"
-            aria-label="Recent character activity table"
-          >
-            <table class="table table-striped mb-0">
-              <caption class="visually-hidden">
-                Recent activity for {{ character.name }}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">When</th>
-                  <th
-                    scope="col"
-                    class="text-end"
-                  >
-                    Change
-                  </th>
-                  <th scope="col">Details</th>
-                  <th scope="col">By</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="transaction in activity"
-                  :key="`${transaction.ledger}-${transaction.id}`"
-                >
-                  <td class="text-nowrap">
-                    <RelativeTime :value="transaction.occurred_at" />
-                  </td>
-                  <td class="text-end text-nowrap tabular-nums fw-semibold">
-                    {{ activityAmount(transaction) }}
-                  </td>
-                  <td>{{ activityDescription(transaction) }}</td>
-                  <td>{{ transaction.actor || "—" }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p
-            v-else
-            class="text-body-secondary mb-0"
-          >
-            No recent activity.
-          </p>
-        </section>
-      </div>
-    </div>
-    <Dialog
-      v-model:visible="addItemOpen"
-      :style="{ width: 'min(35rem, calc(100vw - 2rem))' }"
-      @update:visible="closeAddItemDialogWhenClosed"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="add-item-heading"
-      >
-        <h2
-          id="add-item-heading"
-          class="h3 mb-0"
-        >
-          Add item
-        </h2>
-        <div class="d-grid gap-3">
-          <ItemPickerDialog
-            v-model="grantItemId"
-            :candidates="allItemCandidates"
-            label="Item"
-            no-data-text="No campaign items available."
-          />
-          <label class="form-label mb-0">
-            Quantity
-            <InputNumber
-              v-model.number="grantQuantity"
-              class="w-100"
-              :min="1"
-              :step="1"
-              show-buttons
-              fluid
-            />
-          </label>
-        </div>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="closeAddItemDialog"
-          />
-          <Button
-            label="Add item"
-            :disabled="!grantItemId || grantQuantity < 1"
-            @click="grantItem"
-          />
-        </footer>
-      </section>
-    </Dialog>
-    <Dialog
-      v-model:visible="noteRemoveOpen"
-      modal
-      header="Remove note?"
-      :style="{ width: 'min(30rem, calc(100vw - 2rem))' }"
-      @update:visible="closeNoteRemovalWhenClosed"
-    >
-      <p class="mb-4">Remove this note? This cannot be undone.</p>
-      <footer class="d-flex flex-wrap justify-content-end gap-2">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          :disabled="noteBusy"
-          @click="closeNoteRemoval"
-        />
-        <Button
-          label="Remove note"
-          icon="mdi mdi-delete-outline"
-          severity="danger"
-          :loading="noteBusy"
-          @click="removeNote"
-        />
-      </footer>
-    </Dialog>
 
     <Dialog
       v-model:visible="moneyDialog"
+      modal
       :style="{ width: 'min(39rem, calc(100vw - 2rem))' }"
       @update:visible="closeMoneyDialogWhenClosed"
     >
@@ -1329,13 +81,7 @@
           id="money-action-heading"
           class="h3 mb-0"
         >
-          {{
-            moneyAction === "spend"
-              ? "Spend coins"
-              : moneyAction === "transfer"
-                ? "Transfer coins"
-                : "Exchange coins"
-          }}
+          {{ moneyActionTitle }}
         </h2>
         <div class="d-grid gap-3">
           <template v-if="moneyAction === 'spend'">
@@ -1396,9 +142,7 @@
                 <label class="form-label mb-0">
                   Target coins
                   <InputText
-                    :model-value="
-                      exchangeAmount === undefined ? '' : String(exchangeAmount)
-                    "
+                    :model-value="exchangeAmount === null ? '' : String(exchangeAmount)"
                     readonly
                     fluid
                   />
@@ -1432,470 +176,726 @@
             @click="closeMoneyDialog"
           />
           <Button
-            :label="
-              moneyAction === 'spend'
-                ? 'Spend coins'
-                : moneyAction === 'transfer'
-                  ? 'Transfer coins'
-                  : 'Exchange coins'
-            "
-            :disabled="
-              moneyAction === 'transfer'
-                ? !moneyDestination || !hasMoneyAmounts || hasInvalidMoneyAmounts
-                : moneyAction === 'exchange'
-                  ? !exchangeAmount
-                  : !hasMoneyAmounts || hasInvalidMoneyAmounts
-            "
+            :label="moneyActionTitle"
+            :disabled="moneyActionDisabled"
+            :loading="moneyBusy"
             @click="submitMoneyAction"
           />
         </footer>
       </section>
     </Dialog>
-    <Dialog
-      v-model:visible="effectOpen"
-      :style="{ width: 'min(35rem, calc(100vw - 2rem))' }"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="add-effect-heading"
-      >
-        <h2
-          id="add-effect-heading"
-          class="h3 mb-0"
-        >
-          Add active effect
-        </h2>
-        <div class="d-grid gap-3">
-          <label class="form-label mb-0">
-            Effect name
-            <InputText
-              v-model="effectName"
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Source (optional)
-            <InputText
-              v-model="effectSource"
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Duration or expiry reminder
-            <InputText
-              v-model="effectDuration"
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Modifier target
-            <Select
-              v-model="effectTarget"
-              :options="effectTargets"
-              option-label="title"
-              option-value="value"
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Numeric modifier (0 for reminder only)
-            <InputNumber
-              v-model.number="effectValue"
-              :min="-99"
-              :max="99"
-              :step="1"
-              show-buttons
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Reminder (conditional or dice effects)
-            <Textarea
-              v-model="effectReminder"
-              rows="2"
-              fluid
-            />
-          </label>
-        </div>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="effectOpen = false"
-          />
-          <Button
-            label="Add effect"
-            :disabled="!effectName.trim()"
-            @click="saveEffect"
-          />
-        </footer>
-      </section>
-    </Dialog>
-    <Dialog
-      v-model:visible="shortRestOpen"
-      :style="{ width: 'min(29rem, calc(100vw - 2rem))' }"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="short-rest-heading"
-      >
-        <h2
-          id="short-rest-heading"
-          class="h3 mb-0"
-        >
-          Short rest
-        </h2>
-        <div class="d-grid gap-3">
-          <p class="mb-4">
-            Enter current HP after spending Hit Dice. Hoard does not roll Hit Dice.
-          </p>
-          <label class="form-label mb-0">
-            Current HP after rest
-            <InputNumber
-              v-model.number="shortRestHp"
-              :min="0"
-              :max="character?.sheet.max_hp ?? 1"
-              :step="1"
-              show-buttons
-              fluid
-            />
-          </label>
-        </div>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="shortRestOpen = false"
-          />
-          <Button
-            label="Record short rest"
-            @click="takeRest('short')"
-          />
-        </footer>
-      </section>
-    </Dialog>
-    <Dialog
-      v-model:visible="spellCastOpen"
-      :style="{ width: 'min(29rem, calc(100vw - 2rem))' }"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="cast-spell-heading"
-      >
-        <h2
-          id="cast-spell-heading"
-          class="h3 mb-0"
-        >
-          {{ castingSpell ? `Cast ${castingSpell.name}` : "Cast spell" }}
-        </h2>
-        <div>
-          <label class="form-label mb-0">
-            Spell slot
-            <Select
-              v-model="castingSlot"
-              :options="castingSlots"
-              option-label="title"
-              option-value="value"
-              empty-message="No eligible spell slots available"
-              fluid
-            />
-          </label>
-        </div>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="spellCastOpen = false"
-          />
-          <Button
-            label="Record casting"
-            :disabled="!castingSlot"
-            @click="confirmSpellCast"
-          />
-        </footer>
-      </section>
-    </Dialog>
-    <Dialog
-      :visible="Boolean(itemAction)"
-      :style="{ width: 'min(35rem, calc(100vw - 2rem))' }"
-      @update:visible="closeItemActionWhenClosed"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="item-action-heading"
-      >
-        <h2
-          id="item-action-heading"
-          class="h3 mb-0"
-        >
-          {{
-            itemAction === "use"
-              ? "Use item"
-              : itemAction === "destroy"
-                ? "Destroy item"
-                : "Transfer item"
-          }}
-        </h2>
-        <div
-          v-if="selectedInventoryItem"
-          class="d-grid gap-3"
-        >
-          <p class="mb-0">
-            {{ selectedInventoryItem.name }} · {{ selectedInventoryItem.quantity }} held
-          </p>
-          <label
-            v-if="itemAction === 'transfer'"
-            class="form-label mb-0"
+
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xxl-6 g-3">
+          <div class="col">
+            <section class="border rounded-3 p-3 p-md-4 h-100">
+              <Transition
+                name="money-card-flip"
+                mode="out-in"
+              >
+                <div
+                  v-if="!moneyValueVisible"
+                  key="coin-pouch"
+                >
+                  <header
+                    class="d-flex align-items-start justify-content-between gap-2"
+                  >
+                    <div class="text-uppercase fw-semibold small text-body-secondary">
+                      Coin pouch
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                      <Button
+                        icon="mdi mdi-rotate-3d-variant"
+                        text
+                        rounded
+                        size="small"
+                        aria-label="Show coin value"
+                        @click="toggleMoneyCard"
+                      />
+                      <ActionMenu
+                        v-if="canAct"
+                        label="Coin actions"
+                        :items="coinActionItems"
+                      />
+                    </div>
+                  </header>
+                  <div class="fs-5 tabular-nums mt-3">
+                    {{ formatCoinPouch(character.money) }}
+                  </div>
+                </div>
+
+                <div
+                  v-else
+                  key="coin-value"
+                >
+                  <header
+                    class="d-flex align-items-start justify-content-between gap-2"
+                  >
+                    <div class="text-uppercase fw-semibold small text-body-secondary">
+                      Coin value
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                      <Button
+                        icon="mdi mdi-rotate-3d-variant"
+                        text
+                        rounded
+                        size="small"
+                        aria-label="Show coin pouch"
+                        @click="toggleMoneyCard"
+                      />
+                      <ActionMenu
+                        v-if="canAct"
+                        label="Coin actions"
+                        :items="coinActionItems"
+                      />
+                    </div>
+                  </header>
+                  <div class="h4 mt-3 mb-0">
+                    {{ formatGoldValue(character.money.gold_value) }} ¤
+                  </div>
+                </div>
+              </Transition>
+            </section>
+          </div>
+          <div
+            v-for="card in deferredCalculationCards"
+            :key="card"
+            class="col"
           >
-            Transfer to
-            <Select
-              v-model="itemActionDestination"
-              :options="destinationOptions"
-              option-label="title"
-              option-value="value"
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Quantity
-            <InputNumber
-              v-model.number="itemActionQuantity"
-              :min="1"
-              :max="selectedInventoryItem.quantity"
-              :step="1"
-              show-buttons
-              fluid
-            />
-          </label>
-          <label class="form-label mb-0">
-            Note (optional)
-            <Textarea
-              v-model="itemActionDescription"
-              rows="2"
-              fluid
-            />
-          </label>
+            <ComingSoonBlock>
+              <CalculationCard :label="card" />
+            </ComingSoonBlock>
+          </div>
+          <div class="col">
+            <ComingSoonBlock>
+              <section class="border rounded-3 p-3 p-md-4 h-100">
+                <div class="text-uppercase fw-semibold small text-body-secondary">
+                  Movement speed
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-3">
+                  <span
+                    class="mdi mdi-run fs-4"
+                    aria-hidden="true"
+                  />
+                  <Skeleton
+                    width="5rem"
+                    height="1.75rem"
+                  />
+                </div>
+              </section>
+            </ComingSoonBlock>
+          </div>
         </div>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="closeItemAction"
-          />
-          <Button
-            :label="
-              itemAction === 'use'
-                ? 'Use item'
-                : itemAction === 'destroy'
-                  ? 'Destroy item'
-                  : 'Transfer item'
-            "
-            :disabled="itemActionInvalid"
-            @click="submitItemAction"
-          />
-        </footer>
-      </section>
-    </Dialog>
-    <Dialog
-      v-model:visible="hpAdjustmentOpen"
-      :style="{ width: 'min(26rem, calc(100vw - 2rem))' }"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="adjust-hp-heading"
-      >
-        <h2
-          id="adjust-hp-heading"
-          class="h3 mb-0"
-        >
-          Adjust HP
-        </h2>
-        <div class="d-grid gap-3">
-          <p class="mb-0">
-            Current HP: {{ character.sheet.current_hp }} / {{ character.sheet.max_hp }}
+      </div>
+
+      <div class="col-12">
+        <ComingSoonBlock>
+          <section
+            class="border rounded-3 p-3 p-md-4"
+            aria-labelledby="conditions-heading"
+          >
+            <header class="mb-3">
+              <h2
+                id="conditions-heading"
+                class="h5 mb-1"
+              >
+                Conditions
+              </h2>
+              <p class="small text-body-secondary mb-0">
+                Conditions remain active until each cause is removed.
+              </p>
+            </header>
+            <div class="d-flex align-items-start gap-2">
+              <Skeleton
+                shape="circle"
+                size="1.5rem"
+              />
+              <div class="flex-grow-1 d-grid gap-2">
+                <Skeleton width="8rem" />
+                <Skeleton width="14rem" />
+              </div>
+            </div>
+          </section>
+        </ComingSoonBlock>
+      </div>
+
+      <div class="col-12">
+        <ComingSoonBlock>
+          <section class="mb-4">
+            <header>Resources</header>
+            <p class="mb-3 d-flex flex-wrap column-gap-4 row-gap-2">
+              <span class="d-inline-flex align-items-center gap-2">
+                Inspiration:
+                <Skeleton width="5rem" />
+              </span>
+              <span class="d-inline-flex align-items-center gap-2">
+                Spell attack:
+                <Skeleton width="2rem" />
+              </span>
+              <span class="d-inline-flex align-items-center gap-2">
+                Spell save DC:
+                <Skeleton width="2rem" />
+              </span>
+            </p>
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <caption class="visually-hidden">Spell slot availability</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Slot</th>
+                    <th
+                      scope="col"
+                      class="text-end tabular-nums"
+                    >
+                      Current
+                    </th>
+                    <th
+                      scope="col"
+                      class="text-end tabular-nums"
+                    >
+                      Maximum
+                    </th>
+                    <th scope="col">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in 3"
+                    :key="row"
+                  >
+                    <th scope="row"><Skeleton width="5rem" /></th>
+                    <td>
+                      <Skeleton
+                        class="ms-auto"
+                        width="2rem"
+                      />
+                    </td>
+                    <td>
+                      <Skeleton
+                        class="ms-auto"
+                        width="2rem"
+                      />
+                    </td>
+                    <td><Skeleton width="8rem" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </ComingSoonBlock>
+      </div>
+    </div>
+
+    <section class="character-sheet-preview">
+      <section aria-labelledby="abilities-heading">
+        <header class="mb-3">
+          <h2
+            id="abilities-heading"
+            class="h4 mb-1"
+          >
+            Abilities and saving throws
+          </h2>
+          <p class="small text-body-secondary mb-0">
+            Flip a card to see how its totals are calculated.
           </p>
-          <label class="form-label mb-0">
-            Hit points
-            <InputNumber
-              v-model.number="healthAmount"
-              :min="1"
-              :step="1"
-              show-buttons
-              fluid
-            />
-          </label>
+        </header>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+          <div
+            v-for="ability in deferredAbilities"
+            :key="ability.label"
+            class="col"
+          >
+            <ComingSoonBlock>
+              <article class="border rounded-3 p-3 h-100 text-center">
+                <header class="mb-3">
+                  <h3 class="h5 mb-0">{{ ability.label }}</h3>
+                  <span class="small text-uppercase text-body-secondary">
+                    {{ ability.abbreviation }} ·
+                    <Skeleton
+                      class="d-inline-block"
+                      width="2rem"
+                    />
+                  </span>
+                </header>
+                <div class="row row-cols-2 g-2 align-items-start tabular-nums">
+                  <div class="col d-flex flex-column align-items-center">
+                    <span class="small text-body-secondary d-block mb-1">Modifier</span>
+                    <Skeleton
+                      width="3rem"
+                      height="2rem"
+                    />
+                  </div>
+                  <div class="col d-flex flex-column align-items-center">
+                    <span class="small text-body-secondary d-block mb-1">Save</span>
+                    <Skeleton
+                      width="3rem"
+                      height="2rem"
+                    />
+                  </div>
+                </div>
+                <Button
+                  class="mt-3"
+                  size="small"
+                  text
+                  icon="mdi mdi-rotate-3d-variant"
+                  label="Show calculation"
+                  :aria-label="`Show ${ability.label} calculation`"
+                />
+              </article>
+            </ComingSoonBlock>
+          </div>
         </div>
-        <footer class="d-flex justify-content-end gap-2 flex-wrap">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="hpAdjustmentOpen = false"
-          />
-          <Button
-            label="Damage"
-            severity="danger"
-            :disabled="healthAmount < 1 || !canDamage"
-            @click="submitHpAdjustment('damage')"
-          />
-          <Button
-            label="Heal"
-            :disabled="healthAmount < 1 || !canHeal"
-            @click="submitHpAdjustment('healing')"
-          />
-        </footer>
       </section>
-    </Dialog>
-    <Dialog
-      v-model:visible="speedOpen"
-      :style="{ width: 'min(26rem, calc(100vw - 2rem))' }"
-    >
+
       <section
-        class="d-grid gap-3"
-        aria-labelledby="edit-speed-heading"
+        class="mt-4"
+        aria-labelledby="skills-heading"
+      >
+        <header class="mb-3">
+          <h2
+            id="skills-heading"
+            class="h4 mb-1"
+          >
+            Skills
+          </h2>
+          <p class="small text-body-secondary mb-0">
+            Bonuses are grouped by the ability used for each check.
+          </p>
+        </header>
+        <ComingSoonBlock>
+          <div class="border rounded-3 p-2">
+            <div class="row g-0">
+              <div
+                v-for="(column, columnIndex) in deferredSkillColumns"
+                :key="columnIndex"
+                class="col-6"
+              >
+                <section
+                  class="h-100"
+                  :class="columnIndex === 0 ? 'pe-2' : 'ps-2 border-start'"
+                >
+                  <div
+                    v-for="(group, groupIndex) in column"
+                    :key="group.label"
+                    :class="{ 'mt-4': groupIndex > 0 }"
+                  >
+                    <h3 class="h6 text-uppercase text-body-secondary mb-1">
+                      {{ group.label }}
+                    </h3>
+                    <ul class="list-group list-group-flush">
+                      <li
+                        v-for="skill in group.skills"
+                        :key="skill"
+                        class="list-group-item bg-transparent px-0 py-2 d-flex align-items-center justify-content-between gap-3"
+                      >
+                        <span class="skill-name">{{ skill }}</span>
+                        <Skeleton width="2rem" />
+                      </li>
+                    </ul>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </ComingSoonBlock>
+      </section>
+
+      <ComingSoonBlock class="mt-4">
+        <section class="border rounded-3 p-3 p-md-4">
+          <header class="d-flex align-items-center gap-2 flex-wrap">
+            Inventory
+            <Skeleton width="4rem" />
+          </header>
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <caption class="visually-hidden">Character inventory preview</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Item</th>
+                  <th
+                    scope="col"
+                    class="text-end"
+                  >
+                    Quantity
+                  </th>
+                  <th
+                    scope="col"
+                    class="text-end"
+                  >
+                    Weight
+                  </th>
+                  <th
+                    scope="col"
+                    class="text-end"
+                  >
+                    Value
+                  </th>
+                  <th
+                    scope="col"
+                    class="text-end"
+                  >
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row"><Skeleton width="8rem" /></th>
+                  <td>
+                    <Skeleton
+                      class="ms-auto"
+                      width="2rem"
+                    />
+                  </td>
+                  <td>
+                    <Skeleton
+                      class="ms-auto"
+                      width="4rem"
+                    />
+                  </td>
+                  <td>
+                    <Skeleton
+                      class="ms-auto"
+                      width="4rem"
+                    />
+                  </td>
+                  <td>
+                    <Skeleton
+                      class="ms-auto"
+                      width="2rem"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </ComingSoonBlock>
+
+      <ComingSoonBlock class="mt-4">
+        <section
+          class="border rounded-3 p-3 p-md-4"
+          aria-labelledby="equipment-heading"
+        >
+          <header class="mb-3">
+            <h2
+              id="equipment-heading"
+              class="h4 mb-0"
+            >
+              Equipment and effects
+            </h2>
+          </header>
+          <div class="d-grid gap-4">
+            <section>
+              <h3 class="h6 mb-2">
+                Equipment
+                <Skeleton
+                  class="d-inline-block"
+                  width="2rem"
+                />
+              </h3>
+              <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                  <caption class="visually-hidden">Character equipment</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Item</th>
+                      <th scope="col">Slot</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <th scope="row"><Skeleton width="8rem" /></th>
+                      <td><Skeleton width="5rem" /></td>
+                      <td><Skeleton width="5rem" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section>
+              <h3 class="h6 mb-2">
+                Active effects
+                <Skeleton
+                  class="d-inline-block"
+                  width="2rem"
+                />
+              </h3>
+              <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                  <caption class="visually-hidden">Character active effects</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Effect</th>
+                      <th scope="col">Duration</th>
+                      <th scope="col">Modifiers and reminder</th>
+                      <th
+                        scope="col"
+                        class="text-end"
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <th scope="row"><Skeleton width="8rem" /></th>
+                      <td><Skeleton width="5rem" /></td>
+                      <td><Skeleton width="10rem" /></td>
+                      <td>
+                        <Skeleton
+                          class="ms-auto"
+                          width="3rem"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </ComingSoonBlock>
+
+      <section
+        class="mt-4"
+        aria-labelledby="character-reference-heading"
       >
         <h2
-          id="edit-speed-heading"
-          class="h3 mb-0"
+          id="character-reference-heading"
+          class="h4 mb-3"
         >
-          Edit movement speed
+          Character details
         </h2>
-        <label class="form-label mb-0">
-          Walking speed
-          <InputNumber
-            v-model.number="speedFeet"
-            input-id="character-speed"
-            :min="0"
-            :max="1000"
-            :step="5"
-            :invalid="speedFeet !== null && speedFeet % 5 !== 0"
-            suffix=" ft"
-            show-buttons
-            button-layout="horizontal"
+        <div class="d-grid gap-2">
+          <ComingSoonBlock>
+            <SheetDisclosure title="Background and personality">
+              <dl class="row g-3 mb-0">
+                <div
+                  v-for="field in deferredBiographyFields"
+                  :key="field.label"
+                  :class="field.wide ? 'col-12' : 'col-12 col-md-6'"
+                >
+                  <dt class="small text-body-secondary mb-1">{{ field.label }}</dt>
+                  <dd class="mb-0">
+                    <Skeleton :width="field.wide ? '75%' : '10rem'" />
+                  </dd>
+                </div>
+              </dl>
+            </SheetDisclosure>
+          </ComingSoonBlock>
+
+          <ComingSoonBlock>
+            <SheetDisclosure title="Languages and proficiencies">
+              <div class="row g-4">
+                <section class="col-12 col-md-6">
+                  <h3 class="h6 mb-2">Languages</h3>
+                  <Skeleton width="75%" />
+                </section>
+                <section class="col-12 col-md-6">
+                  <h3 class="h6 mb-2">Equipment proficiencies</h3>
+                  <Skeleton width="85%" />
+                </section>
+              </div>
+            </SheetDisclosure>
+          </ComingSoonBlock>
+
+          <ComingSoonBlock>
+            <SheetDisclosure title="Notes">
+              <Skeleton
+                width="80%"
+                height="3rem"
+              />
+            </SheetDisclosure>
+          </ComingSoonBlock>
+
+          <ComingSoonBlock>
+            <SheetDisclosure title="Features and feats">
+              <article>
+                <Skeleton
+                  width="10rem"
+                  class="mb-2"
+                />
+                <Skeleton width="85%" />
+              </article>
+            </SheetDisclosure>
+          </ComingSoonBlock>
+
+          <ComingSoonBlock>
+            <SheetDisclosure title="Spells">
+              <article>
+                <Skeleton
+                  width="9rem"
+                  class="mb-2"
+                />
+                <Skeleton width="80%" />
+              </article>
+            </SheetDisclosure>
+          </ComingSoonBlock>
+
+          <ComingSoonBlock>
+            <SheetDisclosure title="Companions">
+              <article>
+                <Skeleton
+                  width="9rem"
+                  class="mb-3"
+                />
+                <dl class="row g-2 mb-0">
+                  <div
+                    v-for="stat in ['Armor class', 'Hit points', 'Speed']"
+                    :key="stat"
+                    class="col-4 col-md-auto me-md-4"
+                  >
+                    <dt class="small text-body-secondary">{{ stat }}</dt>
+                    <dd class="mb-0"><Skeleton width="4rem" /></dd>
+                  </div>
+                </dl>
+              </article>
+            </SheetDisclosure>
+          </ComingSoonBlock>
+        </div>
+      </section>
+    </section>
+
+    <section
+      class="mt-4 border rounded-3 p-3 p-md-4"
+      aria-labelledby="activity-heading"
+    >
+      <header class="d-flex align-items-center gap-2 flex-wrap mb-3">
+        <h2
+          id="activity-heading"
+          class="h4 mb-0"
+        >
+          Recent activity
+        </h2>
+        <span class="flex-grow-1" />
+        <Button
+          :as="'router-link'"
+          :to="`/c/${campaignId}/ledger`"
+          size="small"
+          text
+          label="View full ledger"
+        />
+      </header>
+      <div
+        v-if="activity.length"
+        class="table-responsive"
+        tabindex="0"
+        aria-label="Recent character activity table"
+      >
+        <table class="table table-striped mb-0">
+          <caption class="visually-hidden">
+            Recent activity for {{ character.name }}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">When</th>
+              <th
+                scope="col"
+                class="text-end"
+              >
+                Change
+              </th>
+              <th scope="col">Details</th>
+              <th scope="col">By</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="transaction in activity"
+              :key="`${transaction.ledger}-${transaction.id}`"
+            >
+              <td class="text-nowrap">
+                <RelativeTime :value="transaction.occurred_at" />
+              </td>
+              <td class="text-end text-nowrap tabular-nums fw-semibold">
+                {{ activityAmount(transaction) }}
+              </td>
+              <td>{{ activityDescription(transaction) }}</td>
+              <td>{{ transaction.actor || "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p
+        v-else
+        class="text-body-secondary mb-0"
+      >
+        No recent activity.
+      </p>
+    </section>
+
+    <Dialog
+      v-model:visible="editorOpen"
+      modal
+      :header="
+        profileSetupRequired ? 'Set up your character' : 'Edit character profile'
+      "
+      :style="{ width: 'min(34rem, calc(100vw - 2rem))' }"
+    >
+      <form
+        class="d-grid gap-3"
+        @submit.prevent="saveProfile"
+      >
+        <p
+          v-if="profileSetupRequired"
+          class="text-body-secondary mb-0"
+        >
+          Choose your character's name, race, and class. Saving makes the character
+          active.
+        </p>
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Name</span>
+          <InputText
+            v-model="draft.name"
+            required
+            maxlength="200"
             fluid
-          >
-            <template #decrementicon>
-              <span aria-hidden="true">−5</span>
-            </template>
-            <template #incrementicon>
-              <span aria-hidden="true">+5</span>
-            </template>
-          </InputNumber>
-          <small class="d-block text-body-secondary mt-1">
-            Enter a multiple of 5 feet.
-          </small>
+          />
         </label>
-        <footer class="d-flex justify-content-end gap-2">
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Race</span>
+          <InputText
+            v-model="draft.race"
+            :required="profileSetupRequired"
+            maxlength="100"
+            fluid
+          />
+        </label>
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Class</span>
+          <InputText
+            v-model="draft.characterClass"
+            :required="profileSetupRequired"
+            maxlength="100"
+            fluid
+          />
+        </label>
+        <footer class="d-flex justify-content-end gap-2 mt-2">
           <Button
+            type="button"
             label="Cancel"
             severity="secondary"
             outlined
-            @click="speedOpen = false"
+            @click="editorOpen = false"
           />
           <Button
-            label="Save speed"
-            :disabled="speedInvalid"
-            @click="saveSpeed"
+            type="submit"
+            label="Save profile"
+            :loading="busy"
           />
         </footer>
-      </section>
-    </Dialog>
-    <Dialog
-      v-model:visible="healthOpen"
-      :style="{ width: 'min(33rem, calc(100vw - 2rem))' }"
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="record-hp-heading"
-      >
-        <h2
-          id="record-hp-heading"
-          class="h3 mb-0"
-        >
-          Record HP change
-        </h2>
-        <div class="d-grid gap-3">
-          <label class="form-label mb-0">
-            Action
-            <Select
-              v-model="healthReason"
-              :options="[
-                { title: 'Damage', value: 'damage' },
-                { title: 'Healing', value: 'healing' },
-                { title: 'Temporary HP change', value: 'temporary' },
-                { title: 'Correction', value: 'correction' },
-              ]"
-              option-label="title"
-              option-value="value"
-              fluid
-            />
-          </label>
-          <label
-            v-if="healthReason !== 'correction'"
-            class="form-label mb-0"
-          >
-            Amount
-            <InputNumber
-              v-model.number="healthAmount"
-              :min="1"
-              :step="1"
-              show-buttons
-              fluid
-            />
-          </label>
-          <template v-else>
-            <label class="form-label mb-0">
-              Correct current HP
-              <InputNumber
-                v-model.number="healthCurrent"
-                :min="0"
-                :step="1"
-                show-buttons
-                fluid
-              />
-            </label>
-            <label class="form-label mb-0">
-              Correct temporary HP
-              <InputNumber
-                v-model.number="healthTemporary"
-                :min="0"
-                :step="1"
-                show-buttons
-                fluid
-              />
-            </label>
-          </template>
-          <Message severity="info">
-            {{ healthPreview }}
-          </Message>
-          <label class="form-label mb-0">
-            Reason (optional)
-            <Textarea
-              v-model="healthDescription"
-              rows="2"
-              fluid
-            />
-          </label>
-        </div>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="healthOpen = false"
-          />
-          <Button
-            label="Record transaction"
-            @click="saveHealth"
-          />
-        </footer>
-      </section>
+      </form>
     </Dialog>
   </section>
+
+  <ProgressBar
+    v-else-if="!error"
+    indeterminate
+    aria-label="Loading character profile"
+  />
 </template>
 
 <script lang="ts">
@@ -1905,253 +905,195 @@ import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import type { MenuItem } from "primevue/menuitem";
 import Message from "primevue/message";
+import ProgressBar from "primevue/progressbar";
 import Select from "primevue/select";
+import Skeleton from "primevue/skeleton";
 import Textarea from "primevue/textarea";
 import { defineComponent } from "vue";
 import {
   archiveCharacter,
-  castCharacterSpell,
-  changeCharacterSheetRecord,
-  createInventoryTransaction,
   createMoneyExchange,
   createMoneyTransfer,
   getCampaign,
-  getItems,
   getTransactions,
-  postHealth,
-  removeCharacterCondition,
   removeCharacterPortrait,
-  restCharacter,
-  setCharacterCondition,
-  setCharacterInspiration,
   updateCharacter,
   uploadCharacterPortrait,
   type Campaign,
   type Character,
-  type CharacterNote,
-  type ConditionMutation,
-  type Item,
   type LedgerTransaction,
 } from "@/api";
 import { exchangedCoinAmount } from "@/campaigns/coinExchange";
+import ActionMenu from "@/campaigns/components/ActionMenu.vue";
+import CalculationCard from "@/campaigns/components/CalculationCard.vue";
+import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
+import CoinAmountPicker from "@/campaigns/components/CoinAmountPicker.vue";
+import ComingSoonBlock from "@/campaigns/components/ComingSoonBlock.vue";
+import SheetDisclosure from "@/campaigns/components/SheetDisclosure.vue";
 import {
   readCoinDisplayMode,
   storeCoinDisplayMode,
 } from "@/campaigns/coinDisplayPreference";
-import ActionMenu from "@/campaigns/components/ActionMenu.vue";
-import CalculationBreakdown from "@/campaigns/components/CalculationBreakdown.vue";
-import CalculationCard from "@/campaigns/components/CalculationCard.vue";
-import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
-import CoinAmountPicker from "@/campaigns/components/CoinAmountPicker.vue";
-import ConditionManager from "@/campaigns/components/ConditionManager.vue";
-import ItemPickerDialog from "@/campaigns/components/ItemPickerDialog.vue";
-import MarkdownContent from "@/campaigns/components/MarkdownContent.vue";
-import PlayerEncounterActions from "@/campaigns/components/PlayerEncounterActions.vue";
-import RelativeTime from "@/components/RelativeTime.vue";
-import SheetDisclosure from "@/campaigns/components/SheetDisclosure.vue";
 import { displayCoin, displayIdentifier, formatCoinPouch } from "@/campaigns/display";
-import type { PickerCandidate } from "@/campaigns/itemPicker";
-import { formatGoldValue, formatMoneyValue } from "@/campaigns/money";
+import { nearLevelUpXpThreshold } from "@/campaigns/experience";
+import { formatGoldValue } from "@/campaigns/money";
+import RelativeTime from "@/components/RelativeTime.vue";
 import { campaignRefreshRevision } from "@/realtime";
-
-type InventoryRow = Character["inventory"][number] & {
-  item?: Item;
-};
-
-const skillAbilities: Record<string, string> = {
-  acrobatics: "dexterity",
-  animal_handling: "wisdom",
-  arcana: "intelligence",
-  athletics: "strength",
-  deception: "charisma",
-  history: "intelligence",
-  insight: "wisdom",
-  intimidation: "charisma",
-  investigation: "intelligence",
-  medicine: "wisdom",
-  nature: "intelligence",
-  perception: "wisdom",
-  performance: "charisma",
-  persuasion: "charisma",
-  religion: "intelligence",
-  sleight_of_hand: "dexterity",
-  stealth: "dexterity",
-  survival: "wisdom",
-};
 
 const xpThresholds = [
   0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000,
   140000, 165000, 195000, 225000, 265000, 305000, 355000,
 ];
 
-const NEAR_LEVEL_UP_XP_THRESHOLD = 1000;
-
 const denominationOptions = ["cp", "sp", "ep", "gp", "pp"].map((value) => ({
   title: displayCoin(value),
   value,
 }));
-
-const effectTargetOptions = [
-  "ac",
-  "speed",
-  "spell_attack",
-  "spell_dc",
-  "weapon_attack",
-  "weapon_damage",
-  "ability:strength",
-  "ability:dexterity",
-  "ability:constitution",
-  "ability:intelligence",
-  "ability:wisdom",
-  "ability:charisma",
-  "save:strength",
-  "save:dexterity",
-  "save:constitution",
-  "save:intelligence",
-  "save:wisdom",
-  "save:charisma",
-].map((value) => ({ title: displayIdentifier(value.replace(":", " ")), value }));
 
 export default defineComponent({
   components: {
     ActionMenu,
     Button,
     CalculationCard,
+    CharacterAvatar,
+    CoinAmountPicker,
+    ComingSoonBlock,
     Dialog,
     InputNumber,
     InputText,
     Message,
-    Select,
-    Textarea,
-    CoinAmountPicker,
-    ConditionManager,
-    CalculationBreakdown,
-    CharacterAvatar,
-    ItemPickerDialog,
-    MarkdownContent,
-    PlayerEncounterActions,
+    ProgressBar,
     RelativeTime,
+    Select,
     SheetDisclosure,
+    Skeleton,
+    Textarea,
   },
   data() {
-    const levelUpError = this.$route.query.level_up_error;
-
     return {
-      campaignId: Number(this.$route.params.id),
-      characterId: Number(this.$route.params.characterId),
       campaign: undefined as Campaign | undefined,
       character: undefined as Character | undefined,
-      ownCharacter: false,
-      characters: [] as Character[],
-      items: [] as Item[],
-      flippedAbilityKey: "",
+      editorOpen: false,
+      setupPrompted: false,
       moneyValueVisible: readCoinDisplayMode() === "value",
-      error: typeof levelUpError === "string" ? levelUpError : "",
-      grantItemId: undefined as number | undefined,
-      grantQuantity: 1,
-      itemAction: undefined as "use" | "destroy" | "transfer" | undefined,
-      selectedInventoryItem: undefined as
-        { item_id: number; name: string; quantity: number } | undefined,
-      itemActionQuantity: 1,
-      itemActionDestination: undefined as number | undefined,
-      itemActionDescription: "",
       moneyAction: "spend" as "spend" | "transfer" | "exchange",
       moneyDialog: false,
+      moneyBusy: false,
       denomination: "gp",
       amount: 1,
       moneyAmounts: { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 } as Record<string, number>,
       moneyDestination: undefined as number | undefined,
       exchangeTargetDenomination: "sp",
       moneyDescription: "",
-      addItemOpen: false,
-      activity: [] as LedgerTransaction[],
-      healthOpen: false,
-      hpAdjustmentOpen: false,
-      speedOpen: false,
-      speedFeet: null as number | null,
-      healthReason: "damage" as "damage" | "healing" | "temporary" | "correction",
-      healthAmount: 1,
-      healthCurrent: 0,
-      healthTemporary: 0,
-      healthDescription: "",
-      shortRestOpen: false,
-      shortRestHp: 0,
-      spellCastOpen: false,
-      castingSpell: undefined as Character["spells"][number] | undefined,
-      castingSlot: undefined as string | undefined,
-      effectOpen: false,
-      effectName: "",
-      effectSource: "",
-      effectDuration: "",
-      effectReminder: "",
-      effectTarget: "ac",
-      effectValue: 0,
-      noteEditorOpen: false,
-      editingNoteId: undefined as number | undefined,
-      noteBody: "",
-      noteBusy: false,
-      noteRemoveOpen: false,
-      noteToRemove: undefined as CharacterNote | undefined,
       denominations: denominationOptions,
-      xpThresholds,
-      effectTargets: effectTargetOptions,
+      activity: [] as LedgerTransaction[],
+      busy: false,
+      error: "",
+      draft: {
+        name: "",
+        race: "",
+        characterClass: "",
+      },
+      deferredCalculationCards: [
+        "HP",
+        "Armor class",
+        "Initiative bonus",
+        "Proficiency bonus",
+      ],
+      deferredAbilities: [
+        { label: "Strength", abbreviation: "STR" },
+        { label: "Dexterity", abbreviation: "DEX" },
+        { label: "Constitution", abbreviation: "CON" },
+        { label: "Intelligence", abbreviation: "INT" },
+        { label: "Wisdom", abbreviation: "WIS" },
+        { label: "Charisma", abbreviation: "CHA" },
+      ],
+      deferredSkillColumns: [
+        [
+          { label: "Strength", skills: ["Athletics"] },
+          {
+            label: "Dexterity",
+            skills: ["Acrobatics", "Sleight of hand", "Stealth"],
+          },
+          {
+            label: "Intelligence",
+            skills: ["Arcana", "History", "Investigation", "Nature", "Religion"],
+          },
+        ],
+        [
+          {
+            label: "Wisdom",
+            skills: [
+              "Animal handling",
+              "Insight",
+              "Medicine",
+              "Perception",
+              "Survival",
+            ],
+          },
+          {
+            label: "Charisma",
+            skills: ["Deception", "Intimidation", "Performance", "Persuasion"],
+          },
+        ],
+      ],
+      deferredBiographyFields: [
+        { label: "Background", wide: false },
+        { label: "Alignment", wide: false },
+        { label: "About", wide: true },
+        { label: "Personality traits", wide: true },
+        { label: "Ideals", wide: true },
+        { label: "Bonds", wide: true },
+        { label: "Flaws", wide: true },
+      ],
     };
   },
   computed: {
+    campaignId(): number {
+      return Number(this.$route.params.id);
+    },
+    characterId(): number {
+      return Number(this.$route.params.characterId);
+    },
+    canEdit(): boolean {
+      return Boolean(
+        this.character &&
+        (this.campaign?.is_game_master ||
+          this.character.context_id === this.campaignId),
+      );
+    },
+    canAct(): boolean {
+      return Boolean(
+        this.character &&
+        this.character.context_id === this.campaignId &&
+        this.character.is_active,
+      );
+    },
+    profileSetupRequired(): boolean {
+      return Boolean(
+        this.character &&
+        this.character.context_id === this.campaignId &&
+        !this.character.is_active,
+      );
+    },
     characterActionItems(): MenuItem[] {
-      const items: MenuItem[] = [];
-
-      if (this.character?.has_inspiration) {
-        items.push({
-          label: "Use inspiration",
-          icon: "mdi mdi-star",
-          command: () => void this.toggleInspiration(),
-        });
-      } else if (this.campaign?.is_game_master) {
-        items.push({
-          label: "Award inspiration",
-          icon: "mdi mdi-star-outline",
-          command: () => void this.toggleInspiration(),
-        });
-      }
-
-      items.push(
+      const items: MenuItem[] = [
         {
-          label: "Add condition",
-          icon: "mdi mdi-bandage",
-          command: () => this.openConditionManager(),
-        },
-        {
-          label: "Short rest",
-          icon: "mdi mdi-weather-sunset",
-          command: () => this.openShortRest(),
-        },
-        {
-          label: "Long rest",
-          icon: "mdi mdi-weather-night",
-          command: () => void this.takeRest("long"),
-        },
-        { separator: true },
-        {
-          label: "Edit character",
-          icon: "mdi mdi-pencil",
-          command: () => {
-            void this.$router.push(
-              `/c/${this.campaignId}/characters/${this.characterId}/build?mode=edit`,
-            );
-          },
+          label: "Edit profile",
+          icon: "mdi mdi-pencil-outline",
+          command: () => this.openEditor(),
         },
         {
           label: "Change portrait",
-          icon: "mdi mdi-image-edit",
+          icon: "mdi mdi-image-edit-outline",
           command: () => this.choosePortrait(),
         },
-      );
+      ];
 
       if (this.character?.portrait_url) {
         items.push({
           label: "Remove portrait",
-          icon: "mdi mdi-image-remove",
+          icon: "mdi mdi-image-remove-outline",
           command: () => void this.removePortrait(),
         });
       }
@@ -2182,87 +1124,19 @@ export default defineComponent({
         },
         {
           label: "Exchange coins",
-          icon: "mdi mdi-currency-exchange",
+          icon: "mdi mdi-cash-sync",
           command: () => this.openMoneyDialog("exchange"),
         },
       ];
     },
-    hpActionItems(): MenuItem[] {
-      return [
-        {
-          label: "Add temporary HP",
-          icon: "mdi mdi-shield-plus-outline",
-          command: () => this.openHealthFor("temporary"),
-        },
-        {
-          label: "Advanced HP adjustment",
-          icon: "mdi mdi-tune-variant",
-          command: () => this.openHealthFor("damage"),
-        },
-        { separator: true },
-        {
-          label: "Short rest",
-          icon: "mdi mdi-weather-sunset",
-          command: () => this.openShortRest(),
-        },
-        {
-          label: "Long rest",
-          icon: "mdi mdi-weather-night",
-          command: () => void this.takeRest("long"),
-        },
-      ];
-    },
-    refreshRevision(): number {
-      return campaignRefreshRevision.value;
-    },
-    healthPreview(): string {
-      if (!this.character) {
-        return "";
-      }
-
-      const beforeCurrent = this.character.sheet.current_hp;
-      const beforeTemporary = this.character.sheet.temporary_hp;
-
-      if (this.healthReason === "correction") {
-        return `Current ${beforeCurrent} → ${this.healthCurrent}; temporary ${beforeTemporary} → ${this.healthTemporary}`;
-      }
-
-      if (this.healthReason === "damage") {
-        const damage = Math.abs(this.healthAmount);
-        const absorbed = Math.min(beforeTemporary, damage);
-
-        return `Damage ${damage}: temporary ${beforeTemporary} − ${absorbed} = ${beforeTemporary - absorbed}; current ${beforeCurrent} − ${damage - absorbed} = ${Math.max(0, beforeCurrent - (damage - absorbed))}`;
-      }
-
-      if (this.healthReason === "healing") {
-        const healing = Math.abs(this.healthAmount);
-        const result = Math.min(this.character.sheet.max_hp, beforeCurrent + healing);
-
-        return `Current ${beforeCurrent} + ${healing} = ${result} (maximum ${this.character.sheet.max_hp})`;
-      }
-
-      return `Temporary ${beforeTemporary} + ${this.healthAmount} = ${beforeTemporary + this.healthAmount}`;
-    },
-    allItemCandidates(): PickerCandidate[] {
-      return this.items.map((item) => ({ item }));
-    },
-    inventoryRows() {
-      return (this.character?.inventory ?? []).map((entry) => ({
-        ...entry,
-        item: this.items.find((item) => item.id === entry.item_id),
-      }));
-    },
     destinationOptions() {
-      return this.characters
+      return (this.campaign?.characters ?? [])
         .filter(
-          (candidate) =>
-            candidate.id !== this.character?.id &&
-            candidate.is_active &&
-            !candidate.is_archived,
+          (candidate) => candidate.id !== this.character?.id && candidate.is_active,
         )
         .map((candidate) => ({ title: candidate.name, value: candidate.id }));
     },
-    exchangeAmount() {
+    exchangeAmount(): number | null {
       return exchangedCoinAmount(
         this.denomination,
         this.exchangeTargetDenomination,
@@ -2284,83 +1158,46 @@ export default defineComponent({
     hasMoneyAmounts(): boolean {
       return Object.keys(this.submittedMoneyAmounts).length > 0;
     },
-    selectedInventoryQuantity(): number {
-      return this.selectedInventoryItem?.quantity ?? 0;
-    },
-    itemActionInvalid(): boolean {
-      return (
-        this.itemActionQuantity < 1 ||
-        this.itemActionQuantity > this.selectedInventoryQuantity ||
-        (this.itemAction === "transfer" && !this.itemActionDestination)
-      );
-    },
-    canAct(): boolean {
-      return Boolean(
-        this.ownCharacter && this.character?.is_active && !this.character.is_archived,
-      );
-    },
-    canEdit(): boolean {
-      return this.ownCharacter || Boolean(this.campaign?.is_game_master);
-    },
-    noteIsEmpty(): boolean {
-      return !this.noteBody.trim();
-    },
-    canDamage(): boolean {
-      const sheet = this.character?.sheet;
-
-      return Boolean(sheet && (sheet.current_hp > 0 || sheet.temporary_hp > 0));
-    },
-    canHeal(): boolean {
-      const sheet = this.character?.sheet;
-
-      return Boolean(sheet && sheet.current_hp < sheet.max_hp);
-    },
-    movementSpeedLabel(): string {
-      const speed = this.character?.sheet.speed.trim();
-
-      if (!speed) {
-        return "Not set";
+    moneyActionTitle(): string {
+      if (this.moneyAction === "spend") {
+        return "Spend coins";
       }
 
-      return /^\d+$/.test(speed) ? `${speed} ft` : speed;
-    },
-    speedInvalid(): boolean {
-      return (
-        this.speedFeet === null ||
-        !Number.isInteger(this.speedFeet) ||
-        this.speedFeet < 0 ||
-        this.speedFeet > 1000 ||
-        this.speedFeet % 5 !== 0
-      );
-    },
-    castingSlots() {
-      const spell = this.castingSpell;
-
-      if (!spell || !this.character) {
-        return [];
+      if (this.moneyAction === "transfer") {
+        return "Transfer coins";
       }
 
-      return Object.entries(this.character.sheet.spell_slot_pools)
-        .filter(
-          ([key, pool]) =>
-            !key.startsWith("pact-") && Number(key) >= spell.level && pool.current > 0,
-        )
-        .map(([key, pool]) => ({
-          title: `Level ${key} (${pool.current}/${pool.maximum})`,
-          value: key,
-        }));
+      return "Exchange coins";
+    },
+    moneyActionDisabled(): boolean {
+      if (this.moneyAction === "transfer") {
+        return (
+          !this.moneyDestination || !this.hasMoneyAmounts || this.hasInvalidMoneyAmounts
+        );
+      }
+
+      if (this.moneyAction === "exchange") {
+        return !this.exchangeAmount;
+      }
+
+      return !this.hasMoneyAmounts || this.hasInvalidMoneyAmounts;
     },
     experienceProgress() {
-      const level = this.character?.sheet.level ?? 1;
-      const current = this.character?.experience ?? 0;
-      const minimum = this.xpThresholds[level - 1] ?? 0;
-      const maximum = this.xpThresholds[level];
+      const level = this.campaign?.level ?? 1;
+      const current = this.campaign?.shared_experience ?? 0;
+      const minimum = xpThresholds[level - 1] ?? 0;
+      const maximum = xpThresholds[level];
       const progress = maximum
         ? Math.min(100, Math.max(0, ((current - minimum) / (maximum - minimum)) * 100))
         : 100;
       const remaining = maximum === undefined ? null : Math.max(0, maximum - current);
+      const levelXpRequirement = maximum === undefined ? null : maximum - minimum;
+      const nearLevelUpThreshold =
+        levelXpRequirement === null ? null : nearLevelUpXpThreshold(levelXpRequirement);
       const isNearLevelUp =
-        remaining !== null && remaining < NEAR_LEVEL_UP_XP_THRESHOLD;
+        remaining !== null &&
+        nearLevelUpThreshold !== null &&
+        remaining <= nearLevelUpThreshold;
 
       return {
         current,
@@ -2372,135 +1209,21 @@ export default defineComponent({
         remaining,
       };
     },
-    abilityGroups() {
-      if (!this.character) {
-        return [];
-      }
-
-      const character = this.character;
-
-      return [
-        ["strength", "Strength", "STR"],
-        ["dexterity", "Dexterity", "DEX"],
-        ["constitution", "Constitution", "CON"],
-        ["intelligence", "Intelligence", "INT"],
-        ["wisdom", "Wisdom", "WIS"],
-        ["charisma", "Charisma", "CHA"],
-      ].map(([key, label, abbreviation]) => {
-        const ability = character.sheet.abilities[key];
-        const save = character.sheet.saves[key];
-
-        return {
-          key,
-          label,
-          abbreviation,
-          score: ability.score,
-          calculation: ability.formula,
-          modifier: ability.modifier,
-          modifierFromScore: ability.modifier - ability.adjustment,
-          modifierAdjustment: ability.adjustment,
-          save,
-          skills: Object.entries(character.sheet.skills)
-            .filter(([name]) => skillAbilities[name] === key)
-            .map(([name, skill]) => ({ name, ...skill })),
-        };
-      });
-    },
-    skillGroups() {
-      const order = ["strength", "wisdom", "dexterity", "charisma", "intelligence"];
-
-      return this.abilityGroups
-        .filter((ability) => ability.skills.length)
-        .sort((left, right) => order.indexOf(left.key) - order.indexOf(right.key));
-    },
-    skillColumns() {
-      return [
-        this.skillGroups.filter((ability) =>
-          ["strength", "dexterity", "intelligence"].includes(ability.key),
-        ),
-        this.skillGroups.filter((ability) =>
-          ["wisdom", "charisma"].includes(ability.key),
-        ),
-      ];
-    },
-    biographyFields(): Array<{ label: string; value: string; wide: boolean }> {
-      if (!this.character) {
-        return [];
-      }
-
-      return [
-        { label: "Background", value: this.character.background, wide: false },
-        { label: "Alignment", value: this.character.alignment, wide: false },
-        { label: "About", value: this.character.about, wide: true },
-        {
-          label: "Personality traits",
-          value: this.character.personality_traits,
-          wide: true,
-        },
-        { label: "Ideals", value: this.character.ideals, wide: true },
-        { label: "Bonds", value: this.character.bonds, wide: true },
-        { label: "Flaws", value: this.character.flaws, wide: true },
-      ].filter((field) => field.value.trim());
-    },
-    equipmentProficiencyGroups(): Array<{ label: string; values: string[] }> {
-      if (!this.character) {
-        return [];
-      }
-
-      return Object.entries(this.character.equipment_proficiencies)
-        .map(([group, values]) => ({
-          label: displayIdentifier(group),
-          values: values.map(displayIdentifier),
-        }))
-        .filter((group) => group.values.length);
+    campaignRefresh(): number {
+      return campaignRefreshRevision.value;
     },
   },
   watch: {
-    refreshRevision(): void {
+    campaignRefresh(): void {
       void this.load();
     },
   },
+  mounted() {
+    void this.load();
+  },
   methods: {
-    showAbilityCalculation(abilityKey: string): void {
-      this.flippedAbilityKey = abilityKey;
-    },
-    hideAbilityCalculation(): void {
-      this.flippedAbilityKey = "";
-    },
-    toggleMoneyCard(): void {
-      this.moneyValueVisible = !this.moneyValueVisible;
-      storeCoinDisplayMode(this.moneyValueVisible ? "value" : "pouch");
-    },
-    showSuccess(message: string): void {
-      this.$toast.add({
-        severity: "success",
-        summary: message,
-        life: 4_000,
-      });
-    },
-    displayCoin,
-    displayName: displayIdentifier,
     formatCoinPouch,
     formatGoldValue,
-    formatMoneyValue,
-    formatItemWeight(item: Item | null | undefined): string {
-      const amount = item?.equipment.weight_amount;
-
-      if (!amount) {
-        return "—";
-      }
-
-      const numericAmount = Number(amount);
-      const formattedAmount = Number.isFinite(numericAmount)
-        ? numericAmount.toLocaleString()
-        : amount;
-      const unit = item.equipment.weight_unit;
-
-      return unit ? `${formattedAmount} ${unit}` : formattedAmount;
-    },
-    signed(value: number): string {
-      return value >= 0 ? `+${value}` : `${value}`;
-    },
     formatXp(value: number): string {
       return `${value.toLocaleString()} XP`;
     },
@@ -2510,8 +1233,7 @@ export default defineComponent({
         .map(
           (entry) =>
             `${entry.amount > 0 ? "+" : ""}${entry.amount} ${
-              entry.item_name ??
-              (entry.denomination ? displayCoin(entry.denomination) : "XP")
+              entry.denomination ? displayCoin(entry.denomination) : "XP"
             }`,
         )
         .join(" · ");
@@ -2523,489 +1245,9 @@ export default defineComponent({
         displayIdentifier(transaction.ledger)
       );
     },
-    proficiencyLabel(proficiency: string): string {
-      return (
-        {
-          half: "Half",
-          proficient: "Proficient",
-          expertise: "Expertise",
-        }[proficiency] ?? ""
-      );
-    },
-    proficiencyClass(proficiency: string): string {
-      return `proficiency-bonus proficiency-bonus--${proficiency}`;
-    },
-    proficiencyIcon(proficiency: string): string {
-      return (
-        {
-          half: "mdi-circle-half-full",
-          proficient: "mdi-shield-check",
-          expertise: "mdi-star-four-points",
-        }[proficiency] ?? ""
-      );
-    },
-    async applyCondition(condition: ConditionMutation): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        await setCharacterCondition(this.campaignId, this.character.id, condition);
-        await this.load();
-        this.showSuccess(`${this.displayName(condition.identifier)} updated.`);
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to apply the condition.";
-      }
-    },
-    async removeCondition(conditionId: number): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        await removeCharacterCondition(this.campaignId, this.character.id, conditionId);
-        await this.load();
-        this.showSuccess("Condition removed.");
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to remove the condition.";
-      }
-    },
-    openShortRest(): void {
-      if (!this.character) {
-        return;
-      }
-
-      this.shortRestHp = this.character.sheet.current_hp;
-      this.shortRestOpen = true;
-    },
-    async takeRest(kind: "short" | "long"): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        this.character = await restCharacter(
-          this.campaignId,
-          this.character.id,
-          kind,
-          kind === "short" ? this.shortRestHp : undefined,
-        );
-        this.shortRestOpen = false;
-        this.showSuccess(`${kind === "short" ? "Short" : "Long"} rest recorded.`);
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to record rest.";
-      }
-    },
-    openSpellCast(spell: Character["spells"][number]): void {
-      this.castingSpell = spell;
-      this.castingSlot = undefined;
-
-      if (spell.level === 0) {
-        void this.confirmSpellCast();
-      } else {
-        this.spellCastOpen = true;
-      }
-    },
-    async confirmSpellCast(): Promise<void> {
-      if (!this.character || !this.castingSpell) {
-        return;
-      }
-
-      try {
-        this.character = await castCharacterSpell(
-          this.campaignId,
-          this.character.id,
-          this.castingSpell.id,
-          this.castingSpell.level === 0 ? undefined : this.castingSlot,
-        );
-        this.spellCastOpen = false;
-        this.showSuccess(`${this.castingSpell.name} recorded.`);
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to record spell casting.";
-      }
-    },
-    async archive(): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        await archiveCharacter(this.campaignId, this.character.id);
-        await this.$router.replace(`/c/${this.campaignId}/characters`);
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to archive character.";
-      }
-    },
-    choosePortrait(): void {
-      const input = this.$refs.portraitInput as HTMLInputElement;
-
-      input.click();
-    },
-    async uploadPortrait(event: Event): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      const input = event.target as HTMLInputElement;
-      const file = input.files?.[0];
-
-      if (!file) {
-        return;
-      }
-
-      if (file.size > 5 * 1024 * 1024) {
-        this.error = "Portraits must be no larger than 5 MB.";
-        input.value = "";
-
-        return;
-      }
-
-      try {
-        const result = await uploadCharacterPortrait(
-          this.campaignId,
-          this.character.id,
-          file,
-        );
-        this.character = { ...this.character, portrait_url: result.portrait_url };
-        this.showSuccess("Portrait updated.");
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to update portrait.";
-      } finally {
-        input.value = "";
-      }
-    },
-    async removePortrait(): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        await removeCharacterPortrait(this.campaignId, this.character.id);
-        this.character = { ...this.character, portrait_url: null };
-        this.showSuccess("Portrait removed.");
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to remove portrait.";
-      }
-    },
-    startAddingNote(): void {
-      this.editingNoteId = undefined;
-      this.noteBody = "";
-      this.noteEditorOpen = true;
-    },
-    startEditingNote(note: CharacterNote): void {
-      this.editingNoteId = note.id;
-      this.noteBody = note.body;
-      this.noteEditorOpen = true;
-    },
-    closeNoteEditor(): void {
-      if (this.noteBusy) {
-        return;
-      }
-
-      this.noteEditorOpen = false;
-      this.editingNoteId = undefined;
-      this.noteBody = "";
-    },
-    async saveNote(): Promise<void> {
-      if (!this.character || this.noteIsEmpty || this.noteBusy) {
-        return;
-      }
-
-      const operation = this.editingNoteId === undefined ? "create" : "update";
-
-      this.noteBusy = true;
-
-      try {
-        await changeCharacterSheetRecord(
-          this.campaignId,
-          this.character.id,
-          "notes",
-          operation,
-          {
-            body: this.noteBody.trim(),
-          },
-          this.editingNoteId,
-        );
-        this.noteEditorOpen = false;
-        this.editingNoteId = undefined;
-        this.noteBody = "";
-        this.showSuccess(operation === "create" ? "Note added." : "Note updated.");
-        await this.load();
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to save note.";
-      } finally {
-        this.noteBusy = false;
-      }
-    },
-    askToRemoveNote(note: CharacterNote): void {
-      this.noteToRemove = note;
-      this.noteRemoveOpen = true;
-    },
-    closeNoteRemoval(): void {
-      if (this.noteBusy) {
-        return;
-      }
-
-      this.noteRemoveOpen = false;
-      this.noteToRemove = undefined;
-    },
-    closeNoteRemovalWhenClosed(open: boolean): void {
-      if (!open) {
-        this.closeNoteRemoval();
-      }
-    },
-    async removeNote(): Promise<void> {
-      if (!this.character || !this.noteToRemove || this.noteBusy) {
-        return;
-      }
-
-      this.noteBusy = true;
-
-      try {
-        await changeCharacterSheetRecord(
-          this.campaignId,
-          this.character.id,
-          "notes",
-          "delete",
-          {},
-          this.noteToRemove.id,
-        );
-        this.noteRemoveOpen = false;
-        this.noteToRemove = undefined;
-        this.showSuccess("Note removed.");
-        await this.load();
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to remove note.";
-      } finally {
-        this.noteBusy = false;
-      }
-    },
-    async load(): Promise<void> {
-      try {
-        const [nextCampaign, nextItems, recent] = await Promise.all([
-          getCampaign(this.campaignId),
-          getItems(this.campaignId),
-          getTransactions(this.campaignId, "all", 1, this.characterId),
-        ]);
-
-        this.campaign = nextCampaign;
-        this.characters = nextCampaign.characters;
-        this.character = nextCampaign.characters.find(
-          (candidate) => candidate.id === this.characterId,
-        );
-        this.ownCharacter = this.character?.context_id === this.campaignId;
-
-        if (this.ownCharacter && this.character && !this.character.is_build_complete) {
-          await this.$router.replace(
-            `/c/${this.campaignId}/characters/${this.characterId}/build`,
-          );
-          return;
-        }
-
-        this.items = nextItems;
-        this.activity = recent.results.slice(0, 5);
-
-        if (!this.character) {
-          await this.$router.replace(`/c/${this.campaignId}/characters`);
-        }
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to load character profile.";
-      }
-    },
-    async toggleInspiration(): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      const inspirationWasAvailable = this.character.has_inspiration;
-
-      try {
-        this.character = await setCharacterInspiration(
-          this.campaignId,
-          this.character.id,
-          !this.character.has_inspiration,
-        );
-        this.showSuccess(
-          inspirationWasAvailable ? "Inspiration used." : "Inspiration awarded.",
-        );
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to update inspiration.";
-      }
-    },
-    openConditionManager(): void {
-      const conditionManager = this.$refs.conditionManager as
-        { openNewCondition: () => void } | undefined;
-
-      conditionManager?.openNewCondition();
-    },
-    async equipItem(entry: { item_id: number; name: string }): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        await changeCharacterSheetRecord(
-          this.campaignId,
-          this.character.id,
-          "loadout",
-          "create",
-          {
-            item_id: entry.item_id,
-            equipped: true,
-          },
-        );
-        this.showSuccess(`${entry.name} equipped.`);
-        await this.load();
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to equip item.";
-      }
-    },
-    async grantItem(): Promise<void> {
-      if (!this.character || !this.grantItemId) {
-        return;
-      }
-
-      try {
-        await createInventoryTransaction(this.campaignId, {
-          from_character_id: null,
-          to_character_id: this.character.id,
-          item_id: this.grantItemId,
-          quantity: this.grantQuantity,
-          description: "Self-granted item",
-        });
-
-        this.showSuccess("Saved to the ledger.");
-        this.closeAddItemDialog();
-        await this.load();
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to complete this action.";
-      }
-    },
-    closeAddItemDialog(): void {
-      this.addItemOpen = false;
-      this.grantItemId = undefined;
-      this.grantQuantity = 1;
-    },
-    closeAddItemDialogWhenClosed(open: boolean): void {
-      if (open) {
-        return;
-      }
-
-      this.closeAddItemDialog();
-    },
-    openItemAction(
-      action: "use" | "destroy" | "transfer",
-      entry: { item_id: number; name: string; quantity: number },
-    ): void {
-      this.itemAction = action;
-      this.selectedInventoryItem = entry;
-      this.itemActionQuantity = 1;
-      this.itemActionDestination = undefined;
-      this.itemActionDescription = "";
-    },
-    inventoryActionItems(entry: InventoryRow): MenuItem[] {
-      const items: MenuItem[] = [];
-      const category = entry.item?.equipment.category;
-
-      if (category === "weapon" || category === "armor") {
-        items.push({
-          label: "Equip",
-          icon: "mdi mdi-shield-sword-outline",
-          command: () => void this.equipItem(entry),
-        });
-      }
-
-      items.push(
-        {
-          label: "Use",
-          icon: "mdi mdi-play-outline",
-          command: () => this.openItemAction("use", entry),
-        },
-        {
-          label: "Transfer",
-          icon: "mdi mdi-swap-horizontal",
-          command: () => this.openItemAction("transfer", entry),
-        },
-        { separator: true },
-        {
-          label: "Destroy",
-          icon: "mdi mdi-delete-outline",
-          class: "text-danger",
-          command: () => this.openItemAction("destroy", entry),
-        },
-      );
-
-      return items;
-    },
-    closeItemAction(): void {
-      this.itemAction = undefined;
-      this.selectedInventoryItem = undefined;
-      this.itemActionQuantity = 1;
-      this.itemActionDestination = undefined;
-      this.itemActionDescription = "";
-    },
-    closeItemActionWhenClosed(open: boolean): void {
-      if (!open) {
-        this.closeItemAction();
-      }
-    },
-    async submitItemAction(): Promise<void> {
-      if (!this.character || !this.selectedInventoryItem || !this.itemAction) {
-        return;
-      }
-
-      if (this.itemActionInvalid) {
-        return;
-      }
-
-      try {
-        await createInventoryTransaction(this.campaignId, {
-          from_character_id: this.character.id,
-          to_character_id:
-            this.itemAction === "transfer" ? this.itemActionDestination! : null,
-          item_id: this.selectedInventoryItem.item_id,
-          quantity: this.itemActionQuantity,
-          description:
-            this.itemActionDescription ||
-            `${this.itemAction === "use" ? "Used" : this.itemAction === "destroy" ? "Destroyed" : "Transferred"} ${this.selectedInventoryItem.name}`,
-        });
-
-        this.showSuccess("Saved to the ledger.");
-        this.closeItemAction();
-        await this.load();
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to update inventory.";
-      }
+    toggleMoneyCard(): void {
+      this.moneyValueVisible = !this.moneyValueVisible;
+      storeCoinDisplayMode(this.moneyValueVisible ? "value" : "pouch");
     },
     closeMoneyDialog(): void {
       this.moneyDialog = false;
@@ -3031,6 +1273,8 @@ export default defineComponent({
       if (!this.character) {
         return;
       }
+
+      this.moneyBusy = true;
 
       try {
         if (this.moneyAction === "exchange") {
@@ -3058,243 +1302,180 @@ export default defineComponent({
           });
         }
 
-        this.showSuccess("Saved to the ledger.");
+        this.$toast.add({
+          severity: "success",
+          summary: "Saved to the ledger.",
+          life: 4_000,
+        });
         this.closeMoneyDialog();
         await this.load();
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to update money.";
+      } finally {
+        this.moneyBusy = false;
       }
     },
-    openHealth(): void {
-      if (!this.character) {
-        return;
-      }
-
-      this.healthCurrent = this.character.sheet.current_hp;
-      this.healthTemporary = this.character.sheet.temporary_hp;
-      this.healthAmount = 1;
-      this.healthDescription = "";
-      this.healthOpen = true;
-    },
-    openHealthFor(reason: "damage" | "healing" | "temporary" | "correction"): void {
-      this.healthReason = reason;
-      this.openHealth();
-    },
-    openHpAdjustment(): void {
-      this.healthAmount = 1;
-      this.hpAdjustmentOpen = true;
-    },
-    openSpeedEditor(): void {
-      const distance = this.character?.sheet.speed.match(/\d+/)?.[0];
-
-      this.speedFeet = distance ? Number(distance) : null;
-      this.speedOpen = true;
-    },
-    async saveSpeed(): Promise<void> {
-      if (!this.character || this.speedInvalid) {
-        return;
-      }
-
-      const speed = String(this.speedFeet as number);
-
+    async load(): Promise<void> {
       try {
-        await updateCharacter(this.campaignId, this.character.id, { speed });
-        this.character = {
-          ...this.character,
-          sheet: { ...this.character.sheet, speed },
-        };
-        this.speedOpen = false;
-        this.showSuccess("Movement speed updated.");
+        const [campaign, recentActivity] = await Promise.all([
+          getCampaign(this.campaignId),
+          getTransactions(this.campaignId, "all", 1, this.characterId),
+        ]);
+        const character = campaign.characters.find(
+          (candidate) => candidate.id === this.characterId,
+        );
+
+        if (!character) {
+          this.error = "Character not found.";
+          return;
+        }
+
+        this.campaign = campaign;
+        this.character = character;
+        this.activity = recentActivity.results.slice(0, 5);
+
+        if (this.profileSetupRequired && !this.setupPrompted) {
+          this.setupPrompted = true;
+          this.openEditor();
+        }
       } catch (exception) {
         this.error =
           exception instanceof Error
             ? exception.message
-            : "Unable to update movement speed.";
+            : "Unable to load the character profile.";
       }
     },
-    async submitHpAdjustment(reason: "damage" | "healing"): Promise<void> {
+    openEditor(): void {
       if (!this.character) {
         return;
       }
 
+      this.draft = {
+        name: this.character.name,
+        race: this.character.race,
+        characterClass: this.character.class,
+      };
+      this.editorOpen = true;
+    },
+    async saveProfile(): Promise<void> {
+      if (!this.character || !this.draft.name.trim()) {
+        return;
+      }
+
+      this.busy = true;
+
       try {
-        await postHealth(this.campaignId, {
-          character_id: this.character.id,
-          reason,
-          current_hp_delta:
-            reason === "damage" ? -Math.abs(this.healthAmount) : this.healthAmount,
+        await updateCharacter(this.campaignId, this.character.id, {
+          name: this.draft.name.trim(),
+          race: this.draft.race.trim(),
+          class: this.draft.characterClass.trim(),
         });
-        this.hpAdjustmentOpen = false;
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to update HP.";
-      }
-    },
-    async saveHealth(): Promise<void> {
-      if (!this.character) {
-        return;
-      }
-
-      try {
-        await postHealth(this.campaignId, {
-          character_id: this.character.id,
-          reason: this.healthReason,
-          ...(this.healthReason === "damage"
-            ? { current_hp_delta: -Math.abs(this.healthAmount) }
-            : {}),
-          ...(this.healthReason === "healing"
-            ? { current_hp_delta: Math.abs(this.healthAmount) }
-            : {}),
-          ...(this.healthReason === "temporary"
-            ? { temporary_hp_delta: this.healthAmount }
-            : {}),
-          ...(this.healthReason === "correction"
-            ? {
-                current_hp: this.healthCurrent,
-                temporary_hp: this.healthTemporary,
-              }
-            : {}),
-          description: this.healthDescription,
+        this.editorOpen = false;
+        this.$toast.add({
+          severity: "success",
+          summary: "Character profile updated.",
+          life: 4_000,
         });
-        this.healthOpen = false;
-        this.healthDescription = "";
+        await this.load();
       } catch (exception) {
         this.error =
-          exception instanceof Error ? exception.message : "Unable to update HP.";
+          exception instanceof Error ? exception.message : "Unable to update profile.";
+      } finally {
+        this.busy = false;
       }
     },
-    openEffect(): void {
-      this.effectName = "";
-      this.effectSource = "";
-      this.effectDuration = "";
-      this.effectReminder = "";
-      this.effectTarget = "ac";
-      this.effectValue = 0;
-      this.effectOpen = true;
+    choosePortrait(): void {
+      const input = this.$refs.portraitInput as HTMLInputElement | undefined;
+      input?.click();
     },
-    async toggleEffect(effect: Character["effects"][number]): Promise<void> {
+    async archive(): Promise<void> {
       if (!this.character) {
         return;
       }
 
       try {
-        await changeCharacterSheetRecord(
-          this.campaignId,
-          this.character.id,
-          "effects",
-          "update",
-          { enabled: !effect.enabled },
-          effect.id,
-        );
-        await this.load();
+        await archiveCharacter(this.campaignId, this.character.id);
+        await this.$router.replace(`/c/${this.campaignId}/characters`);
       } catch (exception) {
         this.error =
-          exception instanceof Error ? exception.message : "Unable to update effect.";
+          exception instanceof Error
+            ? exception.message
+            : "Unable to archive character.";
       }
     },
-    async saveEffect(): Promise<void> {
-      if (!this.character || !this.effectName.trim()) {
+    async uploadPortrait(event: Event): Promise<void> {
+      const input = event.target as HTMLInputElement;
+      const file = input.files?.[0];
+
+      if (!file || !this.character) {
         return;
       }
 
       try {
-        await changeCharacterSheetRecord(
-          this.campaignId,
-          this.character.id,
-          "effects",
-          "create",
-          {
-            name: this.effectName,
-            source: this.effectSource,
-            duration: this.effectDuration,
-            reminder: this.effectReminder,
-            modifiers: this.effectValue
-              ? [{ target: this.effectTarget, value: this.effectValue }]
-              : [],
-          },
-        );
-        this.effectOpen = false;
+        await uploadCharacterPortrait(this.campaignId, this.character.id, file);
+        this.$toast.add({
+          severity: "success",
+          summary: "Portrait updated.",
+          life: 4_000,
+        });
         await this.load();
       } catch (exception) {
         this.error =
-          exception instanceof Error ? exception.message : "Unable to add effect.";
+          exception instanceof Error ? exception.message : "Unable to upload portrait.";
+      } finally {
+        input.value = "";
       }
     },
-    async deleteEffect(effect: Character["effects"][number]): Promise<void> {
+    async removePortrait(): Promise<void> {
       if (!this.character) {
         return;
       }
 
       try {
-        await changeCharacterSheetRecord(
-          this.campaignId,
-          this.character.id,
-          "effects",
-          "delete",
-          {},
-          effect.id,
-        );
+        await removeCharacterPortrait(this.campaignId, this.character.id);
+        this.$toast.add({
+          severity: "success",
+          summary: "Portrait removed.",
+          life: 4_000,
+        });
         await this.load();
       } catch (exception) {
         this.error =
-          exception instanceof Error ? exception.message : "Unable to remove effect.";
+          exception instanceof Error ? exception.message : "Unable to remove portrait.";
       }
     },
-  },
-  mounted() {
-    void this.load();
   },
 });
 </script>
 
 <style scoped>
-.level-up-near {
-  font-weight: var(--bs-body-font-weight);
-}
-
-.skill-proficiency-icon {
-  color: var(--hoard-gold);
-}
-
 .skill-name {
   min-width: 0;
 }
 
-.sheet-copy {
-  overflow-wrap: anywhere;
-  white-space: pre-line;
-}
-
-.ability-card-flip-enter-active,
-.ability-card-flip-leave-active {
+.money-card-flip-enter-active,
+.money-card-flip-leave-active {
   transition:
     transform 140ms ease,
     opacity 140ms ease;
   transform-origin: center;
 }
 
-.ability-card-flip-enter-from {
+.money-card-flip-enter-from {
   opacity: 0;
   transform: rotateY(90deg);
 }
 
-.ability-card-flip-leave-to {
+.money-card-flip-leave-to {
   opacity: 0;
   transform: rotateY(-90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ability-card-flip-enter-active,
-  .ability-card-flip-leave-active {
+  .money-card-flip-enter-active,
+  .money-card-flip-leave-active {
     transition: none;
-  }
-}
-
-@media (min-width: 576px) {
-  .coin-value-column {
-    border-top: 0 !important;
-    border-left: var(--bs-border-width) var(--bs-border-style) var(--bs-border-color) !important;
   }
 }
 </style>

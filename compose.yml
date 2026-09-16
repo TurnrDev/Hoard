@@ -1,0 +1,114 @@
+networks:
+  web:
+    external: true
+  hoard:
+    driver: bridge
+    name: hoard
+
+services:
+  app:
+    build: .
+    command: app
+    container_name: hoard_app
+    environment: &app-environment
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: dnd.turnr.net
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://dnd.turnr.net
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-hoard}
+      POSTGRES_USER: ${POSTGRES_USER:-hoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/2
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    labels:
+      homepage.description: D&D campaign companion
+      homepage.group: D&D
+      homepage.href: https://dnd.turnr.net
+      homepage.name: Hoard
+      homepage.showStats: true
+      homepage.siteMonitor: http://hoard_app:8000
+      traefik.enable: true
+      traefik.docker.network: web
+      traefik.http.routers.hoard.entrypoints: public
+      traefik.http.routers.hoard.rule: Host(`dnd.turnr.net`)
+      traefik.http.routers.hoard.tls: true
+      traefik.http.routers.hoard.tls.certresolver: cloudflare
+      traefik.http.services.hoard.loadbalancer.server.port: 8000
+    networks:
+      - web
+      - hoard
+    volumes:
+      - /data/appdata/hoard/media:/app/media
+      - /data/appdata/hoard/static:/app/staticfiles
+
+  worker:
+    build: .
+    command: worker
+    container_name: hoard_worker
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - hoard
+    volumes:
+      - /data/appdata/hoard/media:/app/media
+
+  db:
+    image: postgres:18-alpine
+    container_name: hoard_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hoard}
+      POSTGRES_USER: ${POSTGRES_USER:-hoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - /data/appdata/hoard/db-data:/var/lib/postgresql
+    networks:
+      - hoard
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-hoard} -d ${POSTGRES_DB:-hoard}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    container_name: hoard_redis
+    volumes:
+      - /data/appdata/hoard/redis-data:/data
+    networks:
+      - hoard
+
+  nginx:
+    image: nginx:1.29-alpine
+    container_name: hoard_nginx
+    depends_on:
+      - app
+    labels:
+      traefik.enable: true
+      traefik.docker.network: web
+      traefik.http.routers.hoard-assets.entrypoints: public
+      traefik.http.routers.hoard-assets.rule: Host(`dnd.turnr.net`) && (PathPrefix(`/static/`) || PathPrefix(`/media/`))
+      traefik.http.routers.hoard-assets.tls: true
+      traefik.http.routers.hoard-assets.tls.certresolver: cloudflare
+      traefik.http.services.hoard-assets.loadbalancer.server.port: 80
+    networks:
+      - web
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /data/appdata/hoard/media:/srv/media:ro
+      - /data/appdata/hoard/static:/srv/static:ro

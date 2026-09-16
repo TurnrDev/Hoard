@@ -35,6 +35,7 @@ import {
   connectCampaignRealtime,
   disconnectCampaignRealtime,
   pendingCommandCount,
+  subscribeCampaignCalendar,
   subscribeDomainEvents,
 } from "./realtime";
 
@@ -62,7 +63,9 @@ describe("campaign realtime transport", () => {
     });
     vi.stubGlobal("WebSocket", { OPEN: 1, CLOSED: 3 });
     const listener = vi.fn();
+    const calendarListener = vi.fn();
     const unsubscribe = subscribeDomainEvents(listener);
+    const unsubscribeCalendar = subscribeCampaignCalendar(calendarListener);
     connectCampaignRealtime(7);
     const socket = activeSocket();
 
@@ -76,14 +79,26 @@ describe("campaign realtime transport", () => {
     });
     socket.deliver({
       type: "campaign.calendar_changed",
-      calendar: { year: 82 },
+      calendar: {
+        era_abbreviation: "PD",
+        era_name: "Powder Dynasty",
+        year: 82,
+        day: 1,
+      },
     });
 
     await expect(result).resolves.toEqual({ year: 82 });
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ type: "campaign.calendar_changed" }),
     );
+    expect(calendarListener).toHaveBeenCalledWith({
+      era_abbreviation: "PD",
+      era_name: "Powder Dynasty",
+      year: 82,
+      day: 1,
+    });
     unsubscribe();
+    unsubscribeCalendar();
   });
 
   it("tracks a pending command until its acknowledgement arrives", async () => {
@@ -103,5 +118,28 @@ describe("campaign realtime transport", () => {
 
     await expect(result).resolves.toBeUndefined();
     expect(pendingCommandCount.value).toBe(0);
+  });
+
+  it("renders structured request errors as readable messages", async () => {
+    vi.stubGlobal("window", {
+      location: { protocol: "http:", host: "example.test" },
+      setTimeout,
+    });
+    vi.stubGlobal("WebSocket", { OPEN: 1, CLOSED: 3 });
+    connectCampaignRealtime(7);
+    const socket = activeSocket();
+
+    const result = campaignRequest<void>("campaign.calendar.get");
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    const sent = JSON.parse(socket.send.mock.calls[0][0]) as Record<string, unknown>;
+    socket.deliver({
+      type: "query.error",
+      request_id: sent.request_id,
+      detail: ["You already have a player context in this campaign."],
+    });
+
+    await expect(result).rejects.toThrow(
+      "You already have a player context in this campaign.",
+    );
   });
 });

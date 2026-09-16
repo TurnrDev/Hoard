@@ -102,22 +102,9 @@ QUERY_OPERATIONS = frozenset(
         "campaign.calendar.get",
         "campaign.members.list",
         "campaign.invites.list",
-        "campaign.level.status",
         "characters.list",
         "characters.get",
-        "characters.builder.definition",
-        "characters.builder.entry.get",
-        "characters.builder.get",
-        "characters.level_up.definition",
-        "characters.level_up.class.get",
-        "characters.level_up.preview",
-        "characters.level_up.feats",
-        "characters.imports.cah.preview",
         "transactions.list",
-        "compendium.items.list",
-        "compendium.search",
-        "compendium.sources.list",
-        "compendium.repositories.list",
         "user.contexts.list",
         "invite.inspect",
     }
@@ -130,66 +117,15 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.invites.create",
         "campaign.invites.resend",
         "campaign.invites.revoke",
-        "campaign.level.approve",
         "campaign.presence.heartbeat",
-        "campaign.encounter.start",
-        "campaign.encounter.end",
-        "campaign.encounter.combatants.add_character",
-        "campaign.encounter.combatants.add",
-        "campaign.encounter.combatants.reorder",
-        "campaign.encounter.combatants.update",
-        "campaign.encounter.combatants.remove",
-        "campaign.encounter.current.set",
-        "campaign.encounter.initiative.roll",
-        "campaign.encounter.initiative.tie.choose",
-        "campaign.encounter.turn.end",
-        "campaign.encounter.conditions.set",
-        "campaign.encounter.conditions.remove",
-        "characters.conditions.set",
-        "characters.conditions.remove",
         "characters.create",
         "characters.update",
         "characters.portrait.remove",
         "characters.archive",
-        "characters.builder.save",
-        "characters.builder.complete",
-        "characters.level_up.complete",
-        "characters.health.post",
-        "characters.notes.create",
-        "characters.notes.update",
-        "characters.notes.delete",
-        "characters.features.create",
-        "characters.features.update",
-        "characters.features.delete",
-        "characters.spells.create",
-        "characters.spells.update",
-        "characters.spells.delete",
-        "characters.loadout.create",
-        "characters.loadout.update",
-        "characters.loadout.delete",
-        "characters.effects.create",
-        "characters.effects.update",
-        "characters.effects.delete",
-        "characters.spells.cast",
-        "characters.rest",
-        "characters.inspiration.set",
-        "characters.companions.create",
-        "characters.companions.update",
-        "characters.companions.delete",
-        "characters.imports.cah.begin",
-        "characters.imports.cah.commit",
-        "characters.imports.cah.cancel",
-        "inventory.transactions.create",
         "money.transfers.create",
         "money.exchanges.create",
         "experience.shared_awards.create",
         "transactions.reverse",
-        "compendium.items.create",
-        "compendium.items.update",
-        "compendium.items.delete",
-        "compendium.sources.enable",
-        "compendium.sources.disable",
-        "compendium.repositories.import",
         "invite.accept",
         "invite.register_and_accept",
     }
@@ -201,25 +137,12 @@ def operation_definitions() -> dict[str, OperationDefinition]:
     from .payloads import (
         CalendarAdjustmentCommand,
         CampaignCalendarData,
-        CharacterConditionCommand,
-        CharacterConditionIdentifierCommand,
         CharacterCreateCommand,
-        CharacterHealthCommand,
         CharacterIdentifierCommand,
         CharacterUpdateCommand,
-        CombatantConditionCommand,
-        CombatantConditionIdentifierCommand,
-        EncounterCharacterAddCommand,
-        EncounterCombatantAddCommand,
-        EncounterCombatantIdentifierCommand,
-        EncounterCombatantReorderCommand,
-        EncounterCombatantUpdateCommand,
-        EncounterCurrentCombatantCommand,
-        InitiativeTieChoiceCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
         MemberDeactivationCommand,
-        PlayerInitiativeRollCommand,
     )
 
     definitions = {
@@ -244,86 +167,10 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         payload_model=CalendarAdjustmentCommand,
         result_model=CampaignCalendarData,
     )
-    for name in ("campaign.encounter.start", "campaign.encounter.end"):
-        definitions[name] = OperationDefinition(
-            name=name,
-            kind=OperationKind.COMMAND,
-            payload_model=EmptyPayload,
-        )
-    definitions["campaign.encounter.combatants.add_character"] = OperationDefinition(
-        name="campaign.encounter.combatants.add_character",
-        kind=OperationKind.COMMAND,
-        payload_model=EncounterCharacterAddCommand,
-    )
-    definitions["campaign.encounter.combatants.add"] = OperationDefinition(
-        name="campaign.encounter.combatants.add",
-        kind=OperationKind.COMMAND,
-        payload_model=EncounterCombatantAddCommand,
-    )
-    definitions["campaign.encounter.combatants.update"] = OperationDefinition(
-        name="campaign.encounter.combatants.update",
-        kind=OperationKind.COMMAND,
-        payload_model=EncounterCombatantUpdateCommand,
-    )
-    definitions["campaign.encounter.combatants.reorder"] = OperationDefinition(
-        name="campaign.encounter.combatants.reorder",
-        kind=OperationKind.COMMAND,
-        payload_model=EncounterCombatantReorderCommand,
-    )
-    definitions["campaign.encounter.combatants.remove"] = OperationDefinition(
-        name="campaign.encounter.combatants.remove",
-        kind=OperationKind.COMMAND,
-        payload_model=EncounterCombatantIdentifierCommand,
-    )
-    definitions["campaign.encounter.current.set"] = OperationDefinition(
-        name="campaign.encounter.current.set",
-        kind=OperationKind.COMMAND,
-        payload_model=EncounterCurrentCombatantCommand,
-    )
-    definitions["campaign.encounter.initiative.roll"] = OperationDefinition(
-        name="campaign.encounter.initiative.roll",
-        kind=OperationKind.COMMAND,
-        payload_model=PlayerInitiativeRollCommand,
-    )
-    definitions["campaign.encounter.initiative.tie.choose"] = OperationDefinition(
-        name="campaign.encounter.initiative.tie.choose",
-        kind=OperationKind.COMMAND,
-        payload_model=InitiativeTieChoiceCommand,
-    )
-    definitions["campaign.encounter.turn.end"] = OperationDefinition(
-        name="campaign.encounter.turn.end",
-        kind=OperationKind.COMMAND,
-        payload_model=EmptyPayload,
-    )
-    definitions["campaign.encounter.conditions.set"] = OperationDefinition(
-        name="campaign.encounter.conditions.set",
-        kind=OperationKind.COMMAND,
-        payload_model=CombatantConditionCommand,
-    )
-    definitions["campaign.encounter.conditions.remove"] = OperationDefinition(
-        name="campaign.encounter.conditions.remove",
-        kind=OperationKind.COMMAND,
-        payload_model=CombatantConditionIdentifierCommand,
-    )
-    definitions["characters.conditions.set"] = OperationDefinition(
-        name="characters.conditions.set",
-        kind=OperationKind.COMMAND,
-        payload_model=CharacterConditionCommand,
-    )
-    definitions["characters.conditions.remove"] = OperationDefinition(
-        name="characters.conditions.remove",
-        kind=OperationKind.COMMAND,
-        payload_model=CharacterConditionIdentifierCommand,
-    )
     definitions["campaign.members.deactivate"] = OperationDefinition(
         name="campaign.members.deactivate",
         kind=OperationKind.COMMAND,
         payload_model=MemberDeactivationCommand,
-    )
-    definitions["characters.health.post"] = OperationDefinition(
-        name="characters.health.post",
-        kind=OperationKind.COMMAND,
-        payload_model=CharacterHealthCommand,
     )
     definitions["characters.create"] = OperationDefinition(
         name="characters.create",

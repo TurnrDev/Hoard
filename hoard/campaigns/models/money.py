@@ -1,7 +1,7 @@
 from django.db import models
 from django.db.models import Q
 
-from .ledger import ImmutableLedgerEntry, LedgerTransaction
+from .audit import ImmutableLedgerEntry, LedgerTransaction
 
 
 class MoneyAccount(models.Model):

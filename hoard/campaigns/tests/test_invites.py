@@ -5,8 +5,13 @@ from django.core.exceptions import ValidationError
 from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
 
-from hoard.campaigns.models import Campaign, CampaignContext
+from hoard.campaigns.models import (
+    Campaign,
+    CampaignContext,
+    InvitationEvent,
+)
 from hoard.campaigns.services import accept_invitation, create_invitation
+from hoard.campaigns.services.characters import CharacterLifecycleService
 
 
 class InvitationTests(TestCase):
@@ -19,7 +24,7 @@ class InvitationTests(TestCase):
             kind=CampaignContext.Kind.GM,
         )
 
-    def test_accepting_invite_creates_inactive_draft_and_is_single_use(self) -> None:
+    def test_accepting_invite_creates_an_inactive_pc_and_is_single_use(self) -> None:
         invitation, token = create_invitation(self.gm, "delivery@example.com")
         player = get_user_model().objects.create_user(username="invited")
 
@@ -27,14 +32,43 @@ class InvitationTests(TestCase):
 
         character = context.character
         self.assertFalse(character.is_active)
-        self.assertFalse(character.is_build_complete)
-        self.assertTrue(character.health_history.filter(reason="baseline").exists())
+        self.assertEqual(character.name, "invited")
+        self.assertEqual(character.race, "")
+        self.assertEqual(character.character_class, "")
         invitation.refresh_from_db()
         self.assertEqual(invitation.accepted_by, player)
+        self.assertEqual(
+            list(
+                invitation.events.order_by("occurred_at", "pk").values_list(
+                    "reason", flat=True
+                )
+            ),
+            [InvitationEvent.Reason.CREATED, InvitationEvent.Reason.ACCEPTED],
+        )
+        self.assertEqual(invitation.events.first().created_by, self.gm)
+        self.assertEqual(invitation.events.last().created_by, context)
         with self.assertRaises(ValidationError):
             accept_invitation(
                 token, get_user_model().objects.create_user(username="late")
             )
+
+    def test_completing_an_invited_profile_activates_the_character(self) -> None:
+        _, token = create_invitation(self.gm)
+        player = get_user_model().objects.create_user(username="invited")
+        context = accept_invitation(token, player)
+
+        character = CharacterLifecycleService().update(
+            context,
+            context.character,
+            {
+                "name": "Ama",
+                "race": "Nakudama",
+                "character_class": "Hunter Ranger",
+            },
+        )
+
+        self.assertTrue(character.is_active)
+        self.assertEqual(character.name, "Ama")
 
 
 class ConcurrentInvitationTests(TransactionTestCase):

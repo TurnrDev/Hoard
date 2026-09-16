@@ -1,97 +1,136 @@
 # Hoard
 
-A D&D 5e tool for our campaign with specific tools for our homebrew rules. You won't be interested.
+Hoard is a small campaign companion for shared XP, coin ledgers, calendar tracking,
+character profiles, invitations, and campaign administration.
 
-<img width="1280" height="800" alt="Screen Shot 2026-09-14 at 21 17 05" src="https://github.com/user-attachments/assets/fd6112ef-b983-4d25-9174-629addde703c" />
-<img width="1081" height="2401" alt="Screen Shot 2026-09-14 at 21 16 53" src="https://github.com/user-attachments/assets/8266b014-71ba-40bf-811a-1a47442467f0" />
+## Screenshots
 
+### Desktop
 
-## Project layout
+![Hoard game-master dashboard on desktop](docs/images/hoard-desktop.png)
 
-- `hoard/` contains the Django project configuration and application packages.
-- `hoard/campaigns/` contains the campaign application, imported as `hoard.campaigns`.
-- `hoard/` also contains the Vue/Vite SPA, with client files organised alongside
-  the Django application that owns them. Django serves its production build.
+### Mobile
 
-Run Django management commands from the repository root:
+<p align="center">
+  <img
+    src="docs/images/hoard-mobile.png"
+    alt="Hoard character profile on mobile"
+    width="420"
+  >
+</p>
 
-```sh
-docker compose up -d db redis
-uv run python manage.py migrate
-uv run python manage.py runserver --noreload
-```
+## Current release
 
-In a second backend terminal, start the Celery worker. It handles Compendium
-repository imports without blocking Django or the WebSocket server:
+Hoard `0.1.0` focuses on the shared campaign tools that are ready for regular use:
 
-```sh
-uv run celery -A hoard worker --loglevel=INFO
-```
+- shared XP for active player characters, including level progress and immutable
+  ledger history;
+- personal and campaign coin accounts with grants, spending, transfers, exact-value
+  exchanges, and reversals;
+- a campaign calendar whose date is recorded against ledger and audit events;
+- player-character and NPC profiles with portraits, free-text race and class, and
+  profile editing;
+- campaign membership, shareable invitations, roster management, and GM controls;
+- a responsive campaign shell with live WebSocket updates and desktop/mobile party
+  navigation.
 
-In a third terminal, run the client development server from the repository root:
+Character profiles retain the full sheet layout as a preview of planned features.
+Unavailable statistics, abilities, skills, inventory, equipment, and character-detail
+sections are clearly marked **Coming soon** and use skeleton values rather than
+placeholder character data. The Compendium is likewise visible in navigation but is
+not part of this release.
 
-```sh
-npm install
-npm run dev
-```
+## Development
 
-Open the application at `http://localhost:8000`: `django-vite` renders the SPA
-HTML, while Vite supplies development modules and hot reload from port 5173. For a
-production build, run `npm run build`, then `uv run python manage.py
-collectstatic --noinput`. Run Django with `DJANGO_DEBUG=false` to make django-vite
-load the compiled manifest rather than the development server.
-
-## Live updates and WebSockets
-
-Hoard uses Redis for campaign update broadcasts. Start it with the database before
-running the app:
-
-```sh
-docker compose up -d db redis
-uv run python manage.py runserver --noreload
-uv run celery -A hoard worker --loglevel=INFO
-```
-
-The installed Daphne integration makes the normal Django `runserver` command serve
-both HTTP and authenticated WebSocket connections at `ws://localhost:8000`. The
-Vite development server proxies both `/api` and `/ws` to that server, so opening
-either `http://localhost:8000` or `http://localhost:5173` works; the frontend
-automatically connects to the matching `/ws/contexts/<context_id>/` endpoint.
-Use `--noreload` in development: Django's autoreloader restarts the ASGI process
-while browsers are reconnecting WebSockets, and also retains a supervisor process.
-Restart Django manually after changing Python code.
-
-For a production ASGI process, point `REDIS_URL` at the shared Redis instance and
-run the ASGI server and a separate worker:
+Docker Compose is the supported full-stack development workflow. It starts Daphne,
+Vite with live reload, PostgreSQL, and Redis with persistent local volumes:
 
 ```sh
-uv run daphne --websocket-max-message-size 16777216 --websocket-max-frame-size 16777216 hoard.asgi:application
-uv run celery -A hoard worker --loglevel=INFO
+docker compose -f compose.dev.yml up --build
 ```
 
-If the tools are not installed locally, enter the repository's declarative
-development environment once with `nix-shell`. It provides Python, `uv`, Node,
-npm, Git, and Docker Compose; the commands above remain the normal workflow.
+Open `http://localhost:5173`. Vite proxies HTTP uploads, media, the release manifest,
+and WebSockets to Daphne. Django is also available directly at
+`http://localhost:8000`.
 
-The Compose database is available at `localhost:5432` with the development
-database name, user, and password all set to `hoard`. Override the
-`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, and
-`POSTGRES_PORT` environment variables as needed.
-
-## Campaign API and Compendium
-
-Campaign-domain commands use authenticated WebSockets; HTTP is retained only for
-Django session/CSRF operations and raw `.cah` upload bytes. See [the API
-guide](docs/api.md) and the [Compendium guide](docs/compendium.md). Synchronise the community repository
-directory and install its `default` repository with:
+The application container applies migrations when it starts. To run checks in a
+second terminal:
 
 ```sh
-uv run python manage.py update_compendium_registries
+docker compose -f compose.dev.yml exec app uv run pytest --reuse-db
+docker compose -f compose.dev.yml exec app uv run ruff check hoard
+docker compose -f compose.dev.yml exec frontend npm test
+docker compose -f compose.dev.yml exec frontend npm run build
 ```
 
-The frontend login and sockets share the same Django session. Role-scoped commands
-and immutable history are documented in [the API guide](docs/api.md).
+Stop the stack without deleting its database or uploaded portraits:
 
-## AI Policy
+```sh
+docker compose -f compose.dev.yml down
+```
 
-Listen here, I'm a software dev, have been making Django apps since before you were even a stain on your parents bedsheets. I'm taking assistance to speed things up, and I don't care.
+Add `--volumes` only when intentionally recreating the unsupported pre-release
+database and all local uploads.
+
+## Production
+
+Production runs Daphne, Celery, PostgreSQL, Redis, and Nginx. Nginx serves static
+assets and uploaded media directly. Traefik routes application HTTP and WebSocket
+traffic straight to Daphne, while sending `/static/` and `/media/` requests to
+Nginx.
+
+Create the external network and local production environment file once:
+
+```sh
+docker network create web
+cp .env.example .env
+sudo install -d -o 1000 -g 1000 -m 0755 \
+  /data/appdata/hoard/media \
+  /data/appdata/hoard/static
+```
+
+Set a long random `DJANGO_SECRET_KEY` and a strong `POSTGRES_PASSWORD` in `.env`,
+then build and start the deployment for `https://dnd.turnr.net`:
+
+```sh
+docker compose up -d --build
+```
+
+Compose loads `.env` automatically. Database names and users can be changed with
+`POSTGRES_DB` and `POSTGRES_USER`. Persistent production data is stored below
+`/data/appdata/hoard`. The application image runs as UID/GID `1000`, so its media
+and static directories must be writable by that account before the first start.
+
+To inspect status and logs:
+
+```sh
+docker compose ps
+docker compose logs -f app worker nginx
+```
+
+## Architecture
+
+- Django owns authentication, campaign data, portrait uploads, and the initial SPA
+  response. Nginx serves uploaded media directly in production.
+- Application queries and commands use authenticated WebSockets. HTTP is limited to
+  session/CSRF operations, portrait uploads, static/media delivery, and the release
+  manifest.
+- Redis carries campaign broadcasts, cache data, and Celery messages.
+- PostgreSQL stores the campaign, audit, money, and XP ledgers.
+- Vue and PrimeVue provide the browser application; Vite builds its production
+  assets into `hoard/dist`.
+
+See [the API guide](docs/api.md) and [the initial release brief](docs/initial-release.md)
+for the protocol and release scope.
+
+## Local tool shell
+
+Running `nix-shell` provides Python 3.14, uv, Node.js, npm, Git, and Docker Compose.
+Docker Compose remains the supported way to run the full stack; the shell is useful
+for repository checks and maintenance.
+
+## AI policy
+
+Listen here, I'm a software dev, have been making Django apps since before you were
+even a stain on your parents bedsheets. I'm taking assistance to speed things up,
+and I don't care.

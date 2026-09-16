@@ -112,9 +112,11 @@ import {
   registerAndAcceptInvite,
   type InviteDetails,
 } from "@/api";
+import { contexts, rememberContext } from "@/campaigns/context";
 
 export default defineComponent({
   components: { Button, InputText, Message, ProgressSpinner, RelativeTime },
+  emits: ["contexts-changed"],
   data() {
     return {
       details: undefined as InviteDetails | undefined,
@@ -143,9 +145,7 @@ export default defineComponent({
       this.busy = true;
       try {
         const result = await acceptInvite(this.token);
-        await this.$router.replace(
-          `/c/${result.context_id}/characters/${result.character_id}/build`,
-        );
+        await this.openCharacterProfile(result);
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to accept.";
@@ -163,15 +163,31 @@ export default defineComponent({
         });
         await initialiseCsrf();
         await login(this.username, this.password);
-        await this.$router.replace(
-          `/c/${result.context_id}/characters/${result.character_id}/build`,
-        );
+        await this.openCharacterProfile(result);
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to register.";
       } finally {
         this.busy = false;
       }
+    },
+    async openCharacterProfile(result: {
+      context_id: number;
+      character_id: number;
+    }): Promise<void> {
+      const availableContexts = await contexts();
+      const context = availableContexts.find(
+        (candidate) => candidate.id === result.context_id,
+      );
+
+      if (context) {
+        rememberContext(context);
+      }
+
+      this.$emit("contexts-changed");
+      await this.$router.replace(
+        `/c/${result.context_id}/characters/${result.character_id}`,
+      );
     },
   },
 });

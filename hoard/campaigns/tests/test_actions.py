@@ -5,15 +5,7 @@ from hoard.campaigns.models import Campaign, MoneyEntry
 from hoard.campaigns.services import (
     exchange_coins,
     grant_coins,
-    grant_loot,
     spend_coins,
-    take_loot,
-    transfer_item,
-)
-from hoard.compendium.models import (
-    CompendiumEntry,
-    CompendiumRepository,
-    CompendiumSource,
 )
 
 from .helpers import make_character
@@ -23,34 +15,6 @@ class CampaignActionTests(TestCase):
     def setUp(self) -> None:
         self.campaign = Campaign.objects.create(name="Hoard")
         self.first = make_character(self.campaign, "First")
-        self.second = make_character(self.campaign, "Second")
-        repository = CompendiumRepository.objects.create(
-            identifier="test-actions", name="Tests"
-        )
-        source = CompendiumSource.objects.create(
-            repository=repository, identifier="5e", name="5e"
-        )
-        self.campaign.compendium_sources.add(source)
-        self.item = CompendiumEntry.objects.create(
-            source=source,
-            name="Torch",
-            source_identifier="torch",
-            kind="item",
-        )
-
-    def test_loot_and_item_transfer_require_available_inventory(self) -> None:
-        grant_loot(recipient=self.first, item=self.item, quantity=2)
-        transfer_item(
-            source=self.first, recipient=self.second, item=self.item, quantity=1
-        )
-        self.assertEqual(self.first.inventory[self.item], 1)
-        self.assertEqual(self.second.inventory[self.item], 1)
-        take_loot(source=self.second, item=self.item, quantity=1)
-        self.assertNotIn(self.item, self.second.inventory)
-        with self.assertRaises(ValidationError):
-            transfer_item(
-                source=self.first, recipient=self.second, item=self.item, quantity=2
-            )
 
     def test_grant_spend_and_exchange_coins(self) -> None:
         grant_coins(recipient=self.first, coins={"gp": 2})

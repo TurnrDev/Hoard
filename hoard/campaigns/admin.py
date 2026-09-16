@@ -11,9 +11,6 @@ from .models import (
     ExperienceAccount,
     ExperienceEntry,
     ExperienceTransaction,
-    InventoryAccount,
-    InventoryEntry,
-    InventoryTransaction,
     MoneyAccount,
     MoneyEntry,
     MoneyTransaction,
@@ -27,7 +24,6 @@ class CampaignAdmin(admin.ModelAdmin):
         "calendar_era_abbreviation",
         "calendar_year",
         "calendar_day",
-        "use_shared_exp",
         "shared_experience",
     )
     search_fields = ("name",)
@@ -52,7 +48,6 @@ class CharacterAdmin(admin.ModelAdmin):
     )
     list_filter = ("campaign", "is_active")
     search_fields = ("name", "context__user__username")
-    readonly_fields = ("current_hp", "temporary_hp")
 
     def save_model(
         self, request: HttpRequest, obj: Character, form: BaseModelForm, change: bool
@@ -119,12 +114,9 @@ class ReadOnlyEntryAdmin(admin.ModelAdmin):
         return False
 
 
-admin.site.register(InventoryAccount, ReadOnlyAccountAdmin)
 admin.site.register(MoneyAccount, ReadOnlyAccountAdmin)
 admin.site.register(ExperienceAccount, ReadOnlyAccountAdmin)
-admin.site.register(InventoryTransaction, ReadOnlyLedgerAdmin)
 admin.site.register(MoneyTransaction, ReadOnlyLedgerAdmin)
 admin.site.register(ExperienceTransaction, ReadOnlyLedgerAdmin)
-admin.site.register(InventoryEntry, ReadOnlyEntryAdmin)
 admin.site.register(MoneyEntry, ReadOnlyEntryAdmin)
 admin.site.register(ExperienceEntry, ReadOnlyEntryAdmin)

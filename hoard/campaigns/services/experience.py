@@ -11,12 +11,12 @@ from ..models import (
     ExperienceEntry,
     ExperienceTransaction,
 )
-from .ledger import _validate_campaign_scope
+from .ledger import validate_campaign_scope
 
 type ExperienceEntryInput = tuple[ExperienceAccount, int]
 
 
-def _post_experience_transaction(
+def post_experience_transaction(
     entries: list[ExperienceEntryInput],
     *,
     reason: ExperienceTransaction.Reason,
@@ -35,7 +35,7 @@ def _post_experience_transaction(
             "Experience transactions must contain non-zero entries that balance to zero."
         )
     campaign = entries[0][0].campaign
-    _validate_campaign_scope(campaign, *(account for account, _ in entries[1:]))
+    validate_campaign_scope(campaign, *(account for account, _ in entries[1:]))
     posted = ExperienceTransaction.objects.create(
         campaign=campaign,
         reason=reason,
@@ -68,11 +68,14 @@ def award_shared_experience(
 
     with transaction.atomic():
         campaign = Campaign.objects.select_for_update().get(pk=campaign.pk)
-        if not campaign.use_shared_exp:
-            raise ValidationError("Individual XP awards are not implemented.")
         recipients = list(
             Character.objects.select_for_update()
-            .filter(campaign=campaign, is_active=True, context__isnull=False)
+            .filter(
+                campaign=campaign,
+                kind=Character.Kind.PC,
+                is_active=True,
+                context__isnull=False,
+            )
             .order_by("pk")
         )
         if not recipients:
@@ -90,7 +93,7 @@ def award_shared_experience(
         entries.extend(
             (character.experience_account(), per_character) for character in recipients
         )
-        posted = _post_experience_transaction(
+        posted = post_experience_transaction(
             entries,
             reason=ExperienceTransaction.Reason.SHARED_AWARD,
             description=description,
@@ -129,7 +132,7 @@ def activate_character(character: Character) -> Character:
             adjustment = campaign.shared_experience - current_experience
             if adjustment:
                 system = campaign.experience_system_account()
-                _post_experience_transaction(
+                post_experience_transaction(
                     [(system, -adjustment), (account, adjustment)],
                     reason=ExperienceTransaction.Reason.BASELINE,
                     description="Activated character baseline",
@@ -150,7 +153,7 @@ def reverse_experience_transaction(
         )
         if hasattr(original, "reversal"):
             raise ValidationError("This transaction has already been reversed.")
-        reversed_transaction = _post_experience_transaction(
+        reversed_transaction = post_experience_transaction(
             [(entry.account, -entry.amount) for entry in original.entries.all()],
             reason=ExperienceTransaction.Reason.REVERSAL,
             description=description or f"Reversal of transaction {original.pk}",

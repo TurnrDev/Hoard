@@ -34,7 +34,10 @@ export default [
   {
     files: ["hoard/**/*.{ts,vue}"],
     languageOptions: {
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        __HOARD_VERSION__: "readonly",
+      },
     },
   },
   {

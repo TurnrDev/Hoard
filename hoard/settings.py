@@ -13,16 +13,22 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 VITE_DIST_DIR: Path = BASE_DIR / "hoard" / "dist"
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY: str = "django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m"
+SECRET_KEY: str = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG: bool = os.environ.get("DJANGO_DEBUG", "true").lower() in {
@@ -32,7 +38,27 @@ DEBUG: bool = os.environ.get("DJANGO_DEBUG", "true").lower() in {
     "on",
 }
 
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS: list[str] = [
+    value.strip()
+    for value in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
+    if value.strip()
+]
+CSRF_TRUSTED_ORIGINS: list[str] = [
+    value.strip()
+    for value in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if value.strip()
+]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = os.environ.get(
+    "DJANGO_SECURE_SSL_REDIRECT", "false" if DEBUG else "true"
+).lower() in {"1", "true", "yes", "on"}
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = int(
+    os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000")
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
 
 
 # Application definition
@@ -48,7 +74,6 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.staticfiles",
     "django_vite",
     "channels",
-    "hoard.compendium",
     "hoard.campaigns",
 ]
 
@@ -82,8 +107,7 @@ TEMPLATES: list[dict[str, object]] = [
 WSGI_APPLICATION: str = "hoard.wsgi.application"
 ASGI_APPLICATION: str = "hoard.asgi.application"
 
-# Raw .cah bytes use HTTP, but structured rule and character responses can still
-# exceed Daphne's very small 1 MiB default. Keep the ceiling bounded and tunable.
+# Keep WebSocket response and frame ceilings bounded and deployment-tunable.
 DAPHNE_WEBSOCKET_MAX_MESSAGE_SIZE = int(
     os.environ.get("DAPHNE_WEBSOCKET_MAX_MESSAGE_SIZE", 16 * 1024 * 1024)
 )
@@ -185,13 +209,4 @@ DJANGO_VITE: dict[str, dict[str, object]] = {
         "dev_server_port": 5173,
         "manifest_path": VITE_DIST_DIR / ".vite" / "manifest.json",
     }
-}
-
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
-
-MAILERS: dict[str, dict[str, str]] = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
 }

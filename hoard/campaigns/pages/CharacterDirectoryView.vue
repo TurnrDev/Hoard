@@ -30,14 +30,6 @@
     >
       {{ error }}
     </Message>
-    <Message
-      v-if="campaign?.is_game_master && campaign.incomplete_level_ups.length"
-      severity="error"
-      class="mb-4"
-    >
-      {{ campaign.incomplete_level_ups.map((row) => row.character_name).join(", ") }}
-      still need to complete level {{ campaign.level }}.
-    </Message>
     <ul
       v-if="playerCharacters.length"
       class="list-unstyled row g-4"
@@ -54,17 +46,8 @@
               size="preview"
             />
             <div>
-              <h2
-                class="h3 mb-1"
-                :class="{ 'inspired-name': character.has_inspiration }"
-              >
+              <h2 class="h3 mb-1">
                 {{ character.name }}
-                <span
-                  v-if="character.has_inspiration"
-                  class="visually-hidden"
-                >
-                  — Inspired
-                </span>
               </h2>
               <p class="text-body-secondary mb-0">
                 {{ character.race }} · {{ character.class }}
@@ -76,8 +59,7 @@
               {{ formatGoldValue(character.money.gold_value) }} ¤
             </p>
             <p class="small text-body-secondary tabular-nums">
-              {{ character.experience }} XP · {{ character.inventory.length }} inventory
-              entries
+              {{ character.experience.toLocaleString() }} XP
             </p>
           </div>
           <footer class="d-flex flex-wrap gap-2 mt-3">
@@ -194,7 +176,7 @@ export default defineComponent({
         this.characters = nextCampaign.characters;
         this.ownIds = new Set(
           nextCampaign.characters
-            .filter((character) => character.is_active && !character.is_archived)
+            .filter((character) => character.is_active)
             .filter((character) => character.context_id === this.campaignId)
             .map((character) => character.id),
         );

@@ -5,14 +5,9 @@ from typing import Protocol, TypeVar, cast
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from hoard.compendium.models import CompendiumEntry
-
 from ..models import (
     Campaign,
     Character,
-    InventoryAccount,
-    InventoryEntry,
-    InventoryTransaction,
     MoneyAccount,
     MoneyEntry,
     MoneyTransaction,
@@ -24,8 +19,6 @@ class CampaignScoped(Protocol):
 
 
 AccountT = TypeVar("AccountT", bound=CampaignScoped)
-TransactionT = TypeVar("TransactionT", InventoryTransaction, MoneyTransaction)
-EntryT = TypeVar("EntryT", InventoryEntry, MoneyEntry)
 type MoneyEntryInput = tuple[MoneyAccount, MoneyEntry.Denomination, int]
 
 COPPER_VALUES = {
@@ -59,7 +52,7 @@ def character_account[AccountT: CampaignScoped](
     return cast(AccountT, account)
 
 
-def _validate_campaign_scope(campaign: Campaign, *objects: CampaignScoped) -> None:
+def validate_campaign_scope(campaign: Campaign, *objects: CampaignScoped) -> None:
     for obj in objects:
         if obj.campaign_id != campaign.id:
             raise ValidationError(
@@ -67,51 +60,10 @@ def _validate_campaign_scope(campaign: Campaign, *objects: CampaignScoped) -> No
             )
 
 
-def post_inventory_transaction(
-    *,
-    from_account: InventoryAccount,
-    to_account: InventoryAccount,
-    item: CompendiumEntry,
-    quantity: int,
-    description: str = "",
-) -> InventoryTransaction:
-    """Transfer a positive quantity of one item between two campaign accounts."""
-    campaign = from_account.campaign
-    _validate_campaign_scope(campaign, to_account)
-    if item.source.repository.campaign_id not in (None, campaign.id):
-        raise ValidationError(
-            "The supplied item must be global or belong to the same campaign."
-        )
-    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
-        raise ValidationError("Inventory quantities must be positive.")
-    if from_account.pk == to_account.pk:
-        raise ValidationError(
-            "Inventory transfers need different source and destination accounts."
-        )
-    with transaction.atomic():
-        posted = InventoryTransaction.objects.create(
-            campaign=campaign, description=description
-        )
-        InventoryEntry.objects.bulk_create(
-            [
-                InventoryEntry(
-                    transaction=posted,
-                    account=from_account,
-                    item=item,
-                    amount=-quantity,
-                ),
-                InventoryEntry(
-                    transaction=posted, account=to_account, item=item, amount=quantity
-                ),
-            ]
-        )
-    return posted
-
-
 def post_money_transaction(
     entries: list[MoneyEntryInput], *, description: str = ""
 ) -> MoneyTransaction:
-    """Post [(account, denomination, signed_amount), ...] when copper value balances."""
+    """Post entries when their total copper value balances to zero."""
     entries = list(entries)
     if not entries:
         raise ValidationError("Money transactions need at least one entry.")
@@ -119,7 +71,7 @@ def post_money_transaction(
     total_value = 0
     for index, (account, denomination, amount) in enumerate(entries):
         if index:
-            _validate_campaign_scope(campaign, account)
+            validate_campaign_scope(campaign, account)
         if denomination not in COPPER_VALUES or not amount:
             raise ValidationError(
                 "Money entries need a denomination and non-zero amount."
@@ -147,63 +99,31 @@ def post_money_transaction(
     return posted
 
 
-def _entry_data(entry: InventoryEntry | MoneyEntry) -> dict[str, object]:
-    values = {"amount": -entry.amount}
-    if isinstance(entry, InventoryEntry):
-        values["item"] = entry.item
-    elif isinstance(entry, MoneyEntry):
-        values["denomination"] = entry.denomination
-    return values
-
-
-def _reverse_entries[
-    TransactionT: (InventoryTransaction, MoneyTransaction),
-    EntryT: (InventoryEntry, MoneyEntry),
-](
-    original: TransactionT,
-    transaction_model: type[TransactionT],
-    entry_model: type[EntryT],
-    *,
-    description: str = "",
-) -> TransactionT:
-    with transaction.atomic():
-        original = transaction_model.objects.select_for_update().get(pk=original.pk)
-        if hasattr(original, "reversal"):
-            raise ValidationError("This transaction has already been reversed.")
-        reverse = transaction_model.objects.create(
-            campaign=original.campaign,
-            description=description or f"Reversal of transaction {original.pk}",
-            reversal_of=original,
-        )
-        entry_model.objects.bulk_create(
-            [
-                entry_model(
-                    transaction=reverse, account=entry.account, **_entry_data(entry)
-                )
-                for entry in original.entries.all()
-            ]
-        )
-        return cast(TransactionT, reverse)
-
-
-def reverse_inventory_transaction(
-    transaction_to_reverse: InventoryTransaction,
-    *,
-    description: str = "",
-) -> InventoryTransaction:
-    return _reverse_entries(
-        transaction_to_reverse,
-        InventoryTransaction,
-        InventoryEntry,
-        description=description,
-    )
-
-
 def reverse_money_transaction(
     transaction_to_reverse: MoneyTransaction,
     *,
     description: str = "",
 ) -> MoneyTransaction:
-    return _reverse_entries(
-        transaction_to_reverse, MoneyTransaction, MoneyEntry, description=description
-    )
+    with transaction.atomic():
+        original = MoneyTransaction.objects.select_for_update().get(
+            pk=transaction_to_reverse.pk
+        )
+        if hasattr(original, "reversal"):
+            raise ValidationError("This transaction has already been reversed.")
+        reverse = MoneyTransaction.objects.create(
+            campaign=original.campaign,
+            description=description or f"Reversal of transaction {original.pk}",
+            reversal_of=original,
+        )
+        MoneyEntry.objects.bulk_create(
+            [
+                MoneyEntry(
+                    transaction=reverse,
+                    account=entry.account,
+                    denomination=entry.denomination,
+                    amount=-entry.amount,
+                )
+                for entry in original.entries.all()
+            ]
+        )
+        return reverse
