@@ -67,15 +67,15 @@ The release branch does not retain commented-out implementation code.
   intentionally unsupported and must be recreated.
 - Remove the Compendium Django application, URLs, tasks, tests, frontend routes,
   build steps, and Docker dependencies from this branch.
-- Add `Dockerfile`, `compose.dev.yml`, and `compose.prod.yml`:
+- Add `Dockerfile`, `compose.dev.yml`, and `compose.yml`:
   development uses source mounts, Vite live reload, Daphne, PostgreSQL, Redis,
   and persistent local volumes; production uses Daphne, Celery, PostgreSQL,
-  Redis, and Nginx. Nginx serves static and media files directly and proxies HTTP
-  and WebSocket requests to Daphne.
-- Production uses an internal named network for app/worker/database/Redis and
-  the external `web` network for Nginx/Traefik, including Traefik labels.
-- Load production configuration, including Django and database secrets, from the
-  root `.env` file through Compose.
+  Redis, and Nginx. Nginx serves static and media files directly; Traefik routes
+  application HTTP and WebSocket requests directly to Daphne.
+- Production uses an internal named network for app/worker/database/Redis and the
+  external `web` network for Traefik access to Daphne and Nginx.
+- Load production secrets and database configuration from the root `.env` file
+  through Compose; serve the production deployment at `dnd.turnr.net`.
 - Remove compendium compilation and registry initialisation from the image and
   entrypoint.
 - Document Docker as the supported full-stack developer workflow and update
@@ -102,7 +102,7 @@ The release branch does not retain commented-out implementation code.
 - Run Ruff for `hoard`, `npm run fix`, the frontend build, clean migration
   checks, and the focused backend test suite.
 - Verify development and production Compose builds, static and media delivery,
-  WebSocket proxying, and production
+  WebSocket routing, and production
   network/Traefik configuration.
 
 ## Assumptions

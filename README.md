@@ -75,8 +75,9 @@ database and all local uploads.
 ## Production
 
 Production runs Daphne, Celery, PostgreSQL, Redis, and Nginx. Nginx serves static
-assets and uploaded media directly and proxies HTTP and WebSocket traffic. Only
-Nginx joins the external Traefik `web` network.
+assets and uploaded media directly. Traefik routes application HTTP and WebSocket
+traffic straight to Daphne, while sending `/static/` and `/media/` requests to
+Nginx.
 
 Create the external network and local production environment file once:
 
@@ -85,22 +86,22 @@ docker network create web
 cp .env.example .env
 ```
 
-Set a long random `DJANGO_SECRET_KEY`, a strong `POSTGRES_PASSWORD`, and the public
-`HOARD_HOST` in `.env`, then build and start the deployment:
+Set a long random `DJANGO_SECRET_KEY` and a strong `POSTGRES_PASSWORD` in `.env`,
+then build and start the deployment for `https://dnd.turnr.net`:
 
 ```sh
-docker compose -f compose.prod.yml up -d --build
+docker compose up -d --build
 ```
 
 Compose loads `.env` automatically. Database names and users can be changed with
-`POSTGRES_DB` and `POSTGRES_USER`; Django host and origin settings are derived from
-`HOARD_HOST`.
+`POSTGRES_DB` and `POSTGRES_USER`. Persistent production data is stored below
+`/data/appdata/hoard`.
 
 To inspect status and logs:
 
 ```sh
-docker compose -f compose.prod.yml ps
-docker compose -f compose.prod.yml logs -f app worker nginx
+docker compose ps
+docker compose logs -f app worker nginx
 ```
 
 ## Architecture
