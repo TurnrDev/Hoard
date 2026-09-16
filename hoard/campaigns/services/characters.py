@@ -37,10 +37,40 @@ class CharacterLifecycleService:
             raise ValidationError(f"Unsupported character fields: {unsupported}")
         for key, value in fields.items():
             setattr(character, key, value)
+
+        if self.requires_profile_setup(context, character):
+            required_fields = {
+                "name": character.name.strip(),
+                "race": character.race.strip(),
+                "class": character.character_class.strip(),
+            }
+            missing_fields = [
+                label for label, value in required_fields.items() if not value
+            ]
+
+            if missing_fields:
+                fields_list = ", ".join(missing_fields)
+                raise ValidationError(
+                    f"Complete the character's {fields_list} before activating it."
+                )
+
+            character.is_active = True
+
         character.full_clean()
         character.save()
 
         return character
+
+    def requires_profile_setup(
+        self, context: CampaignContext, character: Character
+    ) -> bool:
+        """Return whether the owning player is completing an invited PC profile."""
+        return (
+            context.kind == CampaignContext.Kind.PC
+            and character.kind == Character.Kind.PC
+            and character.context_id == context.pk
+            and not character.is_active
+        )
 
     def archive(self, context: CampaignContext, character: Character) -> Character:
         """Deactivate a character while retaining its ledger history."""

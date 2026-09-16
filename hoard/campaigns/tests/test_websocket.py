@@ -4,10 +4,12 @@ from asgiref.sync import async_to_sync
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase, override_settings
 
 from hoard.campaigns.consumers import UserConsumer
 from hoard.campaigns.models import Campaign, CampaignContext, Character
+from hoard.campaigns.services import create_invitation
 from hoard.routing import websocket_urlpatterns
 
 
@@ -137,3 +139,51 @@ class ContextSocketTests(TransactionTestCase):
 
         self.assertEqual(response["type"], "error")
         self.assertEqual(response["code"], "unsupported_message")
+
+
+@override_settings(
+    CHANNEL_LAYERS={
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+        "local": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+    }
+)
+class InviteSocketTests(TransactionTestCase):
+    def setUp(self) -> None:
+        self.user = get_user_model().objects.create_user(username="invite-gm")
+        self.campaign = Campaign.objects.create(name="Invite campaign")
+        self.context = CampaignContext.objects.create(
+            campaign=self.campaign,
+            user=self.user,
+            kind=CampaignContext.Kind.GM,
+        )
+
+    async def invite_request(self, token: str, message: dict) -> dict:
+        communicator = WebsocketCommunicator(
+            URLRouter(websocket_urlpatterns), f"/ws/invites/{token}/"
+        )
+        communicator.scope["user"] = AnonymousUser()
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.send_json_to(message)
+        response = await communicator.receive_json_from(timeout=2)
+        await communicator.disconnect()
+        return response
+
+    def test_anonymous_visitor_can_inspect_a_valid_invitation(self) -> None:
+        _, token = create_invitation(self.context)
+        message = {"type": "invite.inspect", "request_id": request_id()}
+
+        response = async_to_sync(self.invite_request)(token, message)
+
+        self.assertEqual(response["type"], "query.result")
+        self.assertEqual(response["data"]["campaign_name"], "Invite campaign")
+        self.assertFalse(response["data"]["authenticated"])
+
+    def test_invalid_invitation_returns_a_structured_error(self) -> None:
+        message = {"type": "invite.inspect", "request_id": request_id()}
+
+        response = async_to_sync(self.invite_request)("missing-token", message)
+
+        self.assertEqual(response["type"], "query.error")
+        self.assertEqual(response["code"], "validation_error")
+        self.assertEqual(response["detail"], ["Invitation not found."])

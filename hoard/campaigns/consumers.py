@@ -1010,9 +1010,6 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
 
     async def connect(self) -> None:
         self.token = self.scope["url_route"]["kwargs"]["token"]
-        if not await self._valid_token():
-            await self.close(code=4404)
-            return
         await self.accept()
 
     async def receive_json(self, content: dict[str, object], **kwargs: object) -> None:
@@ -1076,16 +1073,6 @@ class InviteConsumer(HoardJsonWebsocketConsumer):
                 "data": data,
             }
         )
-
-    @database_sync_to_async
-    def _valid_token(self) -> bool:
-        from .services.invitations import invitation_for_token
-
-        try:
-            invitation_for_token(self.token)
-        except ValidationError:
-            return False
-        return True
 
     @database_sync_to_async
     def _inspect(self, content: dict[str, object]) -> dict[str, object]:

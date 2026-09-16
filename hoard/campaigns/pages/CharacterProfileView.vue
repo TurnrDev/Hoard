@@ -830,13 +830,22 @@
     <Dialog
       v-model:visible="editorOpen"
       modal
-      header="Edit character profile"
+      :header="
+        profileSetupRequired ? 'Set up your character' : 'Edit character profile'
+      "
       :style="{ width: 'min(34rem, calc(100vw - 2rem))' }"
     >
       <form
         class="d-grid gap-3"
         @submit.prevent="saveProfile"
       >
+        <p
+          v-if="profileSetupRequired"
+          class="text-body-secondary mb-0"
+        >
+          Choose your character's name, race, and class. Saving makes the character
+          active.
+        </p>
         <label class="d-grid gap-2">
           <span class="fw-semibold">Name</span>
           <InputText
@@ -850,6 +859,7 @@
           <span class="fw-semibold">Race</span>
           <InputText
             v-model="draft.race"
+            :required="profileSetupRequired"
             maxlength="100"
             fluid
           />
@@ -858,6 +868,7 @@
           <span class="fw-semibold">Class</span>
           <InputText
             v-model="draft.characterClass"
+            :required="profileSetupRequired"
             maxlength="100"
             fluid
           />
@@ -963,6 +974,7 @@ export default defineComponent({
       campaign: undefined as Campaign | undefined,
       character: undefined as Character | undefined,
       editorOpen: false,
+      setupPrompted: false,
       moneyValueVisible: readCoinDisplayMode() === "value",
       moneyAction: "spend" as "spend" | "transfer" | "exchange",
       moneyDialog: false,
@@ -1055,6 +1067,13 @@ export default defineComponent({
         this.character &&
         this.character.context_id === this.campaignId &&
         this.character.is_active,
+      );
+    },
+    profileSetupRequired(): boolean {
+      return Boolean(
+        this.character &&
+        this.character.context_id === this.campaignId &&
+        !this.character.is_active,
       );
     },
     characterActionItems(): MenuItem[] {
@@ -1315,6 +1334,11 @@ export default defineComponent({
         this.campaign = campaign;
         this.character = character;
         this.activity = recentActivity.results.slice(0, 5);
+
+        if (this.profileSetupRequired && !this.setupPrompted) {
+          this.setupPrompted = true;
+          this.openEditor();
+        }
       } catch (exception) {
         this.error =
           exception instanceof Error

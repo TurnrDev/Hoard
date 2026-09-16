@@ -11,6 +11,7 @@ from hoard.campaigns.models import (
     InvitationEvent,
 )
 from hoard.campaigns.services import accept_invitation, create_invitation
+from hoard.campaigns.services.characters import CharacterLifecycleService
 
 
 class InvitationTests(TestCase):
@@ -50,6 +51,24 @@ class InvitationTests(TestCase):
             accept_invitation(
                 token, get_user_model().objects.create_user(username="late")
             )
+
+    def test_completing_an_invited_profile_activates_the_character(self) -> None:
+        _, token = create_invitation(self.gm)
+        player = get_user_model().objects.create_user(username="invited")
+        context = accept_invitation(token, player)
+
+        character = CharacterLifecycleService().update(
+            context,
+            context.character,
+            {
+                "name": "Ama",
+                "race": "Nakudama",
+                "character_class": "Hunter Ranger",
+            },
+        )
+
+        self.assertTrue(character.is_active)
+        self.assertEqual(character.name, "Ama")
 
 
 class ConcurrentInvitationTests(TransactionTestCase):
