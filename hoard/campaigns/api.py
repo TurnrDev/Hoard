@@ -61,9 +61,10 @@ from .services.native import (
     HOARD_RENDERED_SHEET_SECTIONS,
     execute_character_event,
     execute_projection_update,
-    native_class_detail_values,
     native_class_details,
     native_sheet_view,
+    native_spell_slot_pools,
+    native_spellcasting_classes,
 )
 
 INSPIRATION_DURATION = timedelta(hours=24)
@@ -259,51 +260,6 @@ SLOT_WORDS = {
     "eighth": "8",
     "ninth": "9",
 }
-FULL_CASTER_SLOTS = (
-    (),
-    (2,),
-    (3,),
-    (4, 2),
-    (4, 3),
-    (4, 3, 2),
-    (4, 3, 3),
-    (4, 3, 3, 1),
-    (4, 3, 3, 2),
-    (4, 3, 3, 3, 1),
-    (4, 3, 3, 3, 2),
-    (4, 3, 3, 3, 2, 1),
-    (4, 3, 3, 3, 2, 1),
-    (4, 3, 3, 3, 2, 1, 1),
-    (4, 3, 3, 3, 2, 1, 1),
-    (4, 3, 3, 3, 2, 1, 1, 1),
-    (4, 3, 3, 3, 2, 1, 1, 1),
-    (4, 3, 3, 3, 2, 1, 1, 1, 1),
-    (4, 3, 3, 3, 3, 1, 1, 1, 1),
-    (4, 3, 3, 3, 3, 2, 1, 1, 1),
-    (4, 3, 3, 3, 3, 2, 2, 1, 1),
-)
-PACT_SLOTS = {
-    1: (1, 1),
-    2: (2, 1),
-    3: (2, 2),
-    4: (2, 2),
-    5: (2, 3),
-    6: (2, 3),
-    7: (2, 4),
-    8: (2, 4),
-    9: (2, 5),
-    10: (2, 5),
-    11: (3, 5),
-    12: (3, 5),
-    13: (3, 5),
-    14: (3, 5),
-    15: (3, 5),
-    16: (3, 5),
-    17: (4, 5),
-    18: (4, 5),
-    19: (4, 5),
-    20: (4, 5),
-}
 EFFECT_TARGETS = frozenset(
     {
         "ac",
@@ -327,141 +283,14 @@ def slot_key(key: object) -> str | None:
     return SLOT_WORDS.get(text, text if text in SLOT_NAMES else None)
 
 
-def slot_map(value: object) -> dict[str, int]:
-    return {
-        key: max(0, int(raw))
-        for raw_key, raw in (value.items() if isinstance(value, dict) else [])
-        if (key := slot_key(raw_key)) is not None
-        and isinstance(raw, int)
-        and not isinstance(raw, bool)
-    }
-
-
-def class_slot_maxima(character: Character) -> dict[str, int]:
-    """Apply the 2014 multiclass caster table; Pact Magic is intentionally separate."""
-    classes = []
-    for detail in native_class_detail_values(character.native_state):
-        stats = detail["stats"]
-        class_value = stats.get("class")
-        resource = class_value.get("value") if isinstance(class_value, dict) else None
-        resource_stats = resource.get("stats") if isinstance(resource, dict) else None
-        name_value = resource_stats.get("name") if isinstance(resource_stats, dict) else None
-        class_level_value = stats.get("class_level")
-        name = name_value.get("value") if isinstance(name_value, dict) else ""
-        class_level = (
-            class_level_value.get("value")
-            if isinstance(class_level_value, dict)
-            else 0
-        )
-        if isinstance(name, str) and isinstance(class_level, int):
-            classes.extend([name.casefold()] * max(0, class_level))
-    if not classes:
-        return {}
-    full = {"bard", "cleric", "druid", "sorcerer", "wizard"}
-    half = {"paladin", "ranger"}
-    third = {"fighter", "rogue"}
-    effective = sum(name in full for name in classes)
-    effective += sum(name in half for name in classes) // 2
-    effective += sum(name in third for name in classes) // 3
-    maxima = (
-        {
-            str(level): amount
-            for level, amount in enumerate(
-                FULL_CASTER_SLOTS[min(effective, 20)], start=1
-            )
-            if amount
-        }
-        if effective
-        else {}
-    )
-    warlock_level = sum(name == "warlock" for name in classes)
-    if warlock_level:
-        count, level = PACT_SLOTS[warlock_level]
-        maxima[f"pact-{level}"] = count
-    return maxima
-
-
 def slot_pools(character: Character) -> dict[str, dict[str, int]]:
-    calculated = class_slot_maxima(character)
-    current = slot_map(character.spell_slot_current)
-    adjustments = slot_map(character.spell_slot_adjustments)
-    # Imports do not contain maxima: preserve their useful values until the
-    # character is progressed through Hoard.
-    if not calculated:
-        calculated = dict(current)
-    keys = sorted(
-        set(calculated) | set(current) | set(adjustments),
-        key=lambda key: (key.startswith("pact-"), int(key.split("-")[-1])),
-    )
-    return {
-        key: {
-            "calculated": calculated.get(key, 0),
-            "adjustment": adjustments.get(key, 0),
-            "maximum": max(0, calculated.get(key, 0) + adjustments.get(key, 0)),
-            "current": min(
-                current.get(key, calculated.get(key, 0) + adjustments.get(key, 0)),
-                max(0, calculated.get(key, 0) + adjustments.get(key, 0)),
-            ),
-        }
-        for key in keys
-    }
+    """Expose spell slots calculated by the character's native system."""
+    return native_spell_slot_pools(character)
 
 
 def spellcasting_classes(character: Character) -> list[dict[str, object]]:
-    """Return each class that supplies this character's spellcasting ability."""
-    class_entries: dict[str, CompendiumEntry] = {}
-
-    for detail in native_class_detail_values(character.native_state):
-        class_value = detail["stats"].get("class")
-        resource = class_value.get("value") if isinstance(class_value, dict) else None
-        entry_id = (
-            resource.get("$hoard_entry_id") if isinstance(resource, dict) else None
-        )
-        if not isinstance(entry_id, int):
-            continue
-        entry = character.native_resources.filter(
-            pk=entry_id,
-            kind=CompendiumEntry.Kind.CLASS,
-        ).first()
-        if entry is not None:
-            class_entries[entry.name.casefold()] = entry
-
-    classes = []
-    for class_name, entry in class_entries.items():
-        data = entry.data if isinstance(entry.data, dict) else {}
-        ability = data.get("spellcastingAbility")
-        spell_slots = data.get("spellSlots")
-        spells = data.get("spells")
-
-        if not isinstance(ability, str) or not ability or not (spell_slots or spells):
-            continue
-
-        ability_name = ability.lower()
-        if ability_name not in ABILITIES:
-            continue
-
-        modifier = character.ability_modifier(ability_name)
-        attack = (
-            character.proficiency_bonus
-            + modifier
-            + effect_total(character, "spell_attack")
-        )
-        save_dc = (
-            8
-            + character.proficiency_bonus
-            + modifier
-            + effect_total(character, "spell_dc")
-        )
-        classes.append(
-            {
-                "name": entry.name,
-                "ability": ability_name,
-                "spell_attack": attack,
-                "spell_save_dc": save_dc,
-            }
-        )
-
-    return classes
+    """Return the native interpreter's spellcasting class projections."""
+    return native_spellcasting_classes(character)
 
 
 def spell_card_data(data: object) -> dict[str, object]:
@@ -1762,21 +1591,16 @@ def take_rest(
         )
         expiry = CharacterEffect.RestExpiry.SHORT
     else:
-        effects.extend(
-            [
-                {
-                    "type": "setStat",
-                    "stat": "current_hp",
-                    "new_value": {"type": "constant", "value": character.max_hp},
-                    "aggregation_type": "set",
-                },
-                {
-                    "type": "setStat",
-                    "stat": "hoard_temporary_hp",
-                    "new_value": {"type": "constant", "value": 0},
-                    "aggregation_type": "set",
-                },
-            ]
+        # The native long-rest mechanic restores HP, Hit Dice, spell slots and
+        # all other system-defined resources.  Hoard only layers its own
+        # temporary-HP projection on top of that event.
+        effects.append(
+            {
+                "type": "setStat",
+                "stat": "hoard_temporary_hp",
+                "new_value": {"type": "constant", "value": 0},
+                "aggregation_type": "set",
+            }
         )
         expiry = CharacterEffect.RestExpiry.LONG
     native_result = execute_character_event(

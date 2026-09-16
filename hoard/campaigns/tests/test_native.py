@@ -11,6 +11,7 @@ from hoard.campaigns.models import (
 from hoard.campaigns.services.native import (
     HOARD_RENDERED_SHEET_SECTIONS,
     execute_character_event,
+    native_class_details,
     native_sheet_view,
 )
 from hoard.compendium.models import (
@@ -195,7 +196,6 @@ class NativeCharacterRuntimeTests(TestCase):
 
     def test_class_details_are_the_native_multiclass_authority(self) -> None:
         from hoard.campaigns.services.native import (
-            native_class_details,
             native_class_level,
             native_class_summary,
         )
@@ -230,3 +230,67 @@ class NativeCharacterRuntimeTests(TestCase):
 
         self.assertEqual(native_class_level(state), 3)
         self.assertEqual(native_class_summary(state), "Fighter 2 / Wizard 1")
+
+    def test_long_rest_uses_calculated_stats_from_linked_classes(self) -> None:
+        from hoard.campaigns.api import take_rest
+
+        definition = self.source.system_definition
+        definition["character_stats"].append(
+            {
+                "id": "spell_slots_1",
+                "type": "base",
+                "value_type": "integer",
+                "default_value": 0,
+            }
+        )
+        definition["resources"] = [
+            {
+                "id": "class",
+                "stats": [
+                    {
+                        "id": "restored_spell_slots",
+                        "type": "calculated",
+                        "components": {"type": "constant", "value": 3},
+                    }
+                ],
+            }
+        ]
+        definition["mechanics"] = [
+            {
+                "id": "restore_spell_slots",
+                "event_names": "long_rest",
+                "effects": {
+                    "type": "setStat",
+                    "stat": "spell_slots_1",
+                    "new_value": {
+                        "type": "stat",
+                        "stat": "$character.classes.0.class.restored_spell_slots",
+                    },
+                    "aggregation_type": "set",
+                },
+            }
+        ]
+        self.source.system_definition = definition
+        self.source.save(update_fields=("system_definition",))
+        wizard = CompendiumEntry.objects.create(
+            source=self.source,
+            kind=CompendiumEntry.Kind.CLASS,
+            source_identifier="wizard",
+            name="Wizard",
+            data={
+                "resource_id": "class",
+                "stats": {"name": {"value": "Wizard"}},
+            },
+        )
+        self.character.native_resources.add(wizard)
+        self.character.native_state = {
+            "classes": [native_class_details(wizard, class_level=3)],
+            "spell_slots_1": 0,
+        }
+        self.character.save(update_fields=("native_state",))
+
+        take_rest(self.character, "long", None, created_by=self.context)
+
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.native_state["spell_slots_1"], 3)
+        self.assertEqual(self.character.spell_slot_current["1"], 3)

@@ -102,6 +102,15 @@ The replacement work is in progress and has these non-negotiable outcomes:
   The import preview resolves each class by native source ID or unique name,
   lets the user search the enabled lineage, and blocks only the included
   Classes collection until every class is resolved.
+- Nested resource paths in the interpreter now resolve calculated resource
+  stats, not only stored values. This is required by the upstream 5e
+  `long_rest` mechanic when it reads class caster-level and per-level slot
+  definitions.
+- Spell-slot maxima, current values, and per-class spell attack/save values are
+  now projected from native state and native event previews. The former
+  hand-maintained full-, half-, third-, and pact-caster tables are gone.
+  Long Rest delegates HP, Hit Dice, and spell-slot restoration to the native
+  `long_rest` event; Hoard only clears its own temporary-HP extension.
 
 ## Repository and package model
 

@@ -8,7 +8,6 @@ from hoard.campaigns.models import (
     Campaign,
     CampaignContext,
     Character,
-    CharacterClassLevel,
     CharacterEffect,
 )
 from hoard.campaigns.services.cah import parse_cah
@@ -117,7 +116,7 @@ class CoreModelTests(TestCase):
             base_hp=10,
         )
         self.assertEqual(Character.level_for_experience(6500), 5)
-        self.assertEqual(character.level, 1)
+        self.assertEqual(character.level, 0)
         self.assertEqual(character.proficiency_bonus, 2)
         self.assertEqual(character.ability_modifier("strength"), 3)
         self.assertEqual(character.max_hp, 12)
@@ -144,10 +143,6 @@ class CoreModelTests(TestCase):
             current_hp=4,
             temporary_hp=3,
         )
-        for level in range(1, 4):
-            CharacterClassLevel.objects.create(
-                character=character, level=level, class_name="Wizard"
-            )
         repository = CompendiumRepository.objects.create(
             identifier="test-spells", name="Test spells"
         )
@@ -240,7 +235,9 @@ class CoreModelTests(TestCase):
 
         take_rest(character, "long", None, created_by=context)
         character.refresh_from_db()
-        self.assertEqual(character.current_hp, character.max_hp)
+        # This compact system fixture defines a native slot-rest mechanic only.
+        # Hoard must not invent a generic HP restore outside the system rules.
+        self.assertEqual(character.current_hp, 7)
         self.assertEqual(character.temporary_hp, 0)
         self.assertEqual(character.spell_slot_current["1"], 4)
 

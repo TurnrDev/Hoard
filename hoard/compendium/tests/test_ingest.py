@@ -79,6 +79,62 @@ class PublishedPackageTests(SimpleTestCase):
 
             self.assertEqual(read_published_system(path), definition)
 
+    def test_5e_long_rest_restores_slots_from_a_calculated_class_resource(self):
+        repository_root = Path(__file__).resolve().parents[3]
+        system = read_published_system(
+            repository_root / "hoard/compendium/systems/compiled/5e/system.rpg"
+        )
+        wizard = json.loads(
+            (
+                repository_root
+                / "hoard/compendium/systems/default/systems/5e/resource_instances"
+                / "class_wizard_wizard.rpg.json"
+            ).read_text()
+        )
+        state = NativeEvaluator(system, {}).default_state()
+        state["classes"] = [
+            {
+                "resource_id": "class_details",
+                "stats": {
+                    "id": {"value": "class-details:wizard"},
+                    "class": {"value": wizard},
+                    "class_level": {"value": 3},
+                    "archetype_id": {"value": None},
+                    "selected_selectable_feature_ids": {"value": []},
+                    "last_selection_level": {"value": 0},
+                },
+            }
+        ]
+        state["intelligence_score"] = 16
+        state["level"] = 3
+
+        execution = NativeRuntime(system, state).fire("long_rest")
+
+        self.assertEqual(execution.state["spell_slots_1"], 4)
+        self.assertEqual(execution.state["spell_slots_2"], 2)
+
+        class_details = next(
+            resource
+            for resource in system["resources"]
+            if resource["id"] == "class_details"
+        )
+        character_evaluator = NativeEvaluator(system, state)
+        details = state["classes"][0]["stats"]
+        class_evaluator = NativeEvaluator(
+            class_details,
+            details,
+            character_evaluator=character_evaluator,
+        )
+        scope = NativeScope(values=details, character=state, parent=state)
+
+        self.assertTrue(class_evaluator.stat("show_spellcasting_details", scope))
+        self.assertEqual(
+            class_evaluator.stat("class.actual_spellcasting_ability", scope),
+            "intelligence",
+        )
+        self.assertEqual(class_evaluator.stat("spell_attack_bonus", scope), 5)
+        self.assertEqual(class_evaluator.stat("spell_save_dc", scope), 13)
+
 
 class NativeCompositionTests(SimpleTestCase):
     def test_deep_merge_merges_identified_stats_without_reordering(self):
@@ -187,6 +243,58 @@ class NativeRuntimeTests(SimpleTestCase):
 
         with self.assertRaisesMessage(NativeRuntimeError, "Unsupported calculation"):
             evaluator.evaluate({"type": "futureNode"})
+
+    def test_resolves_calculated_stats_on_nested_resources(self):
+        definition = {
+            "character_stats": [
+                {
+                    "id": "class_details",
+                    "type": "base",
+                    "default_value": {},
+                }
+            ],
+            "resources": [
+                {
+                    "id": "class",
+                    "stats": [
+                        {
+                            "id": "effective_caster_level",
+                            "type": "base",
+                            "default_value": "zero",
+                        },
+                        {
+                            "id": "is_spellcaster",
+                            "type": "calculated",
+                            "components": {
+                                "type": "notEquals",
+                                "components": {
+                                    "type": "list",
+                                    "components": [
+                                        {
+                                            "type": "stat",
+                                            "stat": "effective_caster_level",
+                                        },
+                                        {"type": "constant", "value": "zero"},
+                                    ],
+                                },
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        state = {
+            "class_details": {
+                "resource_id": "class",
+                "stats": {
+                    "effective_caster_level": {"value": "full"},
+                },
+            }
+        }
+        evaluator = NativeEvaluator(definition, state)
+        scope = NativeScope(values=state, character=state)
+
+        self.assertTrue(evaluator.stat("class_details.is_spellcaster", scope))
 
     def test_compiled_lambda_names_optional_paths_and_append(self):
         state = {

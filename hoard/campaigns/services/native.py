@@ -309,7 +309,134 @@ def initial_native_state(
                 character.spell_slot_current.get(f"level-{level}", 0),
             )
         )
+        adjustment = character.spell_slot_adjustments.get(
+            str(level),
+            character.spell_slot_adjustments.get(f"level-{level}", 0),
+        )
+        if isinstance(adjustment, int) and not isinstance(adjustment, bool):
+            state[f"max_spell_slots_{level}_bonus"] = adjustment
     return state
+
+
+def hydrated_native_state(character: Character) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return the current native definition and fully linked character state.
+
+    This intentionally has no persistence side effects.  It is used for read
+    projections which must be calculated by the same interpreter as a real
+    character event.
+    """
+    source = character_native_source(character)
+    definition = hoard_native_definition(source)
+    state = (
+        deepcopy(character.native_state)
+        if character.native_state
+        else initial_native_state(character, definition)
+    )
+    hydrate_linked_resources(character, state)
+
+    return definition, state
+
+
+def preview_character_event_state(
+    character: Character,
+    event_name: str,
+    payload: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Evaluate an event without modifying the character or recording history."""
+    definition, state = hydrated_native_state(character)
+    execution = NativeRuntime(definition, state).fire(event_name, payload)
+
+    return definition, execution.state
+
+
+def native_spell_slot_pools(character: Character) -> dict[str, dict[str, int]]:
+    """Return slot values and long-rest maxima from the native system runtime."""
+    definition, current_state = hydrated_native_state(character)
+    maximum_state = NativeRuntime(definition, current_state).fire("long_rest").state
+    current_evaluator = NativeEvaluator(definition, current_state)
+    maximum_evaluator = NativeEvaluator(definition, maximum_state)
+    current_scope = NativeScope(values=current_state, character=current_state)
+    maximum_scope = NativeScope(values=maximum_state, character=maximum_state)
+    levels = sorted(
+        (
+            identifier.removeprefix("spell_slots_")
+            for identifier in current_evaluator.stat_definitions
+            if identifier.startswith("spell_slots_")
+            and identifier.removeprefix("spell_slots_").isdigit()
+        ),
+        key=int,
+    )
+    pools: dict[str, dict[str, int]] = {}
+
+    for level in levels:
+        current = current_evaluator.stat(f"spell_slots_{level}", current_scope)
+        maximum = maximum_evaluator.stat(f"spell_slots_{level}", maximum_scope)
+        adjustment = current_evaluator.stat(
+            f"max_spell_slots_{level}_bonus", current_scope
+        )
+        current_value = current if isinstance(current, int) and not isinstance(current, bool) else 0
+        maximum_value = maximum if isinstance(maximum, int) and not isinstance(maximum, bool) else 0
+        adjustment_value = (
+            adjustment
+            if isinstance(adjustment, int) and not isinstance(adjustment, bool)
+            else 0
+        )
+        pools[level] = {
+            "calculated": max(0, maximum_value - adjustment_value),
+            "adjustment": adjustment_value,
+            "maximum": max(0, maximum_value),
+            "current": min(max(0, current_value), max(0, maximum_value)),
+        }
+
+    return pools
+
+
+def native_spellcasting_classes(character: Character) -> list[dict[str, object]]:
+    """Resolve each spellcasting class through the native resource formulas."""
+    definition, state = hydrated_native_state(character)
+    class_details_definition = next(
+        (
+            resource
+            for resource in definition.get("resources", [])
+            if isinstance(resource, dict) and resource.get("id") == "class_details"
+        ),
+        None,
+    )
+    if class_details_definition is None:
+        return []
+
+    character_evaluator = NativeEvaluator(definition, state)
+    classes: list[dict[str, object]] = []
+    for detail in native_class_detail_values(state):
+        stats = detail["stats"]
+        evaluator = NativeEvaluator(
+            class_details_definition,
+            stats,
+            character_evaluator=character_evaluator,
+        )
+        scope = NativeScope(values=stats, character=state, parent=state)
+        is_spellcaster = evaluator.stat("show_spellcasting_details", scope)
+        ability = evaluator.stat("class.actual_spellcasting_ability", scope)
+        attack = evaluator.stat("spell_attack_bonus", scope)
+        save_dc = evaluator.stat("spell_save_dc", scope)
+        name = evaluator.stat("class.name", scope)
+
+        if not is_spellcaster or not isinstance(ability, str) or not isinstance(name, str):
+            continue
+        if not isinstance(attack, int) or isinstance(attack, bool):
+            continue
+        if not isinstance(save_dc, int) or isinstance(save_dc, bool):
+            continue
+        classes.append(
+            {
+                "name": name,
+                "ability": ability,
+                "spell_attack": attack,
+                "spell_save_dc": save_dc,
+            }
+        )
+
+    return classes
 
 
 def execute_character_event(
@@ -804,6 +931,13 @@ def projection_update_targets(field: str, value: Any) -> dict[str, Any]:
             for raw_level, amount in value.items()
             if (level := str(raw_level).removeprefix("level-")) in set("123456789")
         }
+    if field == "spell_slot_adjustments" and isinstance(value, dict):
+        targets = {"hoard_spell_slot_adjustments": value}
+        for raw_level, amount in value.items():
+            level = str(raw_level).removeprefix("level-")
+            if level in set("123456789"):
+                targets[f"max_spell_slots_{level}_bonus"] = amount
+        return targets
     if field in HOARD_PROJECTED_FIELDS:
         return {f"hoard_{field}": value}
     raise ValidationError(f"{field} does not have a native projection mapping.")

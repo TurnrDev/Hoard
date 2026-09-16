@@ -178,6 +178,11 @@ class NativeEvaluator:
                 if isinstance(stats, dict) and part in stats:
                     current = stats.get(part)
                 elif (
+                    isinstance(current.get("resource_id"), str)
+                    and isinstance(stats, dict)
+                ):
+                    current = self.stat_from_resource(part, current, scope)
+                elif (
                     first == "$character"
                     and index == 0
                     and part not in current
