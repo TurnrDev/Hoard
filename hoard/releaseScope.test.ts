@@ -3,6 +3,7 @@ import packageLock from "../package-lock.json?raw";
 import packageMetadata from "../package.json?raw";
 import pythonMetadata from "../pyproject.toml?raw";
 import navigation from "./campaigns/components/CampaignNavigation.vue?raw";
+import comingSoonBlock from "./campaigns/components/ComingSoonBlock.vue?raw";
 import profile from "./campaigns/pages/CharacterProfileView.vue?raw";
 import router from "./router.ts?raw";
 
@@ -18,13 +19,12 @@ describe("initial release UI scope", () => {
   });
 
   it("keeps deferred profile capabilities visible and blocked", () => {
-    expect(profile).toContain("<Message");
-    expect(profile).toContain("<BlockUI");
-    expect(profile).toContain(':blocked="true"');
+    expect(profile).toContain("<ComingSoonBlock");
     expect(profile).toContain("<Skeleton");
-    expect(profile).toContain("detailed character sheet");
-    expect(profile).toContain("health, abilities, equipment, spells");
-    expect(profile).toContain("rests, combat, and level-up");
+    expect(profile).toContain("character-sheet-preview");
+    expect(comingSoonBlock).toContain("<BlockUI");
+    expect(comingSoonBlock).toContain(':blocked="true"');
+    expect(comingSoonBlock).toContain('value="Coming soon"');
   });
 
   it("uses the profile action menu without a character-type editor", () => {
