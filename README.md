@@ -99,7 +99,7 @@ sudo install -d -o 1000 -g 1000 -m 0755 \
 ```
 
 Set a long random `DJANGO_SECRET_KEY` and a strong `POSTGRES_PASSWORD` in `.env`,
-then build and start the deployment for `https://manage.dnd.turnr.net`:
+then build and start the deployment for `https://dnd.turnr.net`:
 
 ```sh
 docker compose up -d --build
