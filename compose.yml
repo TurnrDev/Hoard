@@ -12,8 +12,8 @@ services:
     container_name: hoard_app
     environment: &app-environment
       DJANGO_DEBUG: "false"
-      DJANGO_ALLOWED_HOSTS: manage.dnd.turnr.net
-      DJANGO_CSRF_TRUSTED_ORIGINS: https://manage.dnd.turnr.net
+      DJANGO_ALLOWED_HOSTS: dnd.turnr.net
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://dnd.turnr.net
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
       POSTGRES_DB: ${POSTGRES_DB:-hoard}
       POSTGRES_USER: ${POSTGRES_USER:-hoard}
@@ -31,14 +31,14 @@ services:
     labels:
       homepage.description: D&D campaign companion
       homepage.group: D&D
-      homepage.href: https://manage.dnd.turnr.net
+      homepage.href: https://dnd.turnr.net
       homepage.name: Hoard
       homepage.showStats: true
       homepage.siteMonitor: http://hoard_app:8000
       traefik.enable: true
       traefik.docker.network: web
       traefik.http.routers.hoard.entrypoints: public
-      traefik.http.routers.hoard.rule: Host(`manage.dnd.turnr.net`)
+      traefik.http.routers.hoard.rule: Host(`dnd.turnr.net`)
       traefik.http.routers.hoard.tls: true
       traefik.http.routers.hoard.tls.certresolver: cloudflare
       traefik.http.services.hoard.loadbalancer.server.port: 8000
@@ -102,7 +102,7 @@ services:
       traefik.enable: true
       traefik.docker.network: web
       traefik.http.routers.hoard-assets.entrypoints: public
-      traefik.http.routers.hoard-assets.rule: Host(`manage.dnd.turnr.net`) && (PathPrefix(`/static/`) || PathPrefix(`/media/`))
+      traefik.http.routers.hoard-assets.rule: Host(`dnd.turnr.net`) && (PathPrefix(`/static/`) || PathPrefix(`/media/`))
       traefik.http.routers.hoard-assets.tls: true
       traefik.http.routers.hoard-assets.tls.certresolver: cloudflare
       traefik.http.services.hoard-assets.loadbalancer.server.port: 80
