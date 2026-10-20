@@ -169,17 +169,37 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
 def variable_values(values: object) -> dict[str, object]:
     if not isinstance(values, list):
         return {}
+
     result: dict[str, object] = {}
-    for value in values:
-        if not isinstance(value, Mapping):
+    for group in values:
+        if not isinstance(group, Mapping):
             continue
-        name = value.get("name")
-        if isinstance(name, str) and name:
-            result[name] = value.get("value", value.get("total"))
-            total = value.get("total")
-            if name == "hitPoints" and isinstance(total, (int, float, str)):
-                result["maxHitPoints"] = total
+        add_variable_value(result, group)
+        for key, value in group.items():
+            if isinstance(value, Mapping):
+                add_variable_value(result, value, fallback_name=key)
+
     return result
+
+
+def add_variable_value(
+    result: dict[str, object],
+    variable: Mapping[str, object],
+    *,
+    fallback_name: object = None,
+) -> None:
+    name = variable.get("variableName", variable.get("name", fallback_name))
+    if not isinstance(name, str) or not name:
+        return
+
+    value = variable.get("value", variable.get("total"))
+    if isinstance(value, Mapping):
+        value = value.get("value", variable.get("total"))
+    result[name] = value
+
+    total = variable.get("total")
+    if name == "hitPoints" and isinstance(total, (int, float, str)):
+        result["maxHitPoints"] = total
 
 
 def canonical_stats(variables: Mapping[str, object]) -> dict[str, object]:

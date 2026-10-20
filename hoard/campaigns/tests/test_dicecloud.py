@@ -61,6 +61,25 @@ class DiceCloudServiceTests(SimpleTestCase):
         self.assertEqual(profile["currency"]["gp"], 14)
         self.assertFalse(profile["stale"])
 
+    def test_normalizes_grouped_dicecloud_variables(self):
+        payload = self.payload()
+        payload["creatureVariables"] = [
+            {
+                "level": {"value": 5},
+                "hitPoints": {"value": 31, "total": 44},
+                "armor": {"value": 16},
+                "gp": {"value": 14},
+            }
+        ]
+
+        profile = normalize_creature(self.creature_id, payload)
+
+        self.assertEqual(
+            profile["stats"],
+            {"level": 5, "hitPoints": 31, "maxHitPoints": 44, "armor": 16},
+        )
+        self.assertEqual(profile["currency"]["gp"], 14)
+
     @patch("hoard.campaigns.services.dicecloud.cache.set")
     @patch("hoard.campaigns.services.dicecloud.requests.get")
     def test_fetches_only_the_fixed_public_api_url(self, get, cache_set):
