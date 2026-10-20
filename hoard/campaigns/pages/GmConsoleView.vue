@@ -54,7 +54,7 @@
             <div class="border-top pt-3">
               <p class="small text-body-secondary mb-1">Party wealth</p>
               <p class="h3 mb-0 tabular-nums">
-                {{ formatGoldValue(campaign.party_money.gold_value) }} GP
+                {{ formatGoldValue(campaign.party_money.gold_value) }} ¤
               </p>
             </div>
           </section>
