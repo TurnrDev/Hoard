@@ -146,6 +146,12 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/
 CELERY_RESULT_BACKEND = os.environ.get(
     "CELERY_RESULT_BACKEND", "redis://localhost:6379/2"
 )
+CELERY_BEAT_SCHEDULE = {
+    "refresh-active-dicecloud-profiles": {
+        "task": "hoard.campaigns.tasks.refresh_active_dicecloud_profiles",
+        "schedule": 10.0,
+    }
+}
 
 
 # Database

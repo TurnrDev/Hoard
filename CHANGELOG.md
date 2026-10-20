@@ -16,6 +16,9 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Refresh active linked DiceCloud profiles every 10 seconds while a campaign has
+  a connected participant, publishing updates only when the projected sheet data
+  changes and pausing sync after the existing presence window expires.
 - Replaced local character sheets with lightweight player-character records that
   retain campaign context, legacy name and HP fallback values, DiceCloud link, and
   activity state.

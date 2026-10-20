@@ -21,6 +21,8 @@ CHARACTER_URL_PATTERN = re.compile(
     r"^https://dicecloud\.com/character/(?P<id>[A-Za-z0-9]{8,80})(?:/[^/?#]+)?/?$"
 )
 CACHE_TTL_SECONDS = int(timedelta(hours=24).total_seconds())
+LIVE_SYNC_FAILURE_BASE_SECONDS = 10
+LIVE_SYNC_FAILURE_MAX_SECONDS = int(timedelta(minutes=5).total_seconds())
 CACHE_KEY_VERSION = "v8"
 REQUEST_TIMEOUT_SECONDS = 10
 ABILITY_NAMES = (
@@ -88,8 +90,22 @@ def projection_cache_key(creature_id: str) -> str:
     return f"dicecloud:creature:{CACHE_KEY_VERSION}:{creature_id}"
 
 
+def refresh_failure_cache_key(creature_id: str) -> str:
+    """Return the cache key that limits retries after an upstream failure."""
+    return f"dicecloud:refresh-failure:{CACHE_KEY_VERSION}:{creature_id}"
+
+
 def load_creature(creature_id: str) -> dict[str, object]:
-    """Fetch current data, falling back only after a live upstream failure."""
+    """Return a cached projection, fetching only when no projection is available."""
+    cached = cached_projection(creature_id)
+    if cached is not None:
+        return cached
+
+    return refresh_creature(creature_id)
+
+
+def refresh_creature(creature_id: str) -> dict[str, object]:
+    """Fetch and cache a current projection, regardless of any cached value."""
     with in_flight_lock:
         future = in_flight.get(creature_id)
         if future is None:
@@ -98,16 +114,67 @@ def load_creature(creature_id: str) -> dict[str, object]:
 
     try:
         return future.result()
-    except DiceCloudError:
-        cached = cached_projection(creature_id)
-        if cached is not None:
-            return {**cached, "stale": True}
-        raise
     finally:
         if future.done():
             with in_flight_lock:
                 if in_flight.get(creature_id) is future:
                     del in_flight[creature_id]
+
+
+def refresh_is_allowed(creature_id: str) -> bool:
+    """Return whether live sync may retry this creature after a recent failure."""
+    state = cache.get(refresh_failure_cache_key(creature_id))
+    if not isinstance(state, dict):
+        return True
+
+    retry_after = state.get("retry_after")
+    return not isinstance(retry_after, (int, float)) or retry_after <= timezone.now().timestamp()
+
+
+def record_refresh_failure(creature_id: str) -> int:
+    """Back off repeated live-sync failures and return the delay in seconds."""
+    key = refresh_failure_cache_key(creature_id)
+    state = cache.get(key)
+    attempts = state.get("attempts", 0) if isinstance(state, dict) else 0
+    if not isinstance(attempts, int):
+        attempts = 0
+
+    attempts += 1
+    delay = min(
+        LIVE_SYNC_FAILURE_BASE_SECONDS * (2 ** (attempts - 1)),
+        LIVE_SYNC_FAILURE_MAX_SECONDS,
+    )
+    cache.set(
+        key,
+        {
+            "attempts": attempts,
+            "retry_after": timezone.now().timestamp() + delay,
+        },
+        LIVE_SYNC_FAILURE_MAX_SECONDS,
+    )
+    return delay
+
+
+def clear_refresh_failure(creature_id: str) -> None:
+    """Allow the next failure to start again at the shortest retry delay."""
+    cache.delete(refresh_failure_cache_key(creature_id))
+
+
+def projections_differ(
+    previous: dict[str, object] | None, current: dict[str, object]
+) -> bool:
+    """Compare projections while ignoring metadata that changes on every fetch."""
+    if previous is None:
+        return True
+
+    ignored_keys = {"fetched_at", "stale"}
+    previous_content = {
+        key: value for key, value in previous.items() if key not in ignored_keys
+    }
+    current_content = {
+        key: value for key, value in current.items() if key not in ignored_keys
+    }
+    return previous_content != current_content
 
 
 def fetch_and_normalize(creature_id: str) -> dict[str, object]:

@@ -776,13 +776,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
     def _character_dicecloud_link(self, content: dict[str, object]) -> None:
         from .api import editable_character
         from .payloads import DiceCloudLinkCommand
-        from .services.dicecloud import creature_id_from_input, load_creature
+        from .services.dicecloud import creature_id_from_input, refresh_creature
 
         context = self._context()
         command = DiceCloudLinkCommand.model_validate(content)
         character = editable_character(context, command.character_id)
         creature_id = creature_id_from_input(command.creature)
-        load_creature(creature_id)
+        refresh_creature(creature_id)
         character.dicecloud_creature_id = creature_id
         character.is_active = True
         character.save(update_fields=("dicecloud_creature_id", "is_active"))

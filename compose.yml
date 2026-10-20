@@ -64,6 +64,19 @@ services:
     volumes:
       - /data/appdata/hoard/media:/app/media
 
+  beat:
+    build: .
+    command: beat
+    container_name: hoard_beat
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - hoard
+
   db:
     image: postgres:18-alpine
     container_name: hoard_db

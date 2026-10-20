@@ -11,6 +11,7 @@ from hoard.campaigns.services.dicecloud import (
     load_creature,
     normalize_creature,
     projection_cache_key,
+    refresh_creature,
 )
 
 
@@ -265,16 +266,28 @@ class DiceCloudServiceTests(SimpleTestCase):
     @override_settings(
         CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
     )
-    def test_uses_last_projection_only_after_a_live_fetch_failure(self):
+    def test_uses_cached_projection_without_a_live_fetch(self):
         profile = normalize_creature(self.creature_id, self.payload())
-        with patch(
-            "hoard.campaigns.services.dicecloud.fetch_and_normalize",
-            return_value=profile,
-        ):
-            self.assertFalse(load_creature(self.creature_id)["stale"])
         cache.set(projection_cache_key(self.creature_id), profile, 60)
         with patch(
             "hoard.campaigns.services.dicecloud.fetch_and_normalize",
             side_effect=DiceCloudUnavailable("offline"),
-        ):
-            self.assertTrue(load_creature(self.creature_id)["stale"])
+        ) as fetch:
+            self.assertEqual(load_creature(self.creature_id), profile)
+        fetch.assert_not_called()
+
+    @override_settings(
+        CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    )
+    def test_live_refresh_bypasses_a_cached_projection(self):
+        cached = normalize_creature(self.creature_id, self.payload())
+        refreshed = {**cached, "name": "Updated Ama"}
+        cache.set(projection_cache_key(self.creature_id), cached, 60)
+
+        with patch(
+            "hoard.campaigns.services.dicecloud.fetch_and_normalize",
+            return_value=refreshed,
+        ) as fetch:
+            self.assertEqual(refresh_creature(self.creature_id), refreshed)
+
+        fetch.assert_called_once_with(self.creature_id)
