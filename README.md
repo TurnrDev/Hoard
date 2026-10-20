@@ -1,7 +1,7 @@
 # Hoard
 
-Hoard is a small campaign companion for shared XP, coin ledgers, calendar tracking,
-character profiles, invitations, and campaign administration.
+Hoard is a small campaign companion for shared XP, calendar tracking, DiceCloud
+character sheets, invitations, and campaign administration.
 
 ## Screenshots
 
@@ -23,22 +23,17 @@ character profiles, invitations, and campaign administration.
 
 Hoard `0.1.0` focuses on the shared campaign tools that are ready for regular use:
 
-- shared XP for active player characters, including level progress and immutable
-  ledger history;
-- personal and campaign coin accounts with grants, spending, transfers, exact-value
-  exchanges, and reversals;
+- shared XP divided by the configured party size, including players without
+  DiceCloud sheets, with level progress and immutable party-ledger history;
 - a campaign calendar whose date is recorded against ledger and audit events;
-- player-character and NPC profiles with portraits, free-text race and class, and
-  profile editing;
+- read-only DiceCloud player sheets with player and GM connection management;
 - campaign membership, shareable invitations, roster management, and GM controls;
 - a responsive campaign shell with live WebSocket updates and desktop/mobile party
   navigation.
 
-Character profiles retain the full sheet layout as a preview of planned features.
-Unavailable statistics, abilities, skills, inventory, equipment, and character-detail
-sections are clearly marked **Coming soon** and use skeleton values rather than
-placeholder character data. The Compendium is likewise visible in navigation but is
-not part of this release.
+DiceCloud is the source of truth for player-sheet data. Hoard fetches its public,
+read-only creature data live and uses a short-lived outage fallback without storing a
+local character sheet.
 
 ## Development
 

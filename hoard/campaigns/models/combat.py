@@ -114,14 +114,8 @@ class EncounterCombatant(models.Model):
 
     @property
     def display_name(self) -> str:
-        if self.character_id:
-            return self.character.name
-
         return self.name.strip()
 
     @property
     def health(self) -> tuple[int | None, int | None]:
-        if self.character_id:
-            return self.character.current_hp, self.character.max_hp
-
         return self.current_hp, self.max_hp

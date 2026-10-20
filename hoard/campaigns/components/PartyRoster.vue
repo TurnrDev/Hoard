@@ -33,7 +33,7 @@ export default defineComponent({
   computed: {
     playerCharacters(): Character[] {
       return this.characters
-        .filter((character) => character.is_active && character.is_player_character)
+        .filter((character) => character.is_active)
         .sort((first, second) => {
           const presenceDifference =
             Number(this.connectedFor(second)) - Number(this.connectedFor(first));

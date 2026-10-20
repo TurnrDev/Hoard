@@ -1,24 +1,23 @@
 <template>
-  <section aria-labelledby="management-title">
+  <section aria-labelledby="manage-title">
     <header
       class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-5"
     >
       <div>
         <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
-          Game Master only
+          Game master
         </p>
         <h1
-          id="management-title"
+          id="manage-title"
           class="display-5 mb-0"
         >
-          {{ campaign?.name }} management
+          Manage campaign
         </h1>
       </div>
       <Button
         :as="'router-link'"
         :to="`/c/${campaignId}/gm`"
-        icon="mdi mdi-arrow-left"
-        label="GM desk"
+        label="GM console"
         outlined
       />
     </header>
@@ -30,274 +29,142 @@
     >
       {{ error }}
     </Message>
-
-    <div class="row g-4">
-      <div class="col-12 col-xl-7">
-        <section
-          class="border rounded-3 p-3 p-md-4 h-100"
-          aria-labelledby="members-heading"
+    <section
+      class="border rounded-3 p-3 p-md-4 mb-4"
+      aria-labelledby="invite-title"
+    >
+      <h2
+        id="invite-title"
+        class="h3"
+      >
+        Invite a player
+      </h2>
+      <form
+        class="d-flex flex-column flex-md-row gap-2"
+        @submit.prevent="invitePlayer"
+      >
+        <label
+          class="visually-hidden"
+          for="invitation-email"
         >
-          <header class="mb-3">
-            <h2
-              id="members-heading"
-              class="h3"
-            >
-              Members
-            </h2>
-          </header>
-          <div class="d-grid gap-3">
-            <form
-              class="row g-2"
-              @submit.prevent="invitePlayer"
-            >
-              <div class="col-12 col-md">
-                <label
-                  class="visually-hidden"
-                  for="invitation-email"
-                >
-                  Email address
-                </label>
-                <InputText
-                  id="invitation-email"
-                  v-model="invitationEmail"
-                  type="email"
-                  placeholder="Email (optional)"
-                  fluid
-                />
-              </div>
-              <div class="col-12 col-md-auto">
-                <Button
-                  type="submit"
-                  :loading="busy"
-                  label="Invite player"
-                />
-              </div>
-            </form>
-            <Message
-              v-if="invitationLink"
-              severity="success"
-            >
-              <p class="fw-semibold mb-2">Shareable invitation link</p>
-              <div class="d-flex flex-wrap align-items-center gap-2">
-                <code class="text-break">{{ invitationLink }}</code>
-                <Button
-                  size="small"
-                  label="Copy"
-                  @click="copyInvite(invitationLink)"
-                />
-              </div>
-            </Message>
-            <ul class="list-group">
-              <li
-                v-for="member in members"
-                :key="member.id"
-                class="list-group-item d-flex align-items-center justify-content-between gap-3"
-              >
-                <div>
-                  <strong>{{ member.username }}</strong>
-                  <span class="d-block small text-body-secondary">
-                    {{
-                      member.is_active
-                        ? member.is_game_master
-                          ? "Game master"
-                          : "Player"
-                        : "Inactive"
-                    }}
-                  </span>
-                </div>
-                <Button
-                  icon="mdi mdi-account-remove"
-                  text
-                  :disabled="!member.is_active"
-                  :aria-label="`Deactivate ${member.username}`"
-                  @click="deactivate(member)"
-                />
-              </li>
-            </ul>
-            <h3 class="h4 mt-2">Invitations</h3>
-            <ul
-              v-if="invitations.length"
-              class="list-group"
-            >
-              <li
-                v-for="invitation in invitations"
-                :key="invitation.id"
-                class="list-group-item d-flex align-items-center justify-content-between gap-3"
-              >
-                <div>
-                  <strong>{{ invitation.email || "Shareable link" }}</strong>
-                  <span class="d-block small text-body-secondary">
-                    {{ displayIdentifier(invitation.status) }} · expires
-                    <RelativeTime :value="invitation.expires_at" />
-                  </span>
-                </div>
-                <div class="d-flex gap-1">
-                  <Button
-                    v-if="invitation.status === 'pending'"
-                    icon="mdi mdi-link-variant-plus"
-                    text
-                    :aria-label="`Refresh invitation link for ${invitation.email || 'shareable invitation'}`"
-                    @click="resend(invitation)"
-                  />
-                  <Button
-                    v-if="invitation.status === 'pending'"
-                    icon="mdi mdi-link-off"
-                    text
-                    :aria-label="`Revoke invitation to ${invitation.email || 'shareable link'}`"
-                    @click="revoke(invitation)"
-                  />
-                </div>
-              </li>
-            </ul>
-            <p
-              v-else
-              class="text-body-secondary mb-0"
-            >
-              No invitations have been created.
-            </p>
-          </div>
-        </section>
-      </div>
-      <div class="col-12 col-xl-5">
-        <div class="d-grid gap-4">
-          <section
-            class="border rounded-3 p-3 p-md-4"
-            aria-labelledby="characters-heading"
-          >
-            <header>
-              <h2
-                id="characters-heading"
-                class="h3"
-              >
-                NPCs
-              </h2>
-            </header>
-            <div class="d-grid gap-3">
-              <form
-                class="row g-2"
-                @submit.prevent="createNpc"
-              >
-                <div class="col-12">
-                  <label
-                    class="form-label"
-                    for="npc-name"
-                  >
-                    Name
-                  </label>
-                  <InputText
-                    id="npc-name"
-                    v-model="characterName"
-                    fluid
-                  />
-                </div>
-                <div class="col-6">
-                  <label
-                    class="form-label"
-                    for="npc-race"
-                  >
-                    Ancestry
-                  </label>
-                  <InputText
-                    id="npc-race"
-                    v-model="characterRace"
-                    fluid
-                  />
-                </div>
-                <div class="col-6">
-                  <label
-                    class="form-label"
-                    for="npc-class"
-                  >
-                    Class
-                  </label>
-                  <InputText
-                    id="npc-class"
-                    v-model="characterClass"
-                    fluid
-                  />
-                </div>
-                <div class="col-12">
-                  <Button
-                    type="submit"
-                    label="Create NPC"
-                  />
-                </div>
-              </form>
-              <ul
-                v-if="characters.length"
-                class="list-group"
-              >
-                <li
-                  v-for="character in characters"
-                  :key="character.id"
-                  class="list-group-item d-flex align-items-center justify-content-between gap-3"
-                >
-                  <div>
-                    <strong>{{ character.name }}</strong>
-                    <span class="d-block small text-body-secondary">
-                      {{ character.is_active ? "Active" : "Inactive" }}
-                    </span>
-                  </div>
-                  <Button
-                    v-if="character.is_active"
-                    icon="mdi mdi-account-off-outline"
-                    text
-                    :aria-label="`Deactivate ${character.name}`"
-                    @click="archive(character)"
-                  />
-                </li>
-              </ul>
-              <p
-                v-else
-                class="text-body-secondary mb-0"
-              >
-                No NPCs have been created.
-              </p>
-            </div>
-          </section>
-        </div>
-      </div>
-    </div>
+          Email address
+        </label>
+        <InputText
+          id="invitation-email"
+          v-model="invitationEmail"
+          type="email"
+          class="flex-grow-1"
+          placeholder="Optional email address"
+        />
+        <Button
+          type="submit"
+          :loading="busy"
+          label="Create invitation"
+        />
+      </form>
+      <Message
+        v-if="invitationLink"
+        severity="success"
+        class="mt-3"
+      >
+        Invitation link:
+        <a :href="invitationLink">{{ invitationLink }}</a>
+      </Message>
+    </section>
+    <section
+      class="border rounded-3 p-3 p-md-4 mb-4"
+      aria-labelledby="party-xp-title"
+    >
+      <h2
+        id="party-xp-title"
+        class="h3"
+      >
+        Party XP
+      </h2>
+      <p class="text-body-secondary">
+        Divide XP among this many players. Include players who do not have a DiceCloud
+        sheet.
+      </p>
+      <form
+        class="d-flex flex-column flex-sm-row align-items-sm-end gap-2"
+        @submit.prevent="saveExperienceRecipientCount"
+      >
+        <label class="d-grid gap-2">
+          <span class="fw-semibold">Players receiving XP</span>
+          <InputNumber
+            v-model="experienceRecipientCount"
+            :min="1"
+            :max="100"
+            :use-grouping="false"
+          />
+        </label>
+        <Button
+          type="submit"
+          :loading="recipientCountBusy"
+          label="Save XP players"
+        />
+      </form>
+    </section>
+    <section aria-labelledby="players-title">
+      <h2
+        id="players-title"
+        class="h3"
+      >
+        Players
+      </h2>
+      <ul class="list-group">
+        <li
+          v-for="character in characters"
+          :key="character.id"
+          class="list-group-item d-flex align-items-center justify-content-between gap-3"
+        >
+          <span>
+            <strong>{{ character.name }}</strong>
+            <span class="d-block small text-body-secondary">
+              {{
+                character.is_connected
+                  ? "DiceCloud connected"
+                  : "Awaiting DiceCloud connection"
+              }}
+            </span>
+          </span>
+          <Button
+            :as="'router-link'"
+            :to="`/c/${campaignId}/characters/${character.id}`"
+            label="Manage link"
+            outlined
+          />
+        </li>
+      </ul>
+    </section>
   </section>
 </template>
 
 <script lang="ts">
 import Button from "primevue/button";
+import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
 import { defineComponent } from "vue";
 import {
-  archiveCharacter,
   createInvitation,
-  createCharacter,
   getCampaign,
-  removeMember,
-  resendInvitation,
-  revokeInvitation,
-  type Campaign,
-  type CampaignInvitation,
-  type CampaignMember,
+  setExperienceRecipientCount,
   type Character,
 } from "@/api";
 import { campaignRefreshRevision } from "@/realtime";
-import { displayIdentifier } from "@/campaigns/display";
-import RelativeTime from "@/components/RelativeTime.vue";
 
 export default defineComponent({
-  components: { Button, InputText, Message, RelativeTime },
+  components: { Button, InputNumber, InputText, Message },
   data() {
     return {
-      campaign: undefined as Campaign | undefined,
-      members: [] as CampaignMember[],
-      invitations: [] as CampaignInvitation[],
       characters: [] as Character[],
       invitationEmail: "",
       invitationLink: "",
-      characterName: "",
-      characterRace: "Human",
-      characterClass: "Fighter",
+      experienceRecipientCount: 1,
       error: "",
       busy: false,
+      recipientCountBusy: false,
     };
   },
   computed: {
@@ -317,63 +184,20 @@ export default defineComponent({
     void this.load();
   },
   methods: {
-    displayIdentifier,
-    showSuccess(message: string): void {
-      this.$toast.add({
-        severity: "success",
-        summary: message,
-        life: 4_000,
-      });
-    },
     async load(): Promise<void> {
       try {
-        const next = await getCampaign(this.campaignId);
-        if (!next.is_game_master) {
+        const campaign = await getCampaign(this.campaignId);
+        if (!campaign.is_game_master) {
           await this.$router.replace(`/c/${this.campaignId}`);
           return;
         }
-        this.campaign = next;
-        this.members = next.members;
-        this.characters = next.characters.filter(
-          (character) => !character.is_player_character,
-        );
-        this.invitations = next.invitations;
+        this.characters = campaign.characters;
+        this.experienceRecipientCount = campaign.experience_recipient_count;
       } catch (exception) {
         this.error =
           exception instanceof Error
             ? exception.message
             : "Unable to load campaign management.";
-      }
-    },
-    async createNpc(): Promise<void> {
-      if (!this.characterName.trim()) {
-        return;
-      }
-      try {
-        await createCharacter(this.campaignId, {
-          name: this.characterName.trim(),
-          race: this.characterRace,
-          character_class: this.characterClass,
-          is_npc: true,
-        });
-        this.characterName = "";
-        await this.load();
-        this.showSuccess("NPC created.");
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to create NPC.";
-      }
-    },
-    async archive(character: Character): Promise<void> {
-      try {
-        await archiveCharacter(this.campaignId, character.id);
-        await this.load();
-        this.showSuccess(`${character.name} archived.`);
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to archive character.";
       }
     },
     async invitePlayer(): Promise<void> {
@@ -386,53 +210,30 @@ export default defineComponent({
         this.invitationEmail = "";
         this.invitationLink = invitation.link ?? "";
         await this.load();
-        this.showSuccess("Invitation created.");
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to invite player.";
-      } finally {
-        this.busy = false;
-      }
-    },
-    async copyInvite(link: string): Promise<void> {
-      try {
-        await navigator.clipboard.writeText(link);
-        this.showSuccess("Invitation link copied.");
-      } catch {
-        this.error = "Unable to copy the invitation link.";
-      }
-    },
-    async resend(invitation: CampaignInvitation): Promise<void> {
-      try {
-        const updated = await resendInvitation(this.campaignId, invitation.id);
-        this.invitationLink = updated.link ?? "";
-        await this.load();
-        this.showSuccess("Invitation link refreshed.");
       } catch (exception) {
         this.error =
           exception instanceof Error
             ? exception.message
-            : "Unable to refresh invitation link.";
+            : "Unable to create invitation.";
+      } finally {
+        this.busy = false;
       }
     },
-    async revoke(invitation: CampaignInvitation): Promise<void> {
+    async saveExperienceRecipientCount(): Promise<void> {
+      this.recipientCountBusy = true;
       try {
-        await revokeInvitation(this.campaignId, invitation.id);
-        await this.load();
-        this.showSuccess("Invitation revoked.");
+        this.error = "";
+        await setExperienceRecipientCount(
+          this.campaignId,
+          this.experienceRecipientCount,
+        );
       } catch (exception) {
         this.error =
-          exception instanceof Error ? exception.message : "Unable to revoke.";
-      }
-    },
-    async deactivate(member: CampaignMember): Promise<void> {
-      try {
-        await removeMember(this.campaignId, member.id);
-        await this.load();
-        this.showSuccess(`${member.username} deactivated.`);
-      } catch (exception) {
-        this.error =
-          exception instanceof Error ? exception.message : "Unable to remove member.";
+          exception instanceof Error
+            ? exception.message
+            : "Unable to save the XP player count.";
+      } finally {
+        this.recipientCountBusy = false;
       }
     },
   },

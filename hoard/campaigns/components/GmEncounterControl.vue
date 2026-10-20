@@ -192,7 +192,11 @@
                     severity="danger"
                     text
                     rounded
-                    :disabled="!hasTrackedHealth(combatant) || busy"
+                    :disabled="
+                      combatant.character_id !== null ||
+                      !hasTrackedHealth(combatant) ||
+                      busy
+                    "
                     :aria-label="`Deal damage to ${combatant.name}`"
                     :title="`Deal damage to ${combatant.name}`"
                     @click="openHealthDialog(combatant, 'damage')"
@@ -203,7 +207,11 @@
                     severity="success"
                     text
                     rounded
-                    :disabled="!hasTrackedHealth(combatant) || busy"
+                    :disabled="
+                      combatant.character_id !== null ||
+                      !hasTrackedHealth(combatant) ||
+                      busy
+                    "
                     :aria-label="`Heal ${combatant.name}`"
                     :title="`Heal ${combatant.name}`"
                     @click="openHealthDialog(combatant, 'healing')"
@@ -504,7 +512,6 @@ import {
   addCharacterToEncounter,
   addEncounterCombatant,
   endEncounter,
-  postHealth,
   removeEncounterCombatant,
   reorderEncounterCombatants,
   setCurrentEncounterCombatant,
@@ -702,15 +709,7 @@ export default defineComponent({
       this.error = "";
 
       try {
-        if (combatant.character_id !== null) {
-          const direction = this.healthMode === "damage" ? -1 : 1;
-          await postHealth(this.contextId, {
-            character_id: combatant.character_id,
-            reason: this.healthMode,
-            current_hp_delta: direction * this.healthAmount,
-            description: this.healthNote.trim() || `Combat: ${combatant.name}`,
-          });
-        } else {
+        if (combatant.character_id === null) {
           const maximumHp = combatant.max_hp ?? combatant.current_hp;
           const nextHp =
             this.healthMode === "damage"

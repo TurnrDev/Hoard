@@ -72,10 +72,6 @@ def accept_invitation(token: str, user) -> CampaignContext:
         Character.objects.create(
             campaign=invitation.campaign,
             context=context,
-            kind=Character.Kind.PC,
-            name=user.get_username(),
-            race="",
-            character_class="",
             is_active=False,
         )
         invitation.accepted_at = timezone.now()

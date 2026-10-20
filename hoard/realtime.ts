@@ -45,7 +45,6 @@ const queryOperations = new Set([
   "campaign.invites.list",
   "characters.list",
   "characters.get",
-  "transactions.list",
 ]);
 const pendingRequests = new Map<
   string,

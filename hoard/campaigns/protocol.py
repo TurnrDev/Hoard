@@ -104,7 +104,6 @@ QUERY_OPERATIONS = frozenset(
         "campaign.invites.list",
         "characters.list",
         "characters.get",
-        "transactions.list",
         "user.contexts.list",
         "invite.inspect",
     }
@@ -113,6 +112,7 @@ QUERY_OPERATIONS = frozenset(
 COMMAND_OPERATIONS = frozenset(
     {
         "campaign.calendar.adjust",
+        "campaign.experience.recipients.set",
         "campaign.members.deactivate",
         "campaign.invites.create",
         "campaign.invites.resend",
@@ -129,16 +129,10 @@ COMMAND_OPERATIONS = frozenset(
         "campaign.encounter.initiative.roll",
         "campaign.encounter.initiative.tie.choose",
         "campaign.encounter.turn.end",
-        "characters.create",
-        "characters.update",
-        "characters.portrait.remove",
-        "characters.archive",
-        "characters.health.post",
-        "characters.rest",
-        "money.transfers.create",
-        "money.exchanges.create",
+        "characters.dicecloud.link",
+        "characters.dicecloud.unlink",
+        "characters.active.set",
         "experience.shared_awards.create",
-        "transactions.reverse",
         "invite.accept",
         "invite.register_and_accept",
     }
@@ -150,17 +144,16 @@ def operation_definitions() -> dict[str, OperationDefinition]:
     from .payloads import (
         CalendarAdjustmentCommand,
         CampaignCalendarData,
-        CharacterCreateCommand,
-        CharacterHealthCommand,
+        CharacterActiveCommand,
         CharacterIdentifierCommand,
-        CharacterRestCommand,
-        CharacterUpdateCommand,
+        DiceCloudLinkCommand,
         EncounterCharacterAddCommand,
         EncounterCombatantAddCommand,
         EncounterCombatantIdentifierCommand,
         EncounterCombatantReorderCommand,
         EncounterCombatantUpdateCommand,
         EncounterCurrentCombatantCommand,
+        ExperienceRecipientCountCommand,
         InitiativeTieChoiceCommand,
         InvitationCreateCommand,
         InvitationIdentifierCommand,
@@ -190,6 +183,11 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         payload_model=CalendarAdjustmentCommand,
         result_model=CampaignCalendarData,
     )
+    definitions["campaign.experience.recipients.set"] = OperationDefinition(
+        name="campaign.experience.recipients.set",
+        kind=OperationKind.COMMAND,
+        payload_model=ExperienceRecipientCountCommand,
+    )
     for name in ("campaign.encounter.start", "campaign.encounter.end"):
         definitions[name] = OperationDefinition(
             name=name,
@@ -218,35 +216,20 @@ def operation_definitions() -> dict[str, OperationDefinition]:
         kind=OperationKind.COMMAND,
         payload_model=MemberDeactivationCommand,
     )
-    definitions["characters.create"] = OperationDefinition(
-        name="characters.create",
+    definitions["characters.dicecloud.link"] = OperationDefinition(
+        name="characters.dicecloud.link",
         kind=OperationKind.COMMAND,
-        payload_model=CharacterCreateCommand,
+        payload_model=DiceCloudLinkCommand,
     )
-    definitions["characters.update"] = OperationDefinition(
-        name="characters.update",
-        kind=OperationKind.COMMAND,
-        payload_model=CharacterUpdateCommand,
-    )
-    definitions["characters.health.post"] = OperationDefinition(
-        name="characters.health.post",
-        kind=OperationKind.COMMAND,
-        payload_model=CharacterHealthCommand,
-    )
-    definitions["characters.rest"] = OperationDefinition(
-        name="characters.rest",
-        kind=OperationKind.COMMAND,
-        payload_model=CharacterRestCommand,
-    )
-    definitions["characters.portrait.remove"] = OperationDefinition(
-        name="characters.portrait.remove",
+    definitions["characters.dicecloud.unlink"] = OperationDefinition(
+        name="characters.dicecloud.unlink",
         kind=OperationKind.COMMAND,
         payload_model=CharacterIdentifierCommand,
     )
-    definitions["characters.archive"] = OperationDefinition(
-        name="characters.archive",
+    definitions["characters.active.set"] = OperationDefinition(
+        name="characters.active.set",
         kind=OperationKind.COMMAND,
-        payload_model=CharacterIdentifierCommand,
+        payload_model=CharacterActiveCommand,
     )
     definitions["campaign.invites.create"] = OperationDefinition(
         name="campaign.invites.create",

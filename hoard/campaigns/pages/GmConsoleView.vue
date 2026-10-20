@@ -81,24 +81,13 @@
             Award and distribute
           </h2>
         </header>
-        <div class="row g-4">
-          <section class="col-12 col-xl-6">
-            <GmSharedXpForm
-              :context-id="contextId"
-              :characters="characters"
-              :level="campaign.level"
-              :shared-experience="campaign.shared_experience"
-              @completed="completed"
-            />
-          </section>
-          <section class="col-12 col-xl-6">
-            <GmCoinForm
-              :context-id="contextId"
-              :characters="characters"
-              @completed="completed"
-            />
-          </section>
-        </div>
+        <GmSharedXpForm
+          :context-id="contextId"
+          :recipient-count="campaign.experience_recipient_count"
+          :level="campaign.level"
+          :shared-experience="campaign.shared_experience"
+          @completed="completed"
+        />
       </section>
     </template>
 
@@ -117,7 +106,6 @@ import { defineComponent } from "vue";
 import { formatCoinPouch } from "@/campaigns/display";
 import { formatGoldValue } from "@/campaigns/money";
 import GmCalendarCard from "@/campaigns/components/GmCalendarCard.vue";
-import GmCoinForm from "@/campaigns/components/GmCoinForm.vue";
 import GmEncounterControl from "@/campaigns/components/GmEncounterControl.vue";
 import GmSharedXpForm from "@/campaigns/components/GmSharedXpForm.vue";
 import { getCampaign, type Campaign, type Character } from "@/api";
@@ -126,7 +114,6 @@ import { campaignRefreshRevision } from "@/realtime";
 export default defineComponent({
   components: {
     GmCalendarCard,
-    GmCoinForm,
     GmEncounterControl,
     GmSharedXpForm,
     Message,
@@ -145,7 +132,7 @@ export default defineComponent({
     },
     activePcCount(): number {
       return this.characters.filter(
-        (character) => character.is_active && character.is_player_character,
+        (character) => character.is_active && character.is_connected,
       ).length;
     },
     campaignRefresh(): number {

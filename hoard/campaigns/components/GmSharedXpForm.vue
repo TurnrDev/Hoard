@@ -15,7 +15,8 @@
         Give shared XP
       </h3>
       <p class="mb-0 text-body-secondary">
-        Level {{ level }} · {{ sharedExperience.toLocaleString() }} shared XP
+        Level {{ level }} · {{ sharedExperience.toLocaleString() }} shared XP ·
+        {{ recipientCount }} configured players
       </p>
     </header>
     <label class="d-grid gap-2 mb-3">
@@ -59,18 +60,18 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
+import { defineComponent } from "vue";
 import Button from "primevue/button";
 import InputNumber from "primevue/inputnumber";
 import Message from "primevue/message";
 import Textarea from "primevue/textarea";
-import { createSharedXpAward, type Character } from "@/api";
+import { createSharedXpAward } from "@/api";
 
 export default defineComponent({
   components: { Button, InputNumber, Message, Textarea },
   props: {
     contextId: { type: Number, required: true },
-    characters: { type: Array as PropType<Character[]>, required: true },
+    recipientCount: { type: Number, required: true },
     level: { type: Number, required: true },
     sharedExperience: { type: Number, required: true },
   },
@@ -80,9 +81,7 @@ export default defineComponent({
   },
   computed: {
     recipients(): number {
-      return this.characters.filter(
-        (item) => item.is_active && item.is_player_character,
-      ).length;
+      return this.recipientCount;
     },
     preview(): number {
       return this.recipients && this.amount > 0
@@ -101,7 +100,7 @@ export default defineComponent({
         this.description = "";
         this.$emit(
           "completed",
-          `Awarded ${this.preview} XP to each of ${this.recipients} active PCs.`,
+          `Awarded ${this.preview} XP to each of ${this.recipients} configured players.`,
         );
       } catch (exception) {
         this.error =

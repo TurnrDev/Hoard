@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from ..models import Campaign, CampaignContext, Character, Encounter, EncounterCombatant
+from .dicecloud import load_creature
 
 
 def require_game_master(context: CampaignContext) -> None:
@@ -45,22 +46,9 @@ def start_encounter(context: CampaignContext) -> Encounter:
         return existing
 
     encounter = Encounter.objects.create(campaign=campaign, started_by=context)
-    characters = campaign.characters.filter(
-        context__isnull=False,
-        is_active=True,
-    ).order_by("name", "pk")
+    characters = campaign.characters.filter(is_active=True).order_by("pk")
     EncounterCombatant.objects.bulk_create(
-        [
-            EncounterCombatant(
-                encounter=encounter,
-                character=character,
-                name=character.name,
-                initiative=0,
-                initiative_modifier=character.initiative_bonus,
-                show_hp_numbers=True,
-            )
-            for character in characters
-        ]
+        [combatant_from_character(encounter, character) for character in characters]
     )
 
     return encounter
@@ -89,13 +77,32 @@ def add_character_combatant(
     if character is None:
         raise ValidationError("Character not found in this campaign.")
 
+    name, initiative_modifier, current_hp, max_hp = character_combat_values(character)
     return EncounterCombatant.objects.create(
         encounter=encounter,
         character=character,
-        name=character.name,
+        name=name,
         initiative=initiative,
-        initiative_modifier=character.initiative_bonus,
-        show_hp_numbers=character.is_player_character,
+        initiative_modifier=initiative_modifier,
+        current_hp=current_hp,
+        max_hp=max_hp,
+        show_hp_numbers=True,
+    )
+
+
+def combatant_from_character(
+    encounter: Encounter, character: Character
+) -> EncounterCombatant:
+    name, initiative_modifier, current_hp, max_hp = character_combat_values(character)
+    return EncounterCombatant(
+        encounter=encounter,
+        character=character,
+        name=name,
+        initiative=0,
+        initiative_modifier=initiative_modifier,
+        current_hp=current_hp,
+        max_hp=max_hp,
+        show_hp_numbers=True,
     )
 
 
@@ -285,7 +292,7 @@ def roll_player_initiative(
     if pending is None:
         raise ValidationError("You have already completed your initiative rolls.")
 
-    modifier = character.initiative_bonus
+    modifier = pending.initiative_modifier
     pending.initiative_roll = roll
     pending.initiative_modifier = modifier
     pending.initiative = roll + modifier
@@ -296,7 +303,7 @@ def roll_player_initiative(
         EncounterCombatant.objects.create(
             encounter=encounter,
             character=character,
-            name=character.name,
+            name=pending.name,
             initiative=0,
             initiative_modifier=modifier,
             show_hp_numbers=True,
@@ -408,7 +415,10 @@ def remove_combatant(context: CampaignContext, combatant_id: int) -> None:
     encounter_combatant(context, combatant_id).delete()
 
 
-def encounter_data(context: CampaignContext) -> dict[str, object] | None:
+def encounter_data(
+    context: CampaignContext,
+    projections: dict[int, dict[str, object] | None] | None = None,
+) -> dict[str, object] | None:
     encounter = Encounter.objects.filter(
         campaign_id=context.campaign_id,
         is_active=True,
@@ -428,6 +438,7 @@ def encounter_data(context: CampaignContext) -> dict[str, object] | None:
                 context=context,
                 combatants=combatants,
                 initiative_position=initiative_position,
+                projection=(projections or {}).get(combatant.character_id),
             )
             for initiative_position, combatant in enumerate(combatants)
         ],
@@ -440,11 +451,16 @@ def combatant_data(
     context: CampaignContext,
     combatants: list[EncounterCombatant],
     initiative_position: int,
+    projection: dict[str, object] | None,
 ) -> dict[str, object]:
     current_hp, max_hp = combatant.health
-    is_player_character = bool(
-        combatant.character_id and combatant.character.is_player_character
-    )
+    if (
+        combatant.character_id
+        and projection
+        and not projection.get("unavailable")
+    ):
+        current_hp, max_hp = profile_hp(projection)
+    is_player_character = bool(combatant.character_id)
     can_read_actual_health = (
         context.kind == CampaignContext.Kind.GM or is_player_character
     )
@@ -492,11 +508,7 @@ def combatant_data(
         "character_id": combatant.character_id,
         "is_player_character": is_player_character,
         "name": combatant.display_name,
-        "portrait_url": (
-            combatant.character.portrait.url
-            if combatant.character_id and combatant.character.portrait
-            else None
-        ),
+        "portrait_url": projection.get("image_url") if projection else None,
         "initiative": combatant.initiative,
         "initiative_position": initiative_position,
         "initiative_roll": combatant.initiative_roll,
@@ -515,3 +527,49 @@ def combatant_data(
         "health_percentage": health_percentage,
         "show_hp_numbers": is_player_character,
     }
+
+
+def profile_name(projection: dict[str, object]) -> str:
+    value = projection.get("name")
+    return value if isinstance(value, str) else "Unnamed character"
+
+
+def character_combat_values(
+    character: Character,
+) -> tuple[str, int, int | None, int | None]:
+    """Return DiceCloud combat data, or the retained local fallback when unlinked."""
+    if character.dicecloud_creature_id:
+        projection = load_creature(character.dicecloud_creature_id)
+        current_hp, max_hp = profile_hp(projection)
+        return (
+            profile_name(projection),
+            profile_initiative(projection),
+            current_hp,
+            max_hp,
+        )
+
+    return (
+        character.name or f"Unlinked player {character.pk}",
+        0,
+        character.current_hp,
+        character.max_hp,
+    )
+
+
+def profile_initiative(projection: dict[str, object]) -> int:
+    stats = projection.get("stats")
+    if not isinstance(stats, dict):
+        return 0
+    value = stats.get("initiative")
+    return value if isinstance(value, int) else 0
+
+
+def profile_hp(projection: dict[str, object]) -> tuple[int | None, int | None]:
+    stats = projection.get("stats")
+    if not isinstance(stats, dict):
+        return None, None
+    current = stats.get("hitPoints")
+    maximum = stats.get("maxHitPoints", current)
+    if not isinstance(current, int):
+        return None, None
+    return current, maximum if isinstance(maximum, int) else current

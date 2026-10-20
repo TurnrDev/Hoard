@@ -34,26 +34,6 @@
         </RouterLink>
       </li>
       <li>
-        <span
-          class="campaign-navigation__item campaign-navigation__item--disabled d-flex align-items-center gap-3"
-          aria-disabled="true"
-          aria-label="Compendium — coming soon"
-          :title="expanded ? undefined : 'Compendium — coming soon'"
-        >
-          <span
-            class="mdi mdi-book-open-variant-outline"
-            aria-hidden="true"
-          />
-          <span v-if="expanded">Compendium</span>
-          <span
-            v-if="expanded"
-            class="campaign-navigation__coming-soon badge rounded-pill border border-secondary text-body-secondary bg-transparent ms-auto"
-          >
-            Coming soon
-          </span>
-        </span>
-      </li>
-      <li>
         <RouterLink
           class="campaign-navigation__item d-flex align-items-center gap-3 text-decoration-none"
           :to="`/c/${contextId}/ledger`"

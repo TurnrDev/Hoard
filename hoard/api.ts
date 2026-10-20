@@ -25,50 +25,32 @@ export type Calculation = {
   }>;
 };
 
-export type CharacterSheet = {
-  level: number;
-  rolled_hit_points: number;
-  hp_ability: string;
-  hp_adjustment: number;
-  initiative_adjustment: number;
-  proficiency_bonus_adjustment: number;
-  max_hp: number;
-  hp_calculation: Calculation;
-  current_hp: number;
-  temporary_hp: number;
-  initiative: Calculation;
-  proficiency_bonus: number;
-  proficiency_bonus_calculation: Calculation;
-  jack_of_all_trades: boolean;
-  remarkable_athlete: boolean;
-  abilities: Record<
-    string,
-    {
-      score: number;
-      raw: number;
-      ancestry_bonus: number;
-      background_bonus: number;
-      score_adjustment: number;
-      modifier: number;
-      check_bonus: number;
-      check_formula: Calculation;
-      formula: Calculation;
-    }
-  >;
-  saves: Record<
-    string,
-    { proficiency: string; adjustment: number; bonus: number; formula: Calculation }
-  >;
-  skills: Record<
-    string,
-    {
-      ability: string;
-      proficiency: string;
-      adjustment: number;
-      bonus: number;
-      formula: Calculation;
-    }
-  >;
+export type DiceCloudProfile = {
+  unavailable?: boolean;
+  error?: string;
+  id: string;
+  source_url: string;
+  fetched_at: string;
+  stale: boolean;
+  name: string;
+  image_url: string | null;
+  details: Record<string, string>;
+  stats: Record<string, string | number | null>;
+  abilities: Record<string, string | number | null>;
+  saves: Record<string, string | number | null>;
+  skills: Record<string, string | number | null>;
+  resources: Array<DiceCloudEntry>;
+  equipment: Array<DiceCloudEntry>;
+  spells: Array<DiceCloudEntry>;
+  features: Array<DiceCloudEntry>;
+  currency: Record<string, number | string>;
+};
+
+export type DiceCloudEntry = {
+  name: string;
+  description: string;
+  type: string;
+  value: string | number | null;
 };
 
 export type CampaignSummary = {
@@ -109,14 +91,15 @@ export type Character = {
   context_id: number | null;
   name: string;
   portrait_url: string | null;
-  kind: "pc" | "npc";
   is_player_character: boolean;
   is_active: boolean;
+  is_connected: boolean;
+  dicecloud_creature_id: string | null;
+  current_hp: number | null;
+  max_hp: number | null;
+  profile: DiceCloudProfile | null;
   race: string;
   class: string;
-  experience: number;
-  sheet: CharacterSheet;
-  money: Record<string, number | string>;
 };
 
 export type EncounterCombatant = {
@@ -164,8 +147,23 @@ export type CampaignInvitation = {
   link?: string;
 };
 
+export type PartyExperienceAward = {
+  id: number;
+  amount: number;
+  recipient_count: number;
+  awarded_per_player: number;
+  discarded_amount: number;
+  reason: string;
+  description: string;
+  occurred_at: string;
+  campaign_date: string | null;
+  actor: string | null;
+};
+
 export type Campaign = CampaignSummary & {
+  active_context_id: number;
   shared_experience: number;
+  experience_recipient_count: number;
   level: number;
   eligible_level: number;
   calendar: CampaignCalendar;
@@ -173,46 +171,8 @@ export type Campaign = CampaignSummary & {
   members: CampaignMember[];
   characters: Character[];
   invitations: CampaignInvitation[];
+  party_experience_awards: PartyExperienceAward[];
   encounter: Encounter | null;
-};
-
-export type LedgerEntry = {
-  account_id: number;
-  account_name: string;
-  is_system_account: boolean;
-  amount: number;
-  denomination?: string;
-};
-
-export type LedgerTransaction = {
-  id: number;
-  ledger: string;
-  ledger_label?: string;
-  description: string;
-  occurred_at: string;
-  campaign_date: string | null;
-  entries: LedgerEntry[];
-  reversal_of_id: number | null;
-  is_reversed: boolean;
-  reason?: string;
-  requested_amount?: number;
-  discarded_amount?: number;
-  actor: string | null;
-  changes?: Record<string, { before: unknown; after: unknown }>;
-};
-
-export type MoneyTransferInput = {
-  from_character_id: number | null;
-  to_character_id: number | null;
-  amounts: Record<string, number>;
-  description?: string;
-};
-
-export type MoneyExchangeInput = {
-  character_id: number;
-  given: Record<string, number>;
-  received: Record<string, number>;
-  description?: string;
 };
 
 export type InviteDetails = {
@@ -410,69 +370,34 @@ export function getMembers(contextId: number): Promise<CampaignMember[]> {
   return contextRequest<CampaignMember[]>(contextId, "campaign.members.list");
 }
 
-export function createCharacter(
+export function linkDiceCloudCharacter(
   contextId: number,
-  payload: {
-    name: string;
-    race: string;
-    character_class: string;
-    is_npc?: boolean;
-  },
+  characterId: number,
+  creature: string,
 ): Promise<void> {
-  return contextRequest<void>(contextId, "characters.create", {
-    fields: payload,
+  return contextRequest<void>(contextId, "characters.dicecloud.link", {
+    character_id: characterId,
+    creature,
   });
 }
 
-export function archiveCharacter(
+export function unlinkDiceCloudCharacter(
   contextId: number,
   characterId: number,
 ): Promise<void> {
-  return contextRequest<void>(contextId, "characters.archive", {
+  return contextRequest<void>(contextId, "characters.dicecloud.unlink", {
     character_id: characterId,
   });
 }
 
-export function updateCharacter(
+export function setCharacterActive(
   contextId: number,
   characterId: number,
-  payload: Record<string, unknown>,
+  isActive: boolean,
 ): Promise<void> {
-  const { class: characterClass, ...fields } = payload as {
-    class?: string;
-  } & Record<string, unknown>;
-
-  return contextRequest<void>(contextId, "characters.update", {
+  return contextRequest<void>(contextId, "characters.active.set", {
     character_id: characterId,
-    fields: { ...fields, character_class: characterClass },
-  });
-}
-
-export function postHealth(
-  contextId: number,
-  payload: {
-    character_id: number;
-    reason: "damage" | "healing" | "temporary" | "correction";
-    current_hp_delta?: number;
-    temporary_hp_delta?: number;
-    current_hp?: number;
-    temporary_hp?: number;
-    description?: string;
-  },
-): Promise<void> {
-  return contextRequest<void>(contextId, "characters.health.post", payload);
-}
-
-export function takeRest(
-  contextId: number,
-  characterId: number,
-  kind: "short" | "long",
-  regainedHp = 0,
-): Promise<void> {
-  return contextRequest<void>(contextId, "characters.rest", {
-    character_id: characterId,
-    kind,
-    regained_hp: regainedHp,
+    is_active: isActive,
   });
 }
 
@@ -570,89 +495,19 @@ export function removeEncounterCombatant(
   });
 }
 
-export function uploadCharacterPortrait(
-  contextId: number,
-  characterId: number,
-  file: File,
-): Promise<{ portrait_url: string }> {
-  const body = new FormData();
-  body.append("file", file);
-
-  return request<{ portrait_url: string }>(
-    `/api/uploads/character-portraits/${contextId}/${characterId}/`,
-    { method: "POST", body },
-  );
-}
-
-export function removeCharacterPortrait(
-  contextId: number,
-  characterId: number,
-): Promise<void> {
-  return contextRequest<void>(contextId, "characters.portrait.remove", {
-    character_id: characterId,
-  });
-}
-
-export function createMoneyTransfer(
-  contextId: number,
-  payload: MoneyTransferInput,
-): Promise<LedgerTransaction> {
-  return contextRequest<LedgerTransaction>(
-    contextId,
-    "money.transfers.create",
-    payload,
-  );
-}
-
-export function createMoneyExchange(
-  contextId: number,
-  payload: MoneyExchangeInput,
-): Promise<LedgerTransaction> {
-  return contextRequest<LedgerTransaction>(
-    contextId,
-    "money.exchanges.create",
-    payload,
-  );
-}
-
 export function createSharedXpAward(
   contextId: number,
   payload: { amount: number; description?: string },
-): Promise<LedgerTransaction> {
-  return contextRequest<LedgerTransaction>(
-    contextId,
-    "experience.shared_awards.create",
-    payload,
-  );
-}
-
-export function getTransactions(
-  contextId: number,
-  ledger = "all",
-  page = 1,
-  characterId?: number,
-): Promise<{
-  count: number;
-  page: number;
-  page_size: number;
-  results: LedgerTransaction[];
-}> {
-  const payload = {
-    ledger,
-    page,
-    ...(characterId ? { character_id: characterId } : {}),
-  };
-
-  return contextRequest(contextId, "transactions.list", payload);
-}
-
-export function reverseTransaction(
-  contextId: number,
-  transaction: LedgerTransaction,
 ): Promise<void> {
-  return contextRequest<void>(contextId, "transactions.reverse", {
-    ledger: transaction.ledger,
-    transaction_id: transaction.id,
+  return contextRequest<void>(contextId, "experience.shared_awards.create", payload);
+}
+
+export function setExperienceRecipientCount(
+  contextId: number,
+  experienceRecipientCount: number,
+): Promise<void> {
+  return contextRequest<void>(contextId, "campaign.experience.recipients.set", {
+    experience_recipient_count: experienceRecipientCount,
   });
 }
 

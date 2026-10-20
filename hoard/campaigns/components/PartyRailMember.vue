@@ -6,8 +6,8 @@
     :connected="connected"
     show-presence
     :expanded="expanded"
-    :current-hp="character.sheet.current_hp"
-    :max-hp="character.sheet.max_hp"
+    :current-hp="hitPoints"
+    :max-hp="hitPoints"
     :health-percentage="healthPercentage"
   />
 </template>
@@ -37,13 +37,11 @@ export default defineComponent({
       return this.isCurrentCharacter ? "You" : this.character.name;
     },
     healthPercentage(): number {
-      return Math.max(
-        0,
-        Math.min(
-          100,
-          (this.character.sheet.current_hp / this.character.sheet.max_hp) * 100,
-        ),
-      );
+      return this.hitPoints === null ? 0 : 100;
+    },
+    hitPoints(): number | null {
+      const value = this.character.profile?.stats.hitPoints;
+      return typeof value === "number" ? value : null;
     },
   },
 });

@@ -1,31 +1,18 @@
-from __future__ import annotations
-
 from django.contrib import admin
-from django.forms.models import BaseModelForm
-from django.http import HttpRequest
 
 from .models import (
     Campaign,
     CampaignContext,
     Character,
-    ExperienceAccount,
-    ExperienceEntry,
-    ExperienceTransaction,
-    MoneyAccount,
-    MoneyEntry,
-    MoneyTransaction,
+    Encounter,
+    EncounterCombatant,
+    PartyExperienceAward,
 )
 
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = (
-        "name",
-        "calendar_era_abbreviation",
-        "calendar_year",
-        "calendar_day",
-        "shared_experience",
-    )
+    list_display = ("name", "calendar_era_abbreviation", "calendar_year", "calendar_day", "shared_experience")
     search_fields = ("name",)
 
 
@@ -38,85 +25,11 @@ class CampaignContextAdmin(admin.ModelAdmin):
 
 @admin.register(Character)
 class CharacterAdmin(admin.ModelAdmin):
-    list_display = (
-        "name",
-        "campaign",
-        "context",
-        "is_active",
-        "race",
-        "character_class",
-    )
+    list_display = ("context", "campaign", "dicecloud_creature_id", "is_active")
     list_filter = ("campaign", "is_active")
-    search_fields = ("name", "context__user__username")
-
-    def save_model(
-        self, request: HttpRequest, obj: Character, form: BaseModelForm, change: bool
-    ) -> None:
-        activate = obj.is_active and (not change or "is_active" in form.changed_data)
-        if activate:
-            obj.is_active = False
-        super().save_model(request, obj, form, change)
-        if activate:
-            obj.activate()
+    search_fields = ("context__user__username", "dicecloud_creature_id")
 
 
-class ReadOnlyLedgerAdmin(admin.ModelAdmin):
-    list_display = ("id", "campaign", "description", "occurred_at")
-    readonly_fields = ("id", "campaign", "description", "occurred_at")
-
-    def has_add_permission(self, request: HttpRequest) -> bool:
-        return False
-
-    def has_change_permission(
-        self, request: HttpRequest, obj: object | None = None
-    ) -> bool:
-        return False
-
-    def has_delete_permission(
-        self, request: HttpRequest, obj: object | None = None
-    ) -> bool:
-        return False
-
-
-class ReadOnlyAccountAdmin(admin.ModelAdmin):
-    list_display = ("id", "campaign", "character", "is_system")
-    readonly_fields = ("id", "campaign", "character", "is_system")
-
-    def has_add_permission(self, request: HttpRequest) -> bool:
-        return False
-
-    def has_change_permission(
-        self, request: HttpRequest, obj: object | None = None
-    ) -> bool:
-        return False
-
-    def has_delete_permission(
-        self, request: HttpRequest, obj: object | None = None
-    ) -> bool:
-        return False
-
-
-class ReadOnlyEntryAdmin(admin.ModelAdmin):
-    list_display = ("id", "transaction", "account", "amount")
-    readonly_fields = ("id", "transaction", "account", "amount")
-
-    def has_add_permission(self, request: HttpRequest) -> bool:
-        return False
-
-    def has_change_permission(
-        self, request: HttpRequest, obj: object | None = None
-    ) -> bool:
-        return False
-
-    def has_delete_permission(
-        self, request: HttpRequest, obj: object | None = None
-    ) -> bool:
-        return False
-
-
-admin.site.register(MoneyAccount, ReadOnlyAccountAdmin)
-admin.site.register(ExperienceAccount, ReadOnlyAccountAdmin)
-admin.site.register(MoneyTransaction, ReadOnlyLedgerAdmin)
-admin.site.register(ExperienceTransaction, ReadOnlyLedgerAdmin)
-admin.site.register(MoneyEntry, ReadOnlyEntryAdmin)
-admin.site.register(ExperienceEntry, ReadOnlyEntryAdmin)
+admin.site.register(Encounter)
+admin.site.register(EncounterCombatant)
+admin.site.register(PartyExperienceAward)
