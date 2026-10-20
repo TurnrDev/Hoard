@@ -1,5 +1,9 @@
 # Hoard
 
+<p align="center">
+  <img src="docs/images/hoard-wordmark.png" alt="Hoard" width="600">
+</p>
+
 Hoard is a small campaign companion for shared XP, calendar tracking, DiceCloud
 character sheets, invitations, and campaign administration.
 

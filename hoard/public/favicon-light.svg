@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Hoard</title>
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      #gold-shimmer {
+        display: none;
+      }
+    }
+  </style>
+  <defs>
+    <linearGradient id="hoard-gold" x1="0" y1="300" x2="512" y2="210" gradientUnits="userSpaceOnUse" spreadMethod="repeat">
+      <stop offset="35%" stop-color="#9b6818" />
+      <stop offset="48%" stop-color="#d6a33f" />
+      <stop offset="61%" stop-color="#9b6818" />
+      <animateTransform
+        id="gold-shimmer"
+        attributeName="gradientTransform"
+        attributeType="XML"
+        type="translate"
+        values="717 0;717 0;-205 0;-205 0"
+        keyTimes="0;0.55;0.85;1"
+        dur="4.5s"
+        repeatCount="indefinite"
+      />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#eee6d5" />
+  <path fill="url(#hoard-gold)" stroke="#744c15" stroke-opacity=".6" stroke-width="3" vector-effect="non-scaling-stroke" paint-order="stroke" transform="translate(72.4 41.5) scale(.24)" d="M135 1638v-1490h305v602h649v-602h306v1490h-306v-635h-649v635h-305z" />
+</svg>

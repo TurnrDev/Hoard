@@ -95,7 +95,15 @@ export default defineComponent({
         return undefined;
       }
 
-      return proficiency < 1 ? "text-info" : "text-warning";
+      if (proficiency < 1) {
+        return "proficiency-bonus proficiency-bonus--half";
+      }
+
+      if (proficiency > 1) {
+        return "proficiency-bonus proficiency-bonus--expertise";
+      }
+
+      return "proficiency-bonus";
     },
   },
   methods: {

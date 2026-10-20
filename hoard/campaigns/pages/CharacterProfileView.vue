@@ -784,7 +784,15 @@ export default defineComponent({
         return undefined;
       }
 
-      return value < 1 ? "text-info" : "text-warning";
+      if (value < 1) {
+        return "proficiency-bonus proficiency-bonus--half";
+      }
+
+      if (value > 1) {
+        return "proficiency-bonus proficiency-bonus--expertise";
+      }
+
+      return "proficiency-bonus";
     },
     formatXp(value: number): string {
       return value.toLocaleString();
