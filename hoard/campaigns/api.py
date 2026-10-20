@@ -20,7 +20,7 @@ class Credentials(Schema):
     password: str
 
 
-api = NinjaAPI(title="Hoard API", version="0.1.3", auth=django_auth)
+api = NinjaAPI(title="Hoard API", version="0.2.0", auth=django_auth)
 
 
 def gm_context(context: CampaignContext) -> None:

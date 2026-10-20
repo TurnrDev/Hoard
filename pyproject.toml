@@ -1,6 +1,6 @@
 [project]
 name = "Hoard"
-version = "0.1.3"
+version = "0.2.0"
 description = "A D&D 5e tool for our campaign with specific tools for our homebrew rules. You won't be interested."
 readme = "README.md"
 authors = [
