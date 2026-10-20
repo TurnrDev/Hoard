@@ -7,6 +7,33 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- Read-only public DiceCloud character-sheet links, live sheet projection with a
+  24-hour outage fallback, and a direct link back to each connected sheet.
+- DiceCloud-backed profile summaries for identity, XP progress, currency, combat
+  statistics, abilities, saving throws, skills, and temporary hit points.
+
+### Changed
+
+- Replaced local character sheets with lightweight player-character records that
+  retain campaign context, legacy name and HP fallback values, DiceCloud link, and
+  activity state.
+- Reworked the profile and Party Rail around live DiceCloud data, including
+  MeterGroup HP displays and percentage-only health for hidden enemy HP.
+- Changed XP sharing to campaign-level party XP, with a configurable number of
+  shares so players without a connected sheet can still receive a portion.
+- Derived party currency from active connected DiceCloud sheets rather than local
+  money ledgers.
+- Preserved generic encounter enemies and their local HP controls while making
+  connected player HP read-only.
+
+### Removed
+
+- Local NPC profiles, editable local character-sheet state, portrait uploads,
+  personal money ledgers, individual XP accounts, and local HP/rest mutations.
+- Compendium pages, routes, and supporting data.
+
 ## [0.1.2] - 2026-10-07
 
 ### Changed
