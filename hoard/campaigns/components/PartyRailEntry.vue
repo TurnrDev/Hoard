@@ -38,10 +38,11 @@
         — {{ connected ? "Connected" : "Offline" }}
       </span>
       <span
-        v-if="currentHp !== null && maxHp !== null"
+        v-if="hasDetailedHealth"
         class="d-block small text-body-secondary tabular-nums"
       >
         {{ currentHp }} / {{ maxHp }} HP
+        <template v-if="temporaryHp > 0">· +{{ temporaryHp }} temporary</template>
       </span>
       <span
         v-if="current"
@@ -54,18 +55,37 @@
         Current turn
       </span>
       <HealthBar
-        v-if="healthPercentage !== null"
+        v-if="hasHealthIndicator"
+        :current="currentHp"
+        :maximum="maxHp"
         :percentage="healthPercentage"
-        :label="healthLabel"
+        :label="`${name} health status`"
+        :temporary="temporaryHp"
+        compact
       />
       <slot />
     </div>
     <HealthBar
-      v-else-if="healthPercentage !== null"
+      v-else-if="hasHealthIndicator"
       class="party-rail__compact-health"
+      :current="currentHp"
+      :maximum="maxHp"
       :percentage="healthPercentage"
-      :label="healthLabel"
+      :label="`${name} health status`"
+      :temporary="temporaryHp"
+      compact
     />
+    <span
+      v-if="!expanded && temporaryHp > 0"
+      class="party-rail__temporary-hp small tabular-nums"
+      :aria-label="`${temporaryHp} temporary hit points`"
+    >
+      <span
+        class="mdi mdi-shield-plus-outline"
+        aria-hidden="true"
+      />
+      +{{ temporaryHp }}
+    </span>
   </li>
 </template>
 
@@ -92,20 +112,24 @@ export default defineComponent({
     expanded: { type: Boolean, default: false },
     currentHp: { type: Number as PropType<number | null>, default: null },
     maxHp: { type: Number as PropType<number | null>, default: null },
-    healthPercentage: {
-      type: Number as PropType<number | null>,
-      default: null,
-    },
+    healthPercentage: { type: Number as PropType<number | null>, default: null },
+    temporaryHp: { type: Number, default: 0 },
     current: { type: Boolean, default: false },
   },
   computed: {
-    healthLabel(): string {
-      if (this.currentHp !== null && this.maxHp !== null) {
-        return `${this.name} health: ${this.currentHp} of ${this.maxHp}`;
-      }
-
-      return `${this.name} health bar`;
+    hasDetailedHealth(): boolean {
+      return this.currentHp !== null && this.maxHp !== null;
+    },
+    hasHealthIndicator(): boolean {
+      return this.hasDetailedHealth || this.healthPercentage !== null;
     },
   },
 });
 </script>
+
+<style scoped>
+.party-rail__temporary-hp {
+  grid-column: 1 / -1;
+  color: var(--hoard-health-temporary);
+}
+</style>

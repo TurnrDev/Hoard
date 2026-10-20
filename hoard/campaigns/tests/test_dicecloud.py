@@ -114,6 +114,94 @@ class DiceCloudServiceTests(SimpleTestCase):
         )
         self.assertEqual(profile["currency"]["gp"], 14)
 
+    def test_normalizes_skills_from_dicecloud_metadata(self):
+        payload = self.payload()
+        payload["creatureVariables"] = [
+            {
+                "acrobatics": {
+                    "type": "skill",
+                    "name": "Acrobatics",
+                    "variableName": "acrobatics",
+                    "ability": "intelligence",
+                    "order": 20,
+                    "proficiency": 0.5,
+                    "value": 7,
+                },
+                "athletics": {
+                    "skillType": "skill",
+                    "name": "Athletics",
+                    "variableName": "athletics",
+                    "ability": "strength",
+                    "order": 10,
+                    "proficiency": 1,
+                    "value": 5,
+                },
+                "dexteritySave": {
+                    "type": "skill",
+                    "name": "Dexterity Save",
+                    "variableName": "dexteritySave",
+                    "ability": "dexterity",
+                    "order": 11,
+                    "proficiency": 1,
+                    "value": 8,
+                },
+                "initiative": {
+                    "type": "skill",
+                    "name": "Initiative",
+                    "variableName": "initiative",
+                    "ability": "dexterity",
+                    "order": 9,
+                    "proficiency": 0.5,
+                    "value": 6,
+                },
+                "lightArmor": {
+                    "type": "skill",
+                    "name": "Light Armor",
+                    "variableName": "lightArmor",
+                    "order": 12,
+                    "proficiency": 1,
+                    "value": 3,
+                },
+            }
+        ]
+
+        profile = normalize_creature(self.creature_id, payload)
+
+        self.assertEqual(
+            profile["skills"],
+            [
+                {
+                    "key": "acrobatics",
+                    "name": "Acrobatics",
+                    "ability": "intelligence",
+                    "value": 7,
+                    "proficiency": 0.5,
+                    "order": 20,
+                },
+                {
+                    "key": "athletics",
+                    "name": "Athletics",
+                    "ability": "strength",
+                    "value": 5,
+                    "proficiency": 1.0,
+                    "order": 10,
+                },
+                {
+                    "key": "initiative",
+                    "name": "Initiative",
+                    "ability": "dexterity",
+                    "value": 6,
+                    "proficiency": 0.5,
+                    "order": 9,
+                },
+            ],
+        )
+        self.assertEqual(
+            profile["saves"],
+            {"dexterity": {"value": 8, "proficiency": 1.0}},
+        )
+        self.assertEqual(profile["stats"]["initiativeProficiency"], 0.5)
+
     def test_normalizes_currency_from_nested_inventory_containers(self):
         payload = self.payload()
         payload["creatureVariables"] = [{"gp": {"value": 999}}]

@@ -37,13 +37,27 @@ export type DiceCloudProfile = {
   details: Record<string, string>;
   stats: Record<string, string | number | null>;
   abilities: Record<string, string | number | null>;
-  saves: Record<string, string | number | null>;
-  skills: Record<string, string | number | null>;
+  saves: Record<string, DiceCloudSave>;
+  skills: Array<DiceCloudSkill>;
   resources: Array<DiceCloudEntry>;
   equipment: Array<DiceCloudEntry>;
   spells: Array<DiceCloudEntry>;
   features: Array<DiceCloudEntry>;
   currency: Record<string, number | string>;
+};
+
+export type DiceCloudSkill = {
+  key: string;
+  name: string;
+  ability: string;
+  value: string | number | null;
+  proficiency: number | null;
+  order: number;
+};
+
+export type DiceCloudSave = {
+  value: string | number | null;
+  proficiency: number | null;
 };
 
 export type DiceCloudEntry = {

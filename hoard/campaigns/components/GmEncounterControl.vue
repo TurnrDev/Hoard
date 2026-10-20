@@ -158,8 +158,8 @@
                     {{ combatant.current_hp }} / {{ combatant.max_hp }} HP
                   </span>
                   <HealthBar
-                    :percentage="combatant.health_percentage ?? 0"
-                    :label="`${combatant.name} health: ${combatant.current_hp} of ${combatant.max_hp}`"
+                    :current="combatant.current_hp ?? 0"
+                    :maximum="combatant.max_hp ?? 0"
                   />
                 </template>
                 <span

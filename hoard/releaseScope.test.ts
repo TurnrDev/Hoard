@@ -17,7 +17,9 @@ describe("initial release UI scope", () => {
   });
 
   it("renders DiceCloud data without local sheet controls", () => {
-    expect(profile).toContain("DiceCloud connection");
+    expect(profile).toContain('label: "DiceCloud"');
+    expect(profile).toContain("connectionDialogVisible");
+    expect(profile).toContain("View on DiceCloud");
     expect(profile).toContain("linkDiceCloudCharacter");
     expect(profile).not.toContain("postHealth");
     expect(profile).not.toContain("uploadCharacterPortrait");

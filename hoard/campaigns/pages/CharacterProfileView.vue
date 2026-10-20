@@ -23,19 +23,25 @@
             v-if="character?.profile"
             class="text-body-secondary mb-0"
           >
-            Level {{ profileLevel }}
-            <span aria-hidden="true">·</span>
             {{ character.race || "No race" }}
             <span aria-hidden="true">·</span>
             {{ character.class || "No class" }}
+            <template v-if="character.profile.details.alignment">
+              <span aria-hidden="true">·</span>
+              {{ character.profile.details.alignment }}
+            </template>
+            <template v-if="character.profile.details.gender">
+              <span aria-hidden="true">·</span>
+              {{ character.profile.details.gender }}
+            </template>
           </p>
           <section
             v-if="experienceProgress"
-            class="mt-2"
+            class="xp-progress mt-2"
             aria-label="Party experience progress"
           >
-            <div class="d-flex justify-content-between gap-3 small tabular-nums">
-              <span>Party XP</span>
+            <div class="d-flex justify-content-between gap-2 small tabular-nums">
+              <span>Level {{ profileLevel }} party XP</span>
               <span>
                 {{ formatXp(experienceProgress.current) }} /
                 {{ formatXp(experienceProgress.next) }}
@@ -54,13 +60,20 @@
           </section>
         </div>
       </div>
-      <Button
-        :as="'router-link'"
-        :to="`/c/${campaignId}/characters`"
-        icon="mdi mdi-account-group-outline"
-        label="Party roster"
-        outlined
-      />
+      <div class="d-flex align-items-center gap-2">
+        <Button
+          :as="'router-link'"
+          :to="`/c/${campaignId}/characters`"
+          icon="mdi mdi-account-group-outline"
+          label="Party roster"
+          outlined
+        />
+        <ActionMenu
+          v-if="canManage"
+          label="Character actions"
+          :items="characterActionItems"
+        />
+      </div>
     </header>
 
     <Message
@@ -72,75 +85,50 @@
       {{ error }}
     </Message>
 
-    <section
-      v-if="character && canManage"
-      class="border rounded-3 p-3 p-md-4 mb-4"
-      aria-labelledby="connection-title"
+    <Dialog
+      v-model:visible="connectionDialogVisible"
+      modal
+      :style="{ width: 'min(42rem, calc(100vw - 2rem))' }"
+      :header="
+        character?.is_connected ? 'Replace DiceCloud sheet' : 'Connect DiceCloud sheet'
+      "
     >
-      <h2
-        id="connection-title"
-        class="h3"
-      >
-        DiceCloud connection
-      </h2>
       <p class="text-body-secondary">
         Hoard reads this public sheet live. Character details, hit points, currency, and
         resources cannot be edited here.
       </p>
       <form
-        class="d-flex flex-column flex-md-row gap-2"
+        class="d-grid gap-3"
         @submit.prevent="connect"
       >
         <label
-          class="visually-hidden"
+          class="form-label mb-0"
           for="dicecloud-creature"
         >
-          DiceCloud creature ID, public character URL, or public API URL
+          DiceCloud character
         </label>
         <InputText
           id="dicecloud-creature"
           v-model="creatureInput"
-          class="flex-grow-1"
           placeholder="Creature ID or https://dicecloud.com/character/..."
         />
-        <Button
-          type="submit"
-          :loading="busy"
-          :label="character.is_connected ? 'Replace sheet' : 'Connect sheet'"
-        />
-        <Button
-          v-if="character.is_connected"
-          type="button"
-          severity="danger"
-          outlined
-          :disabled="busy"
-          label="Disconnect"
-          @click="disconnect"
-        />
+        <footer class="d-flex justify-content-end gap-2">
+          <Button
+            type="button"
+            label="Cancel"
+            severity="secondary"
+            outlined
+            :disabled="busy"
+            @click="connectionDialogVisible = false"
+          />
+          <Button
+            type="submit"
+            :loading="busy"
+            :label="character?.is_connected ? 'Replace sheet' : 'Connect sheet'"
+          />
+        </footer>
       </form>
-      <div
-        v-if="
-          character.is_connected ||
-          (character.name && character.current_hp !== null && character.max_hp !== null)
-        "
-        class="form-check mt-3"
-      >
-        <input
-          :id="`character-active-${character.id}`"
-          v-model="isActive"
-          class="form-check-input"
-          type="checkbox"
-          :disabled="busy"
-          @change="saveActive"
-        />
-        <label
-          class="form-check-label"
-          :for="`character-active-${character.id}`"
-        >
-          Active in this campaign
-        </label>
-      </div>
-    </section>
+    </Dialog>
 
     <Message
       v-if="character && !character.is_connected && !canManage"
@@ -191,24 +179,14 @@
         {{ character.profile.details.description }}
       </p>
 
-      <dl class="row mb-4">
-        <template
-          v-for="detail in identityDetails"
-          :key="detail.label"
-        >
-          <dt class="col-sm-2">{{ detail.label }}</dt>
-          <dd class="col-sm-10">{{ detail.value }}</dd>
-        </template>
-      </dl>
-
       <section
-        class="row g-3 mb-4"
+        class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xxl-6 g-3 mb-4"
         aria-label="Combat statistics"
       >
         <div
           v-for="stat in headlineStats"
           :key="stat.key"
-          class="col-6 col-md-4 col-xl"
+          class="col"
         >
           <section
             v-if="stat.key === 'currency'"
@@ -272,38 +250,34 @@
             <template v-if="stat.key === 'hitPoints'">
               <div>{{ stat.summary }}</div>
               <HealthBar
-                v-if="hitPointPercentage !== null"
+                v-if="hitPointValues !== null"
                 class="mt-3"
-                :percentage="hitPointPercentage"
-                :label="`${stat.summary} hit points`"
+                :current="hitPointValues.current"
+                :maximum="hitPointValues.maximum"
+                :temporary="temporaryHitPoints"
               />
+            </template>
+            <template v-else-if="stat.key === 'initiative'">
+              <span class="d-inline-flex align-items-center gap-1">
+                <span
+                  v-if="proficiencyIcon(stat.proficiency)"
+                  :class="[
+                    'mdi',
+                    proficiencyIcon(stat.proficiency),
+                    proficiencyClass(stat.proficiency),
+                  ]"
+                  role="img"
+                  :aria-label="proficiencyLabel(stat.proficiency)"
+                  :title="proficiencyLabel(stat.proficiency)"
+                />
+                <span :class="proficiencyClass(stat.proficiency)">
+                  {{ stat.summary }}
+                </span>
+              </span>
             </template>
             <template v-else>{{ stat.summary }}</template>
           </DiceCloudStatCard>
         </div>
-      </section>
-
-      <section
-        class="mb-4"
-        aria-labelledby="currency-title"
-      >
-        <h2
-          id="currency-title"
-          class="h3"
-        >
-          Currency
-        </h2>
-        <dl class="row border rounded-3 p-3 mx-0 mb-0">
-          <template
-            v-for="denomination in currencyRows"
-            :key="denomination.label"
-          >
-            <dt class="col-6 col-md-2">{{ denomination.label }}</dt>
-            <dd class="col-6 col-md-2 text-end tabular-nums">
-              {{ denomination.value }}
-            </dd>
-          </template>
-        </dl>
       </section>
 
       <section
@@ -338,64 +312,87 @@
       </section>
 
       <section
-        v-for="section in detailSections"
-        :key="section.id"
+        v-if="skillColumns.length"
         class="mb-4"
-        :aria-labelledby="`${section.id}-title`"
+        aria-labelledby="skills-title"
       >
-        <h2
-          :id="`${section.id}-title`"
-          class="h3"
-        >
-          {{ section.title }}
-        </h2>
-        <ul class="list-group">
-          <li
-            v-for="entry in section.entries"
-            :key="`${entry.type}-${entry.name}`"
-            class="list-group-item"
+        <header class="mb-3">
+          <h2
+            id="skills-title"
+            class="h3 mb-1"
           >
-            <div class="d-flex justify-content-between gap-3">
-              <strong>{{ entry.name }}</strong>
-              <span
-                v-if="entry.value !== null"
-                class="tabular-nums"
-              >
-                {{ entry.value }}
-              </span>
-            </div>
-            <p
-              v-if="entry.description"
-              class="mb-0 mt-1 text-body-secondary"
+            Skills
+          </h2>
+          <p class="small text-body-secondary mb-0">
+            Bonuses are grouped by the ability used for each check.
+          </p>
+        </header>
+        <div class="border rounded-3 p-2">
+          <div class="row g-0">
+            <div
+              v-for="(column, columnIndex) in skillColumns"
+              :key="columnIndex"
+              class="col-12 col-md-6"
             >
-              {{ entry.description }}
-            </p>
-          </li>
-        </ul>
+              <section
+                class="h-100"
+                :class="columnIndex === 0 ? 'pe-md-2' : 'ps-md-2 border-md-start'"
+              >
+                <div
+                  v-for="(group, groupIndex) in column"
+                  :key="group.ability"
+                  :class="{ 'mt-4': groupIndex > 0 }"
+                >
+                  <h3 class="h6 text-uppercase text-body-secondary mb-1">
+                    {{ group.label }}
+                  </h3>
+                  <ul class="list-group list-group-flush">
+                    <li
+                      v-for="skill in group.skills"
+                      :key="skill.key"
+                      class="list-group-item bg-transparent px-0 py-2 d-flex align-items-center justify-content-between gap-3"
+                    >
+                      <span>{{ skill.name }}</span>
+                      <span
+                        class="d-inline-flex flex-shrink-0 align-items-center gap-1 tabular-nums"
+                      >
+                        <span
+                          v-if="proficiencyIcon(skill.proficiency)"
+                          :class="[
+                            'mdi',
+                            proficiencyIcon(skill.proficiency),
+                            proficiencyClass(skill.proficiency),
+                          ]"
+                          role="img"
+                          :aria-label="proficiencyLabel(skill.proficiency)"
+                          :title="proficiencyLabel(skill.proficiency)"
+                        />
+                        <strong :class="proficiencyClass(skill.proficiency)">
+                          {{ signedValue(skill.value) }}
+                        </strong>
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
       </section>
-
-      <p class="small text-body-secondary mt-4 mb-0">
-        Source fetched {{ formattedFetchTime }}.
-        <a
-          :href="character.profile.source_url"
-          target="_blank"
-          rel="noreferrer"
-        >
-          View public DiceCloud data
-        </a>
-        .
-      </p>
     </template>
   </section>
 </template>
 
 <script lang="ts">
 import Button from "primevue/button";
+import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
 import ProgressBar from "primevue/progressbar";
+import type { MenuItem } from "primevue/menuitem";
 import { defineComponent } from "vue";
 import AbilityCard from "@/campaigns/components/AbilityCard.vue";
+import ActionMenu from "@/campaigns/components/ActionMenu.vue";
 import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
 import DiceCloudStatCard from "@/campaigns/components/DiceCloudStatCard.vue";
 import HealthBar from "@/campaigns/components/HealthBar.vue";
@@ -412,16 +409,19 @@ import {
   unlinkDiceCloudCharacter,
   type Campaign,
   type Character,
-  type DiceCloudEntry,
+  type DiceCloudSave,
+  type DiceCloudSkill,
 } from "@/api";
 import { campaignRefreshRevision } from "@/realtime";
 
 export default defineComponent({
   components: {
+    ActionMenu,
     AbilityCard,
     Button,
     CharacterAvatar,
     DiceCloudStatCard,
+    Dialog,
     HealthBar,
     InputText,
     Message,
@@ -433,6 +433,7 @@ export default defineComponent({
       character: undefined as Character | undefined,
       creatureInput: "",
       isActive: false,
+      connectionDialogVisible: false,
       moneyValueVisible: readCoinDisplayMode() === "value",
       busy: false,
       error: "",
@@ -451,10 +452,63 @@ export default defineComponent({
         this.character?.context_id === this.campaign?.active_context_id,
       );
     },
+    characterActionItems(): MenuItem[] {
+      if (!this.character) {
+        return [];
+      }
+
+      const diceCloudItems: MenuItem[] = [
+        {
+          label: this.character.is_connected ? "Replace sheet" : "Connect sheet",
+          icon: "mdi mdi-link-variant",
+          command: () => this.openConnectionDialog(),
+        },
+      ];
+
+      if (this.character.is_connected) {
+        diceCloudItems.push({
+          label: "View on DiceCloud",
+          icon: "mdi mdi-open-in-new",
+          url: this.dicecloudCharacterUrl,
+          target: "_blank",
+        });
+        diceCloudItems.push({
+          label: this.isActive ? "Set inactive" : "Set active",
+          icon: this.isActive
+            ? "mdi mdi-account-off-outline"
+            : "mdi mdi-account-check-outline",
+          disabled: this.busy,
+          command: () => void this.toggleActive(),
+        });
+        diceCloudItems.push({
+          separator: true,
+        });
+        diceCloudItems.push({
+          label: "Disconnect",
+          icon: "mdi mdi-link-off",
+          disabled: this.busy,
+          command: () => void this.disconnect(),
+        });
+      }
+
+      return [
+        {
+          label: "DiceCloud",
+          icon: "mdi mdi-dice-d20-outline",
+          items: diceCloudItems,
+        },
+      ];
+    },
+    dicecloudCharacterUrl(): string {
+      const creatureId = this.character?.dicecloud_creature_id;
+
+      return creatureId ? `https://dicecloud.com/character/${creatureId}` : "";
+    },
     headlineStats(): Array<{
       key: string;
       label: string;
       summary: string;
+      proficiency: number | null;
     }> {
       const stats = this.character?.profile?.stats ?? {};
       const currency = this.character?.profile?.currency ?? {};
@@ -464,21 +518,37 @@ export default defineComponent({
           key: "currency",
           label: "Coin pouch",
           summary: formatCoinPouch(currency),
-        },
-        {
-          key: "armor",
-          label: "Armor class",
-          summary: this.displayValue(stats.armor),
-        },
-        {
-          key: "initiative",
-          label: "Initiative bonus",
-          summary: this.signedValue(stats.initiative),
+          proficiency: null,
         },
         {
           key: "hitPoints",
           label: "Hit points",
           summary: this.hitPointSummary,
+          proficiency: null,
+        },
+        {
+          key: "armor",
+          label: "Armor class",
+          summary: this.displayValue(stats.armor),
+          proficiency: null,
+        },
+        {
+          key: "initiative",
+          label: "Initiative bonus",
+          summary: this.signedValue(stats.initiative),
+          proficiency: this.numberValue(stats.initiativeProficiency),
+        },
+        {
+          key: "proficiency",
+          label: "Proficiency bonus",
+          summary: this.signedValue(stats.proficiencyBonus),
+          proficiency: null,
+        },
+        {
+          key: "movement",
+          label: "Movement speed",
+          summary: this.displayValue(stats.movementSpeed ?? stats.speed),
+          proficiency: null,
         },
       ];
     },
@@ -486,6 +556,11 @@ export default defineComponent({
       const stats = this.character?.profile?.stats ?? {};
       const current = this.displayValue(stats.hitPoints);
       const maximum = this.displayValue(stats.maxHitPoints ?? stats.hitPoints);
+      const temporary = this.temporaryHitPoints;
+
+      if (temporary > 0) {
+        return `${current} / ${maximum} + ${temporary} temporary`;
+      }
 
       return `${current} / ${maximum}`;
     },
@@ -533,7 +608,7 @@ export default defineComponent({
         ariaLabel: `${this.formatXp(current)} of ${this.formatXp(next)} party XP toward level ${normalizedLevel + 1}`,
       };
     },
-    hitPointPercentage(): number | null {
+    hitPointValues(): { current: number; maximum: number } | null {
       const stats = this.character?.profile?.stats ?? {};
       const current = this.numberValue(stats.hitPoints);
       const maximum = this.numberValue(stats.maxHitPoints ?? stats.hitPoints);
@@ -542,7 +617,10 @@ export default defineComponent({
         return null;
       }
 
-      return Math.min(100, Math.max(0, (current / maximum) * 100));
+      return { current, maximum };
+    },
+    temporaryHitPoints(): number {
+      return Math.max(0, this.numberValue(this.character?.profile?.stats.tempHP) ?? 0);
     },
     currencyGoldValue(): string | number {
       return this.character?.profile?.currency.gold_value ?? 0;
@@ -552,7 +630,7 @@ export default defineComponent({
       label: string;
       abbreviation: string;
       score: string | number | null;
-      save: string | number | null;
+      save: DiceCloudSave | null;
     }> {
       const profile = this.character?.profile;
       const abilityDefinitions = [
@@ -570,46 +648,57 @@ export default defineComponent({
         save: profile?.saves[ability.key] ?? null,
       }));
     },
-    identityDetails(): Array<{ label: string; value: string }> {
-      const details = this.character?.profile?.details ?? {};
+    skillColumns(): Array<
+      Array<{ ability: string; label: string; skills: DiceCloudSkill[] }>
+    > {
+      const skills = this.character?.profile?.skills ?? [];
+      const abilityOrder = [
+        "strength",
+        "dexterity",
+        "constitution",
+        "intelligence",
+        "wisdom",
+        "charisma",
+      ];
+      const groupedSkills = new Map<string, DiceCloudSkill[]>();
 
-      return [
-        { label: "Race", value: details.race ?? "" },
-        { label: "Class", value: details.class ?? "" },
-        { label: "Alignment", value: details.alignment ?? "" },
-        { label: "Gender", value: details.gender ?? "" },
-      ].filter((detail) => Boolean(detail.value));
-    },
-    detailSections(): Array<{ id: string; title: string; entries: DiceCloudEntry[] }> {
-      const profile = this.character?.profile;
+      for (const skill of skills) {
+        const ability = skill.ability || "other";
+        const existingSkills = groupedSkills.get(ability) ?? [];
 
-      if (!profile) {
-        return [];
+        existingSkills.push(skill);
+        groupedSkills.set(ability, existingSkills);
       }
 
-      return [
-        {
-          id: "saves",
-          title: "Saving throws",
-          entries: this.statEntries(profile.saves),
-        },
-        { id: "skills", title: "Skills", entries: this.statEntries(profile.skills) },
-        { id: "resources", title: "Resources", entries: profile.resources },
-        { id: "equipment", title: "Equipment", entries: profile.equipment },
-        { id: "spells", title: "Spells", entries: profile.spells },
-        { id: "features", title: "Features", entries: profile.features },
-      ].filter((section) => section.entries.length > 0);
-    },
-    currencyRows(): Array<{ label: string; value: number | string }> {
-      const currency = this.character?.profile?.currency ?? {};
+      const groups = Array.from(groupedSkills.entries())
+        .map(([ability, grouped]) => ({
+          ability,
+          label: this.formatLabel(ability),
+          skills: [...grouped].sort((left, right) => left.order - right.order),
+          order: abilityOrder.indexOf(ability),
+          firstSkillOrder: Math.min(...grouped.map((skill) => skill.order)),
+        }))
+        .sort((left, right) => {
+          const leftOrder = left.order === -1 ? abilityOrder.length : left.order;
+          const rightOrder = right.order === -1 ? abilityOrder.length : right.order;
 
-      return [
-        { label: "CP", value: currency.cp ?? 0 },
-        { label: "SP", value: currency.sp ?? 0 },
-        { label: "EP", value: currency.ep ?? 0 },
-        { label: "GP", value: currency.gp ?? 0 },
-        { label: "PP", value: currency.pp ?? 0 },
-      ];
+          if (leftOrder !== rightOrder) {
+            return leftOrder - rightOrder;
+          }
+
+          return left.firstSkillOrder - right.firstSkillOrder;
+        })
+        .map((group) => ({
+          ability: group.ability,
+          label: group.label,
+          skills: group.skills,
+        }));
+
+      const splitIndex = Math.ceil(groups.length / 2);
+
+      return [groups.slice(0, splitIndex), groups.slice(splitIndex)].filter(
+        (column) => column.length,
+      );
     },
     formattedFetchTime(): string {
       return this.character?.profile?.fetched_at
@@ -632,14 +721,6 @@ export default defineComponent({
     void this.load();
   },
   methods: {
-    statEntries(values: Record<string, string | number | null>): DiceCloudEntry[] {
-      return Object.entries(values).map(([name, value]) => ({
-        name: this.formatLabel(name),
-        description: "",
-        type: "stat",
-        value,
-      }));
-    },
     formatLabel(value: string): string {
       return value
         .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -648,7 +729,7 @@ export default defineComponent({
     },
     displayValue(value: unknown): string {
       return value === undefined || value === null || value === ""
-        ? "—"
+        ? "Not available from DiceCloud"
         : String(value);
     },
     numberValue(value: unknown): number | null {
@@ -672,6 +753,39 @@ export default defineComponent({
 
       return number >= 0 ? `+${number}` : `−${Math.abs(number)}`;
     },
+    proficiencyIcon(value: number | null): string | null {
+      if (value === null || value <= 0) {
+        return null;
+      }
+
+      if (value < 1) {
+        return "mdi-shield-half-full";
+      }
+
+      return "mdi-shield-check";
+    },
+    proficiencyLabel(value: number | null): string {
+      if (value === null || value <= 0) {
+        return "No proficiency";
+      }
+
+      if (value < 1) {
+        return "Partial proficiency";
+      }
+
+      if (value > 1) {
+        return "Expertise";
+      }
+
+      return "Proficient";
+    },
+    proficiencyClass(value: number | null): string | undefined {
+      if (value === null || value <= 0) {
+        return undefined;
+      }
+
+      return value < 1 ? "text-info" : "text-warning";
+    },
     formatXp(value: number): string {
       return value.toLocaleString();
     },
@@ -679,6 +793,9 @@ export default defineComponent({
     toggleMoneyCard(): void {
       this.moneyValueVisible = !this.moneyValueVisible;
       storeCoinDisplayMode(this.moneyValueVisible ? "value" : "pouch");
+    },
+    openConnectionDialog(): void {
+      this.connectionDialogVisible = true;
     },
     async load(): Promise<void> {
       try {
@@ -711,6 +828,7 @@ export default defineComponent({
           this.character.id,
           this.creatureInput.trim(),
         );
+        this.connectionDialogVisible = false;
         await this.load();
       } catch (exception) {
         this.error =
@@ -758,6 +876,10 @@ export default defineComponent({
         this.busy = false;
       }
     },
+    async toggleActive(): Promise<void> {
+      this.isActive = !this.isActive;
+      await this.saveActive();
+    },
   },
 });
 </script>
@@ -779,6 +901,10 @@ export default defineComponent({
 .money-card-flip-leave-to {
   opacity: 0;
   transform: rotateY(-90deg);
+}
+
+.xp-progress {
+  width: min(22rem, 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {

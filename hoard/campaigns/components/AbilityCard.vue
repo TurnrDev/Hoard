@@ -13,7 +13,21 @@
       </div>
       <div class="col">
         <span class="small text-body-secondary d-block mb-1">Save</span>
-        <strong class="fs-3 lh-1">{{ signed(save) }}</strong>
+        <span class="d-inline-flex align-items-center gap-1">
+          <span
+            v-if="proficiencyIcon"
+            :class="['mdi', proficiencyIcon, proficiencyClass]"
+            role="img"
+            :aria-label="proficiencyLabel"
+            :title="proficiencyLabel"
+          />
+          <strong
+            class="fs-3 lh-1"
+            :class="proficiencyClass"
+          >
+            {{ signed(save?.value ?? null) }}
+          </strong>
+        </span>
       </div>
     </div>
   </article>
@@ -21,6 +35,7 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
+import type { DiceCloudSave } from "@/api";
 
 type DiceCloudValue = string | number | null;
 
@@ -33,7 +48,7 @@ export default defineComponent({
       default: null,
     },
     save: {
-      type: [String, Number] as PropType<DiceCloudValue>,
+      type: Object as PropType<DiceCloudSave | null>,
       default: null,
     },
   },
@@ -46,6 +61,41 @@ export default defineComponent({
       }
 
       return this.signed(Math.floor((score - 10) / 2));
+    },
+    proficiencyIcon(): string | null {
+      const proficiency = this.save?.proficiency;
+
+      if (proficiency === null || proficiency === undefined || proficiency <= 0) {
+        return null;
+      }
+
+      return proficiency < 1 ? "mdi-shield-half-full" : "mdi-shield-check";
+    },
+    proficiencyLabel(): string {
+      const proficiency = this.save?.proficiency;
+
+      if (proficiency === null || proficiency === undefined || proficiency <= 0) {
+        return "No proficiency";
+      }
+
+      if (proficiency < 1) {
+        return "Partial proficiency";
+      }
+
+      if (proficiency > 1) {
+        return "Expertise";
+      }
+
+      return "Proficient";
+    },
+    proficiencyClass(): string | undefined {
+      const proficiency = this.save?.proficiency;
+
+      if (proficiency === null || proficiency === undefined || proficiency <= 0) {
+        return undefined;
+      }
+
+      return proficiency < 1 ? "text-info" : "text-warning";
     },
   },
   methods: {

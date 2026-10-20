@@ -21,7 +21,7 @@ CHARACTER_URL_PATTERN = re.compile(
     r"^https://dicecloud\.com/character/(?P<id>[A-Za-z0-9]{8,80})(?:/[^/?#]+)?/?$"
 )
 CACHE_TTL_SECONDS = int(timedelta(hours=24).total_seconds())
-CACHE_KEY_VERSION = "v5"
+CACHE_KEY_VERSION = "v8"
 REQUEST_TIMEOUT_SECONDS = 10
 ABILITY_NAMES = (
     "strength",
@@ -142,6 +142,7 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
         raise DiceCloudError("The DiceCloud creature is unavailable or not public.")
 
     variables = variable_values(payload.get("creatureVariables"))
+    metadata = variable_metadata(payload.get("creatureVariables"))
     properties = payload.get("creatureProperties")
     details = character_details(creature, variables, properties)
     image = creature.get("picture") or creature.get("avatarPicture")
@@ -160,10 +161,10 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
             "gender": text(creature.get("gender"), ""),
             **details,
         },
-        "stats": canonical_stats(variables),
+        "stats": canonical_stats(variables, metadata),
         "abilities": statistic_group(variables, ABILITY_NAMES),
-        "saves": saving_throws(variables),
-        "skills": statistic_group(variables, SKILL_NAMES),
+        "saves": saving_throws(variables, metadata),
+        "skills": skill_entries(payload.get("creatureVariables")),
         "resources": resources(variables, properties),
         "equipment": collection_entries(payload, properties, "item", "equipment"),
         "spells": collection_entries(payload, properties, "spell"),
@@ -421,6 +422,25 @@ def variable_values(values: object) -> dict[str, object]:
     return result
 
 
+def variable_metadata(values: object) -> dict[str, Mapping[str, object]]:
+    """Index DiceCloud variable metadata without retaining the raw response."""
+    if not isinstance(values, list):
+        return {}
+
+    result = {}
+    for group in values:
+        if not isinstance(group, Mapping):
+            continue
+        for fallback_name, variable in group.items():
+            if not isinstance(variable, Mapping):
+                continue
+            name = variable.get("variableName", fallback_name)
+            if isinstance(name, str) and name:
+                result[name] = variable
+
+    return result
+
+
 def add_variable_value(
     result: dict[str, object],
     variable: Mapping[str, object],
@@ -441,7 +461,9 @@ def add_variable_value(
         result["maxHitPoints"] = total
 
 
-def canonical_stats(variables: Mapping[str, object]) -> dict[str, object]:
+def canonical_stats(
+    variables: Mapping[str, object], metadata: Mapping[str, Mapping[str, object]]
+) -> dict[str, object]:
     names = (
         "level",
         "hitPoints",
@@ -449,6 +471,9 @@ def canonical_stats(variables: Mapping[str, object]) -> dict[str, object]:
         "tempHP",
         "armor",
         "initiative",
+        "proficiencyBonus",
+        "speed",
+        "movementSpeed",
         "strength",
         "dexterity",
         "constitution",
@@ -462,7 +487,11 @@ def canonical_stats(variables: Mapping[str, object]) -> dict[str, object]:
         "wisdomSave",
         "charismaSave",
     )
-    return {name: variables.get(name) for name in names if name in variables}
+    result = {name: variables.get(name) for name in names if name in variables}
+    initiative = metadata.get("initiative")
+    if initiative is not None:
+        result["initiativeProficiency"] = decimal_value(initiative.get("proficiency"))
+    return result
 
 
 def statistic_group(
@@ -471,12 +500,63 @@ def statistic_group(
     return {name: display_value(variables.get(name)) for name in names if name in variables}
 
 
-def saving_throws(variables: Mapping[str, object]) -> dict[str, int | str | None]:
+def skill_entries(values: object) -> list[dict[str, int | float | str | None]]:
+    """Project each DiceCloud skill with its declared ability and display metadata."""
+    if not isinstance(values, list):
+        return []
+
+    entries = []
+    seen = set()
+    for group in values:
+        if not isinstance(group, Mapping):
+            continue
+        for fallback_name, variable in group.items():
+            if not isinstance(variable, Mapping):
+                continue
+            if text(variable.get("skillType"), "") != "skill" and text(
+                variable.get("type"), ""
+            ) != "skill":
+                continue
+
+            key = text(variable.get("variableName"), text(fallback_name, ""))
+            name = text(variable.get("name"), key)
+            ability = text(variable.get("ability"), "")
+            if (
+                not key
+                or key in seen
+                or key.lower().endswith("save")
+                or name.lower().endswith(" save")
+                or not ability
+            ):
+                continue
+            seen.add(key)
+            value = variable.get("value", variable.get("total"))
+            entries.append(
+                {
+                    "key": key,
+                    "name": name,
+                    "ability": ability,
+                    "value": display_value(value),
+                    "proficiency": decimal_value(variable.get("proficiency")),
+                    "order": integer(variable.get("order")),
+                }
+            )
+
+    return entries
+
+
+def saving_throws(
+    variables: Mapping[str, object], metadata: Mapping[str, Mapping[str, object]]
+) -> dict[str, dict[str, int | float | str | None]]:
     result = {}
     for ability in ABILITY_NAMES:
         variable_name = f"{ability}Save"
         if variable_name in variables:
-            result[ability] = display_value(variables[variable_name])
+            variable = metadata.get(variable_name, {})
+            result[ability] = {
+                "value": display_value(variables[variable_name]),
+                "proficiency": decimal_value(variable.get("proficiency")),
+            }
     return result
 
 
@@ -732,6 +812,15 @@ def integer(value: object) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def decimal_value(value: object) -> int | float | None:
+    if not isinstance(value, (int, float, str)):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def text(value: object, default: str) -> str:
