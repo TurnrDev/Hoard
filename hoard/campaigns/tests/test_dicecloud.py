@@ -10,6 +10,7 @@ from hoard.campaigns.services.dicecloud import (
     fetch_and_normalize,
     load_creature,
     normalize_creature,
+    projection_cache_key,
 )
 
 
@@ -61,6 +62,39 @@ class DiceCloudServiceTests(SimpleTestCase):
         self.assertEqual(profile["currency"]["gp"], 14)
         self.assertFalse(profile["stale"])
 
+    def test_normalizes_race_and_class_from_creature_properties(self):
+        payload = self.payload()
+        payload["creatureProperties"] = [
+            {"_id": "race-slot", "name": "Race", "type": "propertySlot"},
+            {
+                "_id": "sea-folk",
+                "name": "Sea Folk",
+                "parentId": "race-slot",
+                "type": "feature",
+            },
+            {
+                "_id": "ranger",
+                "name": "Ranger",
+                "type": "class",
+                "subclassName": "Hunter",
+            },
+            {"name": "Level 1", "type": "classLevel", "parentId": "ranger"},
+            {"name": "Level 2", "type": "classLevel", "parentId": "ranger"},
+            {"name": "Level 3", "type": "classLevel", "parentId": "ranger"},
+            {
+                "_id": "bard",
+                "name": "Bard [Multiclass]",
+                "type": "class",
+            },
+            {"name": "Level 1", "type": "classLevel", "parentId": "bard"},
+            {"name": "Level 2", "type": "classLevel", "parentId": "bard"},
+        ]
+
+        profile = normalize_creature(self.creature_id, payload)
+
+        self.assertEqual(profile["details"]["race"], "Sea Folk")
+        self.assertEqual(profile["details"]["class"], "Ranger (Hunter) 3 / Bard 2")
+
     def test_normalizes_grouped_dicecloud_variables(self):
         payload = self.payload()
         payload["creatureVariables"] = [
@@ -79,6 +113,49 @@ class DiceCloudServiceTests(SimpleTestCase):
             {"level": 5, "hitPoints": 31, "maxHitPoints": 44, "armor": 16},
         )
         self.assertEqual(profile["currency"]["gp"], 14)
+
+    def test_normalizes_currency_from_nested_inventory_containers(self):
+        payload = self.payload()
+        payload["creatureVariables"] = [{"gp": {"value": 999}}]
+        payload["creatureProperties"] = [
+            {
+                "_id": "backpack",
+                "name": "Backpack",
+                "type": "container",
+                "contents": [
+                    {
+                        "_id": "gold",
+                        "name": "Gold Pieces",
+                        "type": "item",
+                        "quantity": 14,
+                    },
+                    {
+                        "_id": "pouch",
+                        "name": "Coin pouch",
+                        "type": "container",
+                        "contents": [
+                            {
+                                "_id": "silver",
+                                "name": "Silver Pieces",
+                                "type": "item",
+                                "data": {"quantity": {"value": 7}},
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+
+        profile = normalize_creature(self.creature_id, payload)
+
+        self.assertEqual(profile["currency"], {
+            "cp": 0,
+            "sp": 7,
+            "ep": 0,
+            "gp": 14,
+            "pp": 0,
+            "gold_value": "14.7",
+        })
 
     @patch("hoard.campaigns.services.dicecloud.cache.set")
     @patch("hoard.campaigns.services.dicecloud.requests.get")
@@ -107,7 +184,7 @@ class DiceCloudServiceTests(SimpleTestCase):
             return_value=profile,
         ):
             self.assertFalse(load_creature(self.creature_id)["stale"])
-        cache.set(f"dicecloud:creature:{self.creature_id}", profile, 60)
+        cache.set(projection_cache_key(self.creature_id), profile, 60)
         with patch(
             "hoard.campaigns.services.dicecloud.fetch_and_normalize",
             side_effect=DiceCloudUnavailable("offline"),

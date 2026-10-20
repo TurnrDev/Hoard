@@ -23,10 +23,35 @@
             v-if="character?.profile"
             class="text-body-secondary mb-0"
           >
+            Level {{ profileLevel }}
+            <span aria-hidden="true">·</span>
             {{ character.race || "No race" }}
             <span aria-hidden="true">·</span>
             {{ character.class || "No class" }}
           </p>
+          <section
+            v-if="experienceProgress"
+            class="mt-2"
+            aria-label="Party experience progress"
+          >
+            <div class="d-flex justify-content-between gap-3 small tabular-nums">
+              <span>Party XP</span>
+              <span>
+                {{ formatXp(experienceProgress.current) }} /
+                {{ formatXp(experienceProgress.next) }}
+                XP
+              </span>
+            </div>
+            <ProgressBar
+              class="mt-1"
+              :value="experienceProgress.percentage"
+              :show-value="false"
+              :aria-label="experienceProgress.ariaLabel"
+            />
+            <p class="small text-body-secondary tabular-nums mb-0">
+              {{ formatXp(experienceProgress.remaining) }} XP to level up
+            </p>
+          </section>
         </div>
       </div>
       <Button
@@ -182,13 +207,79 @@
       >
         <div
           v-for="stat in headlineStats"
-          :key="stat.label"
-          class="col-6 col-md-3"
+          :key="stat.key"
+          class="col-6 col-md-4 col-xl"
         >
-          <article class="border rounded-3 h-100 p-3">
-            <p class="small text-body-secondary mb-1">{{ stat.label }}</p>
-            <p class="h3 tabular-nums mb-0">{{ stat.value }}</p>
-          </article>
+          <section
+            v-if="stat.key === 'currency'"
+            class="border rounded-3 p-3 p-md-4 h-100"
+          >
+            <Transition
+              name="money-card-flip"
+              mode="out-in"
+            >
+              <div
+                v-if="!moneyValueVisible"
+                key="coin-pouch"
+              >
+                <header class="d-flex align-items-start justify-content-between gap-2">
+                  <div class="text-uppercase fw-semibold small text-body-secondary">
+                    Coin pouch
+                  </div>
+                  <Button
+                    icon="mdi mdi-rotate-3d-variant"
+                    text
+                    rounded
+                    size="small"
+                    aria-label="Show coin value"
+                    @click="toggleMoneyCard"
+                  />
+                </header>
+                <div class="fs-5 tabular-nums mt-3">
+                  {{ stat.summary }}
+                </div>
+              </div>
+
+              <div
+                v-else
+                key="coin-value"
+              >
+                <header class="d-flex align-items-start justify-content-between gap-2">
+                  <div class="text-uppercase fw-semibold small text-body-secondary">
+                    Coin value
+                  </div>
+                  <Button
+                    icon="mdi mdi-rotate-3d-variant"
+                    text
+                    rounded
+                    size="small"
+                    aria-label="Show coin pouch"
+                    @click="toggleMoneyCard"
+                  />
+                </header>
+                <div class="h4 mt-3 mb-0 tabular-nums">
+                  {{ formatGoldValue(currencyGoldValue) }} ¤
+                </div>
+              </div>
+            </Transition>
+          </section>
+
+          <DiceCloudStatCard
+            v-else
+            :label="stat.label"
+            :summary="stat.summary"
+          >
+            <template v-if="stat.key === 'hitPoints'">
+              <div>{{ stat.summary }}</div>
+              <HealthBar
+                v-if="hitPointPercentage !== null"
+                class="mt-3"
+                :percentage="hitPointPercentage"
+                :label="`${stat.summary} hit points`"
+              />
+            </template>
+            <template v-else>{{ stat.summary }}</template>
+          </DiceCloudStatCard>
         </div>
       </section>
 
@@ -219,36 +310,30 @@
         class="mb-4"
         aria-labelledby="abilities-title"
       >
-        <h2
-          id="abilities-title"
-          class="h3"
-        >
-          Abilities
-        </h2>
-        <div class="table-responsive border rounded-3">
-          <table class="table table-striped mb-0">
-            <caption class="visually-hidden">DiceCloud ability scores</caption>
-            <thead>
-              <tr>
-                <th scope="col">Ability</th>
-                <th
-                  scope="col"
-                  class="text-end"
-                >
-                  Score
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="[name, value] in abilityRows"
-                :key="name"
-              >
-                <th scope="row">{{ formatLabel(name) }}</th>
-                <td class="text-end tabular-nums">{{ displayValue(value) }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <header class="mb-3">
+          <h2
+            id="abilities-title"
+            class="h3 mb-1"
+          >
+            Abilities and saving throws
+          </h2>
+          <p class="small text-body-secondary mb-0">
+            Each card shows the DiceCloud score, derived modifier, and saving throw.
+          </p>
+        </header>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+          <div
+            v-for="ability in abilityCards"
+            :key="ability.key"
+            class="col"
+          >
+            <AbilityCard
+              :label="ability.label"
+              :abbreviation="ability.abbreviation"
+              :score="ability.score"
+              :save="ability.save"
+            />
+          </div>
         </div>
       </section>
 
@@ -308,8 +393,18 @@
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
+import ProgressBar from "primevue/progressbar";
 import { defineComponent } from "vue";
+import AbilityCard from "@/campaigns/components/AbilityCard.vue";
 import CharacterAvatar from "@/campaigns/components/CharacterAvatar.vue";
+import DiceCloudStatCard from "@/campaigns/components/DiceCloudStatCard.vue";
+import HealthBar from "@/campaigns/components/HealthBar.vue";
+import {
+  readCoinDisplayMode,
+  storeCoinDisplayMode,
+} from "@/campaigns/coinDisplayPreference";
+import { formatCoinPouch } from "@/campaigns/display";
+import { formatGoldValue } from "@/campaigns/money";
 import {
   getCampaign,
   linkDiceCloudCharacter,
@@ -322,13 +417,23 @@ import {
 import { campaignRefreshRevision } from "@/realtime";
 
 export default defineComponent({
-  components: { Button, CharacterAvatar, InputText, Message },
+  components: {
+    AbilityCard,
+    Button,
+    CharacterAvatar,
+    DiceCloudStatCard,
+    HealthBar,
+    InputText,
+    Message,
+    ProgressBar,
+  },
   data() {
     return {
       campaign: undefined as Campaign | undefined,
       character: undefined as Character | undefined,
       creatureInput: "",
       isActive: false,
+      moneyValueVisible: readCoinDisplayMode() === "value",
       busy: false,
       error: "",
     };
@@ -346,17 +451,124 @@ export default defineComponent({
         this.character?.context_id === this.campaign?.active_context_id,
       );
     },
-    headlineStats(): Array<{ label: string; value: string }> {
+    headlineStats(): Array<{
+      key: string;
+      label: string;
+      summary: string;
+    }> {
       const stats = this.character?.profile?.stats ?? {};
+      const currency = this.character?.profile?.currency ?? {};
+
       return [
-        { label: "Level", value: this.displayValue(stats.level) },
-        { label: "Armor class", value: this.displayValue(stats.armor) },
-        { label: "Initiative", value: this.displayValue(stats.initiative) },
-        { label: "Hit points", value: this.displayValue(stats.hitPoints) },
+        {
+          key: "currency",
+          label: "Coin pouch",
+          summary: formatCoinPouch(currency),
+        },
+        {
+          key: "armor",
+          label: "Armor class",
+          summary: this.displayValue(stats.armor),
+        },
+        {
+          key: "initiative",
+          label: "Initiative bonus",
+          summary: this.signedValue(stats.initiative),
+        },
+        {
+          key: "hitPoints",
+          label: "Hit points",
+          summary: this.hitPointSummary,
+        },
       ];
     },
-    abilityRows(): Array<[string, string | number | null]> {
-      return Object.entries(this.character?.profile?.abilities ?? {});
+    hitPointSummary(): string {
+      const stats = this.character?.profile?.stats ?? {};
+      const current = this.displayValue(stats.hitPoints);
+      const maximum = this.displayValue(stats.maxHitPoints ?? stats.hitPoints);
+
+      return `${current} / ${maximum}`;
+    },
+    profileLevel(): string {
+      return this.displayValue(this.character?.profile?.stats.level);
+    },
+    experienceProgress(): {
+      current: number;
+      next: number;
+      percentage: number;
+      remaining: number;
+      ariaLabel: string;
+    } | null {
+      const level = this.numberValue(this.character?.profile?.stats.level);
+
+      if (!this.campaign || level === null) {
+        return null;
+      }
+
+      const thresholds = [
+        0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000,
+        120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000,
+      ];
+      const normalizedLevel = Math.max(1, Math.floor(level));
+
+      if (normalizedLevel >= thresholds.length) {
+        return null;
+      }
+
+      const current = this.campaign.shared_experience;
+      const lowerBound = thresholds[normalizedLevel - 1];
+      const next = thresholds[normalizedLevel];
+      const totalForLevel = next - lowerBound;
+      const percentage = Math.min(
+        100,
+        Math.max(0, ((current - lowerBound) / totalForLevel) * 100),
+      );
+      const remaining = Math.max(0, next - current);
+
+      return {
+        current,
+        next,
+        percentage,
+        remaining,
+        ariaLabel: `${this.formatXp(current)} of ${this.formatXp(next)} party XP toward level ${normalizedLevel + 1}`,
+      };
+    },
+    hitPointPercentage(): number | null {
+      const stats = this.character?.profile?.stats ?? {};
+      const current = this.numberValue(stats.hitPoints);
+      const maximum = this.numberValue(stats.maxHitPoints ?? stats.hitPoints);
+
+      if (current === null || maximum === null || maximum <= 0) {
+        return null;
+      }
+
+      return Math.min(100, Math.max(0, (current / maximum) * 100));
+    },
+    currencyGoldValue(): string | number {
+      return this.character?.profile?.currency.gold_value ?? 0;
+    },
+    abilityCards(): Array<{
+      key: string;
+      label: string;
+      abbreviation: string;
+      score: string | number | null;
+      save: string | number | null;
+    }> {
+      const profile = this.character?.profile;
+      const abilityDefinitions = [
+        { key: "strength", label: "Strength", abbreviation: "STR" },
+        { key: "dexterity", label: "Dexterity", abbreviation: "DEX" },
+        { key: "constitution", label: "Constitution", abbreviation: "CON" },
+        { key: "intelligence", label: "Intelligence", abbreviation: "INT" },
+        { key: "wisdom", label: "Wisdom", abbreviation: "WIS" },
+        { key: "charisma", label: "Charisma", abbreviation: "CHA" },
+      ];
+
+      return abilityDefinitions.map((ability) => ({
+        ...ability,
+        score: profile?.abilities[ability.key] ?? null,
+        save: profile?.saves[ability.key] ?? null,
+      }));
     },
     identityDetails(): Array<{ label: string; value: string }> {
       const details = this.character?.profile?.details ?? {};
@@ -439,6 +651,35 @@ export default defineComponent({
         ? "—"
         : String(value);
     },
+    numberValue(value: unknown): number | null {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+
+      if (typeof value === "string" && value.trim() !== "") {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      }
+
+      return null;
+    },
+    signedValue(value: unknown): string {
+      const number = this.numberValue(value);
+
+      if (number === null) {
+        return "—";
+      }
+
+      return number >= 0 ? `+${number}` : `−${Math.abs(number)}`;
+    },
+    formatXp(value: number): string {
+      return value.toLocaleString();
+    },
+    formatGoldValue,
+    toggleMoneyCard(): void {
+      this.moneyValueVisible = !this.moneyValueVisible;
+      storeCoinDisplayMode(this.moneyValueVisible ? "value" : "pouch");
+    },
     async load(): Promise<void> {
       try {
         this.campaign = await getCampaign(this.campaignId);
@@ -520,3 +761,30 @@ export default defineComponent({
   },
 });
 </script>
+
+<style scoped>
+.money-card-flip-enter-active,
+.money-card-flip-leave-active {
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
+  transform-origin: center;
+}
+
+.money-card-flip-enter-from {
+  opacity: 0;
+  transform: rotateY(90deg);
+}
+
+.money-card-flip-leave-to {
+  opacity: 0;
+  transform: rotateY(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .money-card-flip-enter-active,
+  .money-card-flip-leave-active {
+    transition: none;
+  }
+}
+</style>

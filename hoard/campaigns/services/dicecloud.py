@@ -21,6 +21,7 @@ CHARACTER_URL_PATTERN = re.compile(
     r"^https://dicecloud\.com/character/(?P<id>[A-Za-z0-9]{8,80})(?:/[^/?#]+)?/?$"
 )
 CACHE_TTL_SECONDS = int(timedelta(hours=24).total_seconds())
+CACHE_KEY_VERSION = "v5"
 REQUEST_TIMEOUT_SECONDS = 10
 ABILITY_NAMES = (
     "strength",
@@ -78,8 +79,13 @@ def creature_id_from_input(value: str) -> str:
 
 
 def cached_projection(creature_id: str) -> dict[str, object] | None:
-    result = cache.get(f"dicecloud:creature:{creature_id}")
+    result = cache.get(projection_cache_key(creature_id))
     return result if isinstance(result, dict) else None
+
+
+def projection_cache_key(creature_id: str) -> str:
+    """Keep projections from incompatible normalizers out of the fallback cache."""
+    return f"dicecloud:creature:{CACHE_KEY_VERSION}:{creature_id}"
 
 
 def load_creature(creature_id: str) -> dict[str, object]:
@@ -121,7 +127,7 @@ def fetch_and_normalize(creature_id: str) -> dict[str, object]:
         raise DiceCloudUnavailable("DiceCloud is unavailable right now.") from error
 
     projection = normalize_creature(creature_id, payload)
-    cache.set(f"dicecloud:creature:{creature_id}", projection, CACHE_TTL_SECONDS)
+    cache.set(projection_cache_key(creature_id), projection, CACHE_TTL_SECONDS)
     return projection
 
 
@@ -137,6 +143,7 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
 
     variables = variable_values(payload.get("creatureVariables"))
     properties = payload.get("creatureProperties")
+    details = character_details(creature, variables, properties)
     image = creature.get("picture") or creature.get("avatarPicture")
     now = timezone.now().isoformat()
     return {
@@ -151,8 +158,7 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
             "description": text(creature.get("description"), ""),
             "alignment": text(creature.get("alignment"), ""),
             "gender": text(creature.get("gender"), ""),
-            "race": text(creature.get("race"), ""),
-            "class": text(creature.get("class"), ""),
+            **details,
         },
         "stats": canonical_stats(variables),
         "abilities": statistic_group(variables, ABILITY_NAMES),
@@ -162,8 +168,241 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
         "equipment": collection_entries(payload, properties, "item", "equipment"),
         "spells": collection_entries(payload, properties, "spell"),
         "features": collection_entries(payload, properties, "feature", "action"),
-        "currency": currency(variables),
+        "currency": currency(variables, payload, properties),
     }
+
+
+def character_details(
+    creature: Mapping[str, object],
+    variables: Mapping[str, object],
+    properties: object,
+) -> dict[str, str]:
+    """Find identity details that DiceCloud stores as properties rather than fields."""
+    return {
+        "race": identity_detail(
+            creature,
+            variables,
+            properties,
+            field_names=("race", "raceName", "species", "ancestry", "lineage"),
+            property_types=("race", "species", "ancestry", "lineage", "subrace"),
+        ),
+        "class": class_details(creature, variables, properties),
+    }
+
+
+def class_details(
+    creature: Mapping[str, object],
+    variables: Mapping[str, object],
+    properties: object,
+) -> str:
+    """Format DiceCloud class containers as class, subclass, and total level."""
+    property_values = direct_properties(properties)
+    classes = [
+        property_value
+        for property_value in property_values
+        if text(property_value.get("type"), "").lower() == "class"
+    ]
+    if not classes:
+        return identity_detail(
+            creature,
+            variables,
+            properties,
+            field_names=("class", "className", "characterClass"),
+            property_types=("class", "character class", "subclass"),
+        )
+
+    class_entries = []
+    for class_property in classes:
+        name = clean_class_name(text(class_property.get("name"), ""))
+        if not name:
+            continue
+        level = class_level(class_property, property_values, variables)
+        subclass = class_subclass(class_property, property_values)
+        label = f"{name} ({subclass})" if subclass else name
+        class_entries.append((level, label))
+
+    class_entries.sort(key=lambda entry: (-entry[0], entry[1]))
+    return " / ".join(
+        f"{label} {level}" if level else label for level, label in class_entries
+    )
+
+
+def clean_class_name(value: str) -> str:
+    return value.replace("[Multiclass]", "").strip()
+
+
+def class_level(
+    class_property: Mapping[str, object],
+    properties: list[Mapping[str, object]],
+    variables: Mapping[str, object],
+) -> int:
+    for key in ("level", "levels", "classLevel"):
+        level = integer(class_property.get(key))
+        if level:
+            return level
+
+    class_id = class_property.get("_id")
+    if isinstance(class_id, str):
+        level_properties = [
+            property_value
+            for property_value in properties
+            if text(property_value.get("type"), "") == "classLevel"
+            and property_is_descended_from(property_value, class_id, properties)
+        ]
+        if level_properties:
+            maximum_level = max(
+                integer(property_value.get("level"))
+                for property_value in level_properties
+            )
+            return maximum_level or len(level_properties)
+
+    name = clean_class_name(text(class_property.get("name"), ""))
+    variable_name = "".join(character for character in name if character.isalnum())
+    return integer(variables.get(f"{variable_name[:1].lower()}{variable_name[1:]}Level"))
+
+
+def class_subclass(
+    class_property: Mapping[str, object], properties: list[Mapping[str, object]]
+) -> str:
+    for key in ("subclass", "subclassName", "archetype", "archetypeName"):
+        value = text(class_property.get(key), "")
+        if value:
+            return value
+
+    class_id = class_property.get("_id")
+    if not isinstance(class_id, str):
+        return ""
+
+    for property_value in properties:
+        if not property_is_descended_from(property_value, class_id, properties):
+            continue
+        tags = property_tags(property_value)
+        if "subclass" not in tags and "archetype" not in tags:
+            continue
+        value = text(property_value.get("name"), "")
+        if value:
+            return value
+
+    return ""
+
+
+def property_is_descended_from(
+    property_value: Mapping[str, object], ancestor_id: str, properties: list[Mapping[str, object]]
+) -> bool:
+    properties_by_id = {
+        value.get("_id"): value
+        for value in properties
+        if isinstance(value.get("_id"), str)
+    }
+    parent_id = property_parent_id(property_value)
+    while parent_id is not None:
+        if parent_id == ancestor_id:
+            return True
+        parent = properties_by_id.get(parent_id)
+        if parent is None:
+            return False
+        parent_id = property_parent_id(parent)
+    return False
+
+
+def identity_detail(
+    creature: Mapping[str, object],
+    variables: Mapping[str, object],
+    properties: object,
+    *,
+    field_names: tuple[str, ...],
+    property_types: tuple[str, ...],
+) -> str:
+    for source in (creature, variables):
+        for field_name in field_names:
+            value = text(source.get(field_name), "")
+            if value:
+                return value
+
+    values = []
+    property_values = direct_properties(properties)
+    for property_value in property_values:
+        property_type = text(property_value.get("type"), "").lower().replace("_", " ")
+        tags = property_tags(property_value)
+        if property_type not in property_types and not any(
+            tag in property_types for tag in tags
+        ):
+            continue
+        value = text(property_value.get("name"), "")
+        if value and value not in values:
+            values.append(value)
+
+    if values:
+        return " / ".join(values)
+
+    return identity_from_property_parent(property_values, property_types)
+
+
+def direct_properties(properties: object) -> list[Mapping[str, object]]:
+    if not isinstance(properties, list):
+        return []
+    return [value for value in properties if isinstance(value, Mapping)]
+
+
+def property_tags(property_value: Mapping[str, object]) -> tuple[str, ...]:
+    tags = property_value.get("tags")
+    if not isinstance(tags, list):
+        return ()
+    return tuple(
+        tag.strip().lower().replace("_", " ")
+        for tag in tags
+        if isinstance(tag, str) and tag.strip()
+    )
+
+
+def identity_from_property_parent(
+    properties: list[Mapping[str, object]], property_types: tuple[str, ...]
+) -> str:
+    """Resolve identity content nested under a Race or Ancestry folder/slot."""
+    properties_by_id = {
+        property_value.get("_id"): property_value
+        for property_value in properties
+        if isinstance(property_value.get("_id"), str)
+    }
+
+    for property_value in properties:
+        parent = properties_by_id.get(property_parent_id(property_value))
+        if parent is None or not property_matches_identity(parent, property_types):
+            continue
+
+        value = text(property_value.get("name"), "")
+        if value and value.lower() not in property_types:
+            return value
+
+    return ""
+
+
+def property_parent_id(property_value: Mapping[str, object]) -> str | None:
+    parent_id = property_value.get("parentId")
+    if isinstance(parent_id, str):
+        return parent_id
+
+    parent = property_value.get("parent")
+    if isinstance(parent, Mapping):
+        parent_id = parent.get("id")
+        if isinstance(parent_id, str):
+            return parent_id
+
+    return None
+
+
+def property_matches_identity(
+    property_value: Mapping[str, object], property_types: tuple[str, ...]
+) -> bool:
+    property_type = text(property_value.get("type"), "").lower().replace("_", " ")
+    if property_type in property_types:
+        return True
+
+    if any(tag in property_types for tag in property_tags(property_value)):
+        return True
+
+    name = text(property_value.get("name"), "").lower()
+    return name in property_types
 
 
 def variable_values(values: object) -> dict[str, object]:
@@ -332,17 +571,40 @@ def display_value(value: object) -> int | str | None:
     return None
 
 
-def currency(variables: Mapping[str, object]) -> dict[str, int | str]:
+def currency(
+    variables: Mapping[str, object], payload: Mapping[str, object], properties: object
+) -> dict[str, int | str]:
     aliases = {
-        "cp": ("cp", "copper"),
-        "sp": ("sp", "silver"),
-        "ep": ("ep", "electrum"),
-        "gp": ("gp", "gold"),
-        "pp": ("pp", "platinum"),
+        "cp": ("cp", "copper", "copperPiece", "copperPieces", "copperCoin", "copperCoins"),
+        "sp": ("sp", "silver", "silverPiece", "silverPieces", "silverCoin", "silverCoins"),
+        "ep": (
+            "ep",
+            "electrum",
+            "electrumPiece",
+            "electrumPieces",
+            "electrumCoin",
+            "electrumCoins",
+        ),
+        "gp": ("gp", "gold", "goldPiece", "goldPieces", "goldCoin", "goldCoins"),
+        "pp": (
+            "pp",
+            "platinum",
+            "platinumPiece",
+            "platinumPieces",
+            "platinumCoin",
+            "platinumCoins",
+        ),
     }
-    totals = {
+    variable_totals = {
         denomination: integer(next((variables.get(key) for key in keys if key in variables), 0))
         for denomination, keys in aliases.items()
+    }
+    inventory_totals = inventory_currency(payload, properties)
+    totals = {
+        denomination: inventory_totals[denomination]
+        if inventory_totals[denomination] > 0
+        else variable_totals[denomination]
+        for denomination in aliases
     }
     totals["gold_value"] = str(
         Decimal(totals["cp"]) / 100
@@ -354,8 +616,122 @@ def currency(variables: Mapping[str, object]) -> dict[str, int | str]:
     return totals
 
 
+def inventory_currency(
+    payload: Mapping[str, object], properties: object
+) -> dict[str, int]:
+    """Sum coin items from the character inventory, including container contents."""
+    totals = {denomination: 0 for denomination in ("cp", "sp", "ep", "gp", "pp")}
+    roots = [properties]
+    inventory_keys = (
+        "items",
+        "creatureItems",
+        "inventory",
+        "creatureInventory",
+        "containers",
+        "creatureContainers",
+    )
+    roots.extend(payload.get(key) for key in inventory_keys)
+
+    seen_item_ids = set()
+    for root in roots:
+        for item in nested_mappings(root):
+            denomination = currency_denomination(item)
+            if denomination is None:
+                continue
+
+            item_id = item.get("_id", item.get("id"))
+            if item_id is not None:
+                if item_id in seen_item_ids:
+                    continue
+                seen_item_ids.add(item_id)
+
+            totals[denomination] += currency_quantity(item)
+
+    return totals
+
+
+def nested_mappings(value: object) -> list[Mapping[str, object]]:
+    """Return every mapping reachable through a JSON-style DiceCloud value."""
+    result = []
+    values = [value]
+    while values:
+        current = values.pop()
+        if isinstance(current, Mapping):
+            result.append(current)
+            values.extend(current.values())
+        elif isinstance(current, list):
+            values.extend(current)
+    return result
+
+
+def currency_denomination(item: Mapping[str, object]) -> str | None:
+    denominations = {
+        "cp": ("cp", "copper", "copper coin", "copper coins", "copper piece", "copper pieces"),
+        "sp": ("sp", "silver", "silver coin", "silver coins", "silver piece", "silver pieces"),
+        "ep": (
+            "ep",
+            "electrum",
+            "electrum coin",
+            "electrum coins",
+            "electrum piece",
+            "electrum pieces",
+        ),
+        "gp": ("gp", "gold", "gold coin", "gold coins", "gold piece", "gold pieces"),
+        "pp": (
+            "pp",
+            "platinum",
+            "platinum coin",
+            "platinum coins",
+            "platinum piece",
+            "platinum pieces",
+        ),
+    }
+    candidates = (item.get("denomination"), item.get("name"), item.get("title"))
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        normalized = candidate.strip().lower()
+        for denomination, names in denominations.items():
+            if normalized in names:
+                return denomination
+    return None
+
+
+def currency_quantity(item: Mapping[str, object]) -> int:
+    quantity_keys = ("quantity", "amount", "count", "number", "total")
+    for key in quantity_keys:
+        if key in item:
+            return nested_integer(item[key])
+
+    for key in ("data", "attributes", "system"):
+        nested_value = item.get(key)
+        if isinstance(nested_value, Mapping):
+            nested_quantity = currency_quantity(nested_value)
+            if nested_quantity:
+                return nested_quantity
+
+    if text(item.get("type"), "").lower() in {"coin", "coins", "currency"}:
+        return nested_integer(item.get("value", 0))
+
+    return 0
+
+
+def nested_integer(value: object) -> int:
+    if isinstance(value, Mapping):
+        for key in ("value", "total", "amount"):
+            if key in value:
+                return integer(value[key])
+        return 0
+    return integer(value)
+
+
 def integer(value: object) -> int:
-    return int(value) if isinstance(value, (int, float, str)) else 0
+    if not isinstance(value, (int, float, str)):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def text(value: object, default: str) -> str:
