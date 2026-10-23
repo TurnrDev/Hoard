@@ -22,15 +22,10 @@ from django.urls import path, re_path
 from django.urls.resolvers import URLPattern
 
 from hoard.campaigns.api import api
-from hoard.campaigns.views import character_portrait_upload
 from hoard.spa import release_manifest, spa
 
 urlpatterns: list[URLPattern] = [
     path("admin/", admin.site.urls),
-    path(
-        "api/uploads/character-portraits/<int:context_id>/<int:character_id>/",
-        character_portrait_upload,
-    ),
     path("api/", api.urls),
     path("release-manifest.json", release_manifest),
     re_path(r"^(?!api/|admin/|media/).*$", spa),

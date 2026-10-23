@@ -1,18 +1,17 @@
 <template>
   <section aria-labelledby="ledger-title">
     <header class="mb-5">
-      <div>
-        <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
-          Immutable audit history
-        </p>
-        <h1
-          id="ledger-title"
-          class="display-5 mb-0"
-        >
-          Ledger
-        </h1>
-      </div>
+      <p class="text-uppercase fw-semibold small text-body-secondary mb-2">
+        Party experience history
+      </p>
+      <h1
+        id="ledger-title"
+        class="display-5 mb-0"
+      >
+        Ledger
+      </h1>
     </header>
+
     <Message
       v-if="error"
       severity="error"
@@ -22,147 +21,92 @@
     >
       {{ error }}
     </Message>
+
     <section
+      v-if="campaign"
       class="table-responsive border rounded-3"
-      aria-labelledby="ledger-title"
     >
-      <table class="table table-striped table-hover align-middle mb-0">
-        <caption>Immutable campaign audit history</caption>
+      <table class="table table-striped align-middle mb-0">
+        <caption>Party experience award history</caption>
         <thead>
           <tr>
             <th scope="col">When</th>
             <th scope="col">Campaign date</th>
-            <th scope="col">Type</th>
-            <th scope="col">From</th>
-            <th scope="col">To</th>
-            <th scope="col">Amount</th>
             <th scope="col">Description</th>
-            <th scope="col">By</th>
             <th
               scope="col"
               class="text-end"
             >
-              <span class="visually-hidden">Actions</span>
+              Per player
             </th>
+            <th
+              scope="col"
+              class="text-end"
+            >
+              Players
+            </th>
+            <th
+              scope="col"
+              class="text-end"
+            >
+              Remainder
+            </th>
+            <th scope="col">By</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="transaction in transactions"
-            :key="`${transaction.ledger}-${transaction.id}`"
+            v-for="award in campaign.party_experience_awards"
+            :key="award.id"
           >
-            <th scope="row">
-              <RelativeTime :value="transaction.occurred_at" />
-            </th>
-            <td>{{ transaction.campaign_date ?? "Campaign date unavailable" }}</td>
-            <td>
-              <span
-                :class="['mdi', typeIcon(transaction)]"
-                aria-hidden="true"
-              />
-              {{
-                transaction.ledger_label ??
-                displayTransactionIdentifier(transaction.ledger)
-              }}
+            <th scope="row"><RelativeTime :value="award.occurred_at" /></th>
+            <td>{{ award.campaign_date ?? "—" }}</td>
+            <td>{{ description(award) }}</td>
+            <td class="text-end tabular-nums">
+              {{ formatXp(award.awarded_per_player) }}
             </td>
-            <td>{{ names(transaction, false) }}</td>
-            <td>{{ names(transaction, true) }}</td>
-            <td class="tabular-nums">{{ amount(transaction) }}</td>
-            <td>
-              {{ transaction.description || "—" }}
-              <span
-                v-if="transaction.is_reversed"
-                class="badge text-bg-secondary ms-1"
-              >
-                (reversed)
-              </span>
-            </td>
-            <td>{{ transaction.actor || "—" }}</td>
-            <td class="text-end">
-              <Button
-                v-if="canReverse(transaction)"
-                icon="mdi mdi-undo"
-                size="small"
-                text
-                :aria-label="`Reverse ${transaction.ledger_label ?? displayTransactionIdentifier(transaction.ledger)} transaction`"
-                @click="reversing = transaction"
-              />
+            <td class="text-end tabular-nums">{{ award.recipient_count }}</td>
+            <td class="text-end tabular-nums">{{ award.discarded_amount }}</td>
+            <td>{{ award.actor ?? "System" }}</td>
+          </tr>
+          <tr v-if="!campaign.party_experience_awards.length">
+            <td
+              colspan="7"
+              class="text-center text-body-secondary py-4"
+            >
+              No party XP awards have been recorded yet.
             </td>
           </tr>
         </tbody>
       </table>
     </section>
-    <Dialog
-      :visible="Boolean(reversing)"
-      modal
-      :style="{ width: 'min(30rem, calc(100vw - 2rem))' }"
-      @update:visible="
-        (open: boolean) => {
-          if (!open) {
-            reversing = undefined;
-          }
-        }
-      "
-    >
-      <section
-        class="d-grid gap-3"
-        aria-labelledby="reverse-transaction-heading"
-      >
-        <h2
-          id="reverse-transaction-heading"
-          class="h3"
-        >
-          Reverse transaction
-        </h2>
-        <p class="mb-0">
-          This creates the final compensating entry. The original remains in history.
-        </p>
-        <footer class="d-flex justify-content-end gap-2">
-          <Button
-            label="Cancel"
-            severity="secondary"
-            outlined
-            @click="reversing = undefined"
-          />
-          <Button
-            severity="danger"
-            label="Reverse"
-            @click="reverse"
-          />
-        </footer>
-      </section>
-    </Dialog>
+
+    <ProgressBar
+      v-else-if="!error"
+      indeterminate
+      aria-label="Loading ledger"
+    />
   </section>
 </template>
 
 <script lang="ts">
-import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import Message from "primevue/message";
+import ProgressBar from "primevue/progressbar";
 import { defineComponent } from "vue";
-import {
-  getCampaign,
-  getTransactions,
-  reverseTransaction,
-  type Campaign,
-  type LedgerTransaction,
-} from "@/api";
-import { campaignRefreshRevision } from "@/realtime";
-import { displayCoin, displayIdentifier } from "@/campaigns/display";
+import { getCampaign, type Campaign, type PartyExperienceAward } from "@/api";
 import RelativeTime from "@/components/RelativeTime.vue";
+import { campaignRefreshRevision } from "@/realtime";
 
 export default defineComponent({
-  components: { Button, Dialog, Message, RelativeTime },
+  components: { Message, ProgressBar, RelativeTime },
   data() {
     return {
       campaign: undefined as Campaign | undefined,
-      transactions: [] as LedgerTransaction[],
       error: "",
-      reversing: undefined as LedgerTransaction | undefined,
     };
   },
   computed: {
-    campaignId(): number {
+    contextId(): number {
       return Number(this.$route.params.id);
     },
     campaignRefresh(): number {
@@ -178,77 +122,22 @@ export default defineComponent({
     void this.load();
   },
   methods: {
-    displayTransactionIdentifier(value: string): string {
-      return displayIdentifier(value);
+    formatXp(value: number): string {
+      return `${value.toLocaleString()} XP`;
     },
-    names(transaction: LedgerTransaction, positive: boolean): string {
-      return [
-        ...new Set(
-          transaction.entries
-            .filter((entry) => (positive ? entry.amount > 0 : entry.amount < 0))
-            .map((entry) => entry.account_name),
-        ),
-      ].join(", ");
-    },
-
-    amount(transaction: LedgerTransaction): string {
-      if (transaction.ledger.startsWith("audit.")) {
-        return `${Object.keys(transaction.changes ?? {}).length} recorded changes`;
+    description(award: PartyExperienceAward): string {
+      if (award.description) {
+        return award.description;
       }
-      return transaction.entries
-        .filter((entry) => entry.amount > 0)
-        .map(
-          (entry) =>
-            `${entry.amount} ${entry.denomination ? displayCoin(entry.denomination) : "XP"}`,
-        )
-        .join(" · ");
-    },
 
-    typeIcon(transaction: LedgerTransaction): string {
-      return (
-        {
-          experience: "mdi-star-four-points",
-          money: "mdi-cash-multiple",
-        }[transaction.ledger] ?? "mdi-book-open-variant"
-      );
+      return award.reason === "baseline" ? "Campaign XP baseline" : "Party XP award";
     },
-
-    canReverse(transaction: LedgerTransaction): boolean {
-      return Boolean(
-        this.campaign?.is_game_master &&
-        ["money", "experience"].includes(transaction.ledger) &&
-        !transaction.is_reversed &&
-        !transaction.reversal_of_id,
-      );
-    },
-
     async load(): Promise<void> {
       try {
-        const [next, history] = await Promise.all([
-          getCampaign(this.campaignId),
-          getTransactions(this.campaignId),
-        ]);
-        this.campaign = next;
-        this.transactions = history.results;
+        this.campaign = await getCampaign(this.contextId);
       } catch (exception) {
         this.error =
           exception instanceof Error ? exception.message : "Unable to load ledger.";
-      }
-    },
-
-    async reverse(): Promise<void> {
-      if (!this.reversing) {
-        return;
-      }
-      try {
-        await reverseTransaction(this.campaignId, this.reversing);
-        this.reversing = undefined;
-        await this.load();
-      } catch (exception) {
-        this.error =
-          exception instanceof Error
-            ? exception.message
-            : "Unable to reverse transaction.";
       }
     },
   },

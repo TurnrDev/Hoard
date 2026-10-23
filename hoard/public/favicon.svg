@@ -1,16 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Hoard</title>
   <style>
-    .background { fill: #eee6d5; }
-    .coin { fill: #9b6818; stroke: #744c15; }
-    .letter { fill: #eee6d5; }
-
-    @media (prefers-color-scheme: dark) {
-      .background { fill: #11130f; }
-      .coin { fill: #f2c85c; stroke: #f9df91; }
-      .letter { fill: #11130f; }
+    @media (prefers-reduced-motion: reduce) {
+      #gold-shimmer {
+        display: none;
+      }
     }
   </style>
-  <rect class="background" width="64" height="64" rx="14"/>
-  <circle class="coin" cx="32" cy="32" r="23" stroke-width="3"/>
-  <path class="letter" d="M21 18v28h6V35h10v11h6V18h-6v11H27V18z"/>
+  <defs>
+    <linearGradient id="hoard-gold" x1="0" y1="300" x2="512" y2="210" gradientUnits="userSpaceOnUse" spreadMethod="repeat">
+      <stop offset="35%" stop-color="#f2c85c" />
+      <stop offset="48%" stop-color="#fff0ad" />
+      <stop offset="61%" stop-color="#f2c85c" />
+      <animateTransform
+        id="gold-shimmer"
+        attributeName="gradientTransform"
+        attributeType="XML"
+        type="translate"
+        values="717 0;717 0;-205 0;-205 0"
+        keyTimes="0;0.55;0.85;1"
+        dur="4.5s"
+        repeatCount="indefinite"
+      />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#11130f" />
+  <path fill="url(#hoard-gold)" transform="translate(72.4 41.5) scale(.24)" d="M135 1638v-1490h305v602h649v-602h306v1490h-306v-635h-649v635h-305z" />
 </svg>

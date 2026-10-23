@@ -31,9 +31,6 @@ from .payloads import (
     CampaignMemberData,
     CampaignMembershipChangedEvent,
     CampaignPresenceChangedEvent,
-    CharacterHealthChangedEvent,
-    CharacterLifecycleData,
-    CharacterLifecycleEvent,
 )
 from .protocol import (
     CommandAcknowledgementEnvelope,
@@ -52,12 +49,7 @@ from .realtime import (
     notify_campaign_changed,
     notify_campaign_event,
 )
-from .services import (
-    CharacterLifecycleService,
-    accept_invitation,
-    create_invitation,
-    register_and_accept,
-)
+from .services import accept_invitation, create_invitation, register_and_accept
 from .services.calendar import CampaignCalendarService
 
 logger = logging.getLogger(__name__)
@@ -148,6 +140,7 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.get": self._campaign_get,
             "campaign.calendar.get": self._calendar_get,
             "campaign.calendar.adjust": self._calendar_adjust,
+            "campaign.experience.recipients.set": self._experience_recipients_set,
             "campaign.members.list": self._member_list,
             "campaign.members.deactivate": self._member_deactivate,
             "campaign.invites.list": self._invite_list,
@@ -170,17 +163,10 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "campaign.encounter.turn.end": self._player_turn_end,
             "characters.list": self._character_list,
             "characters.get": self._character_get,
-            "characters.create": self._character_create,
-            "characters.update": self._character_update,
-            "characters.portrait.remove": self._character_portrait_remove,
-            "characters.archive": self._character_archive,
-            "characters.health.post": self._character_health_adjust,
-            "characters.rest": self._character_rest,
-            "transactions.list": self._transaction_list,
-            "money.transfers.create": self._money_transfer_create,
-            "money.exchanges.create": self._money_exchange_create,
+            "characters.dicecloud.link": self._character_dicecloud_link,
+            "characters.dicecloud.unlink": self._character_dicecloud_unlink,
+            "characters.active.set": self._character_active_set,
             "experience.shared_awards.create": self._shared_xp_create,
-            "transactions.reverse": self._transaction_reverse,
         }
         handler = handlers.get(message_type)
         if handler is not None:
@@ -303,15 +289,13 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             ).model_dump(mode="json")
         elif message_type in {
             "campaign.calendar.adjust",
+            "campaign.experience.recipients.set",
             "campaign.members.deactivate",
             "campaign.invites.revoke",
             "campaign.presence.heartbeat",
-            "characters.create",
-            "characters.update",
-            "characters.portrait.remove",
-            "characters.archive",
-            "characters.health.post",
-            "characters.rest",
+            "characters.dicecloud.link",
+            "characters.dicecloud.unlink",
+            "characters.active.set",
             "campaign.encounter.start",
             "campaign.encounter.end",
             "campaign.encounter.combatants.add_character",
@@ -375,6 +359,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         from .api import (
             character_data,
             context_data,
+            dicecloud_projection,
+            party_experience_award_data,
             party_money,
             visible_characters,
         )
@@ -383,12 +369,19 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         context = self._context()
         campaign = context.campaign
         connected_context_ids = self.connected_context_ids(campaign.pk)
+        characters = list(
+            visible_characters(context).select_related("context__user").order_by("pk")
+        )
+        projections = {
+            character.pk: dicecloud_projection(character) for character in characters
+        }
         return {
             **context_data(context),
             "id": campaign.pk,
             "name": campaign.name,
             "is_game_master": context.kind == CampaignContext.Kind.GM,
             "shared_experience": campaign.shared_experience,
+            "experience_recipient_count": campaign.experience_recipient_count,
             "level": campaign.level,
             "eligible_level": Character.level_for_experience(
                 campaign.shared_experience
@@ -396,8 +389,14 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
             "calendar": CampaignCalendarData.from_campaign(campaign).model_dump(
                 mode="json"
             ),
-            "party_money": party_money(campaign),
-            "encounter": encounter_data(context),
+            "party_money": party_money(campaign, projections),
+            "party_experience_awards": [
+                party_experience_award_data(award)
+                for award in campaign.party_xp_awards.select_related(
+                    "created_by__user"
+                ).all()
+            ],
+            "encounter": encounter_data(context, projections),
             "members": [
                 {
                     "id": candidate.pk,
@@ -418,7 +417,8 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
                 ).select_related("user")
             ],
             "characters": [
-                character_data(value, context) for value in visible_characters(context)
+                character_data(value, context, projections[value.pk])
+                for value in characters
             ],
             "invitations": (
                 [self._invitation_data(value) for value in campaign.invitations.all()]
@@ -746,14 +746,23 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _character_list(self, content: dict[str, object]) -> list[dict[str, object]]:
-        from .api import character_data, visible_characters
+        from .api import character_data, dicecloud_projection, visible_characters
 
         context = self._context()
-        return [character_data(value, context) for value in visible_characters(context)]
+        characters = visible_characters(context).select_related("context__user")
+        return [
+            character_data(value, context, dicecloud_projection(value))
+            for value in characters
+        ]
 
     @database_sync_to_async
     def _character_get(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import character_data, character_for_context, visible_characters
+        from .api import (
+            character_data,
+            character_for_context,
+            dicecloud_projection,
+            visible_characters,
+        )
 
         context = self._context()
         character = character_for_context(
@@ -761,254 +770,76 @@ class ContextConsumer(HoardJsonWebsocketConsumer):
         )
         if not visible_characters(context).filter(pk=character.pk).exists():
             raise HttpError(404, "Character not found.")
-        return character_data(character, context)
+        return character_data(character, context, dicecloud_projection(character))
 
     @database_sync_to_async
-    def _character_create(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import character_data, gm_context
+    def _character_dicecloud_link(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import DiceCloudLinkCommand
+        from .services.dicecloud import creature_id_from_input, refresh_creature
+
+        context = self._context()
+        command = DiceCloudLinkCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        creature_id = creature_id_from_input(command.creature)
+        refresh_creature(creature_id)
+        character.dicecloud_creature_id = creature_id
+        character.is_active = True
+        character.save(update_fields=("dicecloud_creature_id", "is_active"))
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _character_dicecloud_unlink(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import CharacterIdentifierCommand
+
+        context = self._context()
+        command = CharacterIdentifierCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        character.dicecloud_creature_id = ""
+        character.is_active = False
+        character.save(update_fields=("dicecloud_creature_id", "is_active"))
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _character_active_set(self, content: dict[str, object]) -> None:
+        from .api import editable_character
+        from .payloads import CharacterActiveCommand
+
+        context = self._context()
+        command = CharacterActiveCommand.model_validate(content)
+        character = editable_character(context, command.character_id)
+        character.is_active = command.is_active
+        character.save(update_fields=("is_active",))
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
+
+    @database_sync_to_async
+    def _shared_xp_create(self, content: dict[str, object]) -> None:
+        from .api import gm_context
+        from .services.experience import award_shared_experience
 
         context = self._context()
         gm_context(context)
-        fields = content.get("fields")
-        if not isinstance(fields, dict) or not fields.get("is_npc"):
-            raise ValidationError("Only NPC creation is available from this command.")
-        character = CharacterLifecycleService().create_npc(context, fields)
-        notify_campaign_event(
-            context.campaign_id,
-            CharacterLifecycleEvent(
-                type="character.created",
-                character=CharacterLifecycleData(
-                    id=character.pk,
-                    name=character.name,
-                    is_active=character.is_active,
-                ),
-                request_id=str(content["request_id"]),
-            ),
+        award_shared_experience(
+            context.campaign,
+            self._integer(content, "amount"),
+            description=self._string(content, "description"),
+            created_by=context,
         )
-        return character_data(character, context)
-
-    @database_sync_to_async
-    def _character_update(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import character_data, editable_character
-
-        context = self._context()
-        character = editable_character(context, self._integer(content, "character_id"))
-        fields = content.get("fields")
-        if not isinstance(fields, dict):
-            raise ValueError("fields must be an object.")
-        character = CharacterLifecycleService().update(context, character, fields)
-        notify_campaign_event(
-            context.campaign_id,
-            CharacterLifecycleEvent(
-                type="character.updated",
-                character=CharacterLifecycleData(
-                    id=character.pk,
-                    name=character.name,
-                    is_active=character.is_active,
-                ),
-                request_id=str(content["request_id"]),
-            ),
-        )
-        return character_data(character, context)
-
-    @database_sync_to_async
-    def _character_portrait_remove(
-        self, content: dict[str, object]
-    ) -> dict[str, object]:
-        from .api import character_data, editable_character
-
-        context = self._context()
-        character = editable_character(context, self._integer(content, "character_id"))
-        character.portrait.delete(save=True)
         notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
-        return character_data(character, context)
-
     @database_sync_to_async
-    def _character_archive(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import character_data, editable_character
+    def _experience_recipients_set(self, content: dict[str, object]) -> None:
+        from .api import gm_context
+        from .payloads import ExperienceRecipientCountCommand
 
         context = self._context()
-        character = editable_character(context, self._integer(content, "character_id"))
-        character = CharacterLifecycleService().archive(context, character)
-        notify_campaign_event(
-            context.campaign_id,
-            CharacterLifecycleEvent(
-                type="character.archived",
-                character=CharacterLifecycleData(
-                    id=character.pk,
-                    name=character.name,
-                    is_active=character.is_active,
-                ),
-                request_id=str(content["request_id"]),
-            ),
-        )
-        return character_data(character, context)
-
-    @database_sync_to_async
-    def _character_health_adjust(self, content: dict[str, object]) -> None:
-        from .api import editable_character
-        from .payloads import CharacterHealthCommand
-        from .services.health import adjust_health
-
-        context = self._context()
-        command = CharacterHealthCommand.model_validate(content)
-        character = editable_character(context, command.character_id)
-        amount = (
-            -command.current_hp_delta
-            if command.reason == "damage"
-            else command.current_hp_delta
-            if command.reason == "healing"
-            else command.temporary_hp_delta
-        )
-        updated = adjust_health(
-            character,
-            reason=command.reason,
-            amount=amount,
-            current_hp=command.current_hp,
-            temporary_hp=command.temporary_hp,
-            description=command.description,
-            created_by=context,
-        )
-        notify_campaign_event(
-            context.campaign_id,
-            CharacterHealthChangedEvent(
-                character_id=updated.pk,
-                max_hp=updated.max_hp,
-                current_hp=updated.current_hp,
-                temporary_hp=updated.temporary_hp,
-                request_id=str(content["request_id"]),
-            ),
-        )
-
-    @database_sync_to_async
-    def _character_rest(self, content: dict[str, object]) -> None:
-        from .api import editable_character
-        from .payloads import CharacterRestCommand
-        from .services.health import take_rest
-
-        context = self._context()
-        command = CharacterRestCommand.model_validate(content)
-        character = editable_character(context, command.character_id)
-        updated = take_rest(
-            character,
-            kind=command.kind,
-            regained_hp=command.regained_hp,
-            created_by=context,
-        )
-        notify_campaign_event(
-            context.campaign_id,
-            CharacterHealthChangedEvent(
-                character_id=updated.pk,
-                max_hp=updated.max_hp,
-                current_hp=updated.current_hp,
-                temporary_hp=updated.temporary_hp,
-                request_id=str(content["request_id"]),
-            ),
-        )
-
-    @database_sync_to_async
-    def _transaction_list(self, content: dict[str, object]) -> dict[str, object]:
-        from .api import TRANSACTION_MODELS, history_data, transaction_queryset
-
-        context = self._context()
-        ledger = self._string(content, "ledger") or "all"
-        rows: list[dict[str, object]] = []
-        if ledger in ("all", "money", "experience"):
-            ledgers = ("money", "experience") if ledger == "all" else (ledger,)
-            for ledger_name in ledgers:
-                model = TRANSACTION_MODELS[ledger_name]
-                query = transaction_queryset(model, context.campaign)
-                if context.kind != CampaignContext.Kind.GM:
-                    query = query.filter(
-                        entries__account__character__context__user=context.user
-                    ).distinct()
-                rows.extend(history_data(posted) for posted in query)
-        if ledger in ("all", "audit"):
-            audit_models = []
-            if context.kind == CampaignContext.Kind.GM:
-                audit_models.extend((InvitationEvent, MembershipEvent))
-            for model in audit_models:
-                events = model.objects.filter(campaign=context.campaign).select_related(
-                    "created_by__user"
-                )
-                rows.extend(self._audit_data(posted) for posted in events)
-        rows.sort(key=lambda row: str(row["occurred_at"]), reverse=True)
-        page = max(1, int(content.get("page", 1)))
-        page_size = min(100, max(1, int(content.get("page_size", 25))))
-        start = (page - 1) * page_size
-        return {
-            "count": len(rows),
-            "page": page,
-            "page_size": page_size,
-            "results": rows[start : start + page_size],
-        }
-
-    @database_sync_to_async
-    def _money_transfer_create(self, content: dict[str, object]) -> dict[str, object]:
-        from types import SimpleNamespace
-
-        from .api import MoneyTransferCreate, money_transfer_create
-
-        context = self._context()
-        payload = MoneyTransferCreate(
-            from_character_id=content.get("from_character_id"),
-            to_character_id=content.get("to_character_id"),
-            amounts=content.get("amounts", {}),
-            description=self._string(content, "description"),
-        )
-        result = money_transfer_create(
-            SimpleNamespace(auth=context.user), context.pk, payload
-        )
-        return result[1] if isinstance(result, tuple) else result
-
-    @database_sync_to_async
-    def _money_exchange_create(self, content: dict[str, object]) -> dict[str, object]:
-        from types import SimpleNamespace
-
-        from .api import MoneyExchangeCreate, money_exchange_create
-
-        context = self._context()
-        payload = MoneyExchangeCreate(
-            character_id=self._integer(content, "character_id"),
-            given=content.get("given", {}),
-            received=content.get("received", {}),
-            description=self._string(content, "description"),
-        )
-        result = money_exchange_create(
-            SimpleNamespace(auth=context.user), context.pk, payload
-        )
-        return result[1] if isinstance(result, tuple) else result
-
-    @database_sync_to_async
-    def _shared_xp_create(self, content: dict[str, object]) -> dict[str, object]:
-        from types import SimpleNamespace
-
-        from .api import SharedXpAwardCreate, shared_xp_award_create
-
-        context = self._context()
-        payload = SharedXpAwardCreate(
-            amount=self._integer(content, "amount"),
-            description=self._string(content, "description"),
-        )
-        result = shared_xp_award_create(
-            SimpleNamespace(auth=context.user), context.pk, payload
-        )
-        return result[1] if isinstance(result, tuple) else result
-
-    @database_sync_to_async
-    def _transaction_reverse(self, content: dict[str, object]) -> dict[str, object]:
-        from types import SimpleNamespace
-
-        from .api import transaction_reverse
-
-        context = self._context()
-        return transaction_reverse(
-            SimpleNamespace(auth=context.user),
-            context.pk,
-            self._string(content, "ledger", required=True),
-            self._integer(content, "transaction_id"),
-        )
+        gm_context(context)
+        command = ExperienceRecipientCountCommand.model_validate(content)
+        campaign = context.campaign
+        campaign.experience_recipient_count = command.experience_recipient_count
+        campaign.save(update_fields=("experience_recipient_count",))
+        notify_campaign_changed(context.campaign_id, str(content["request_id"]))
 
     def _context(self) -> CampaignContext:
         context = (

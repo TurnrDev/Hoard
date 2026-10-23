@@ -155,6 +155,31 @@ const defaultThemePreferences: ThemePreferences = {
   palette: "normal",
 };
 
+function updateBrowserThemeAssets(isDark: boolean): void {
+  const variant = isDark ? "dark" : "light";
+  const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  const appleTouchIcon = document.querySelector<HTMLLinkElement>(
+    'link[rel="apple-touch-icon"]',
+  );
+  const themeColor = isDark ? "#11130f" : "#eee6d5";
+
+  if (favicon) {
+    favicon.href = new URL(`favicon-${variant}.svg`, favicon.href).href;
+  }
+
+  if (appleTouchIcon) {
+    const filename = isDark ? "apple-touch-icon.png" : "apple-touch-icon-light.png";
+
+    appleTouchIcon.href = new URL(filename, appleTouchIcon.href).href;
+  }
+
+  for (const themeColorMeta of document.querySelectorAll<HTMLMetaElement>(
+    'meta[name="theme-color"]',
+  )) {
+    themeColorMeta.content = themeColor;
+  }
+}
+
 export function readThemePreferences(): ThemePreferences {
   const stored = localStorage.getItem(themeStorageKey);
 
@@ -193,6 +218,8 @@ export function applyThemePreferences(preferences: ThemePreferences): void {
   document.documentElement.style.colorScheme = isDark ? "dark" : "light";
   document.documentElement.dataset.bsTheme = isDark ? "dark" : "light";
   document.documentElement.dataset.hoardPalette = preferences.palette;
+
+  updateBrowserThemeAssets(isDark);
 
   usePreset(preferences.palette === "colourblind" ? HoardLaraColourblind : HoardLara);
 }

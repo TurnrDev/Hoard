@@ -1,20 +1,6 @@
-from __future__ import annotations
-
-from collections import defaultdict
-from dataclasses import dataclass
-from decimal import Decimal
-from typing import TYPE_CHECKING
-
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Sum
-
-if TYPE_CHECKING:
-    from hoard.campaigns.models.experience import ExperienceAccount
-    from hoard.campaigns.models.money import MoneyAccount, MoneyTransaction
-    from hoard.campaigns.services.actions import CoinAmounts
-
 
 XP_LEVEL_THRESHOLDS = (
     0,
@@ -112,6 +98,9 @@ class Campaign(models.Model):
     calendar_year = models.PositiveIntegerField("Calendar Year", default=81)
     calendar_day = models.PositiveSmallIntegerField("Calendar Day", default=137)
     shared_experience = models.PositiveIntegerField("Shared Experience", default=0)
+    experience_recipient_count = models.PositiveSmallIntegerField(
+        "XP Recipient Count", default=1
+    )
     level = models.PositiveSmallIntegerField("Campaign Level", default=1)
 
     def adjust_calendar_day(self, amount: int) -> None:
@@ -128,18 +117,6 @@ class Campaign(models.Model):
             self.calendar_day = 365
         else:
             self.calendar_day += amount
-
-    def money_system_account(self) -> MoneyAccount:
-        from ..services.ledger import system_account
-        from .money import MoneyAccount
-
-        return system_account(MoneyAccount, self)
-
-    def experience_system_account(self) -> ExperienceAccount:
-        from ..services.ledger import system_account
-        from .experience import ExperienceAccount
-
-        return system_account(ExperienceAccount, self)
 
     def award_shared_experience(
         self,
@@ -224,26 +201,9 @@ class CampaignContext(models.Model):
         super().save(*args, **kwargs)
 
 
-@dataclass(frozen=True)
-class MoneyBalance:
-    copper: int = 0
-    silver: int = 0
-    electrum: int = 0
-    gold: int = 0
-    platinum: int = 0
-
-    @property
-    def gold_value(self) -> Decimal:
-        return (
-            Decimal(self.copper) / Decimal(100)
-            + Decimal(self.silver) / Decimal(10)
-            + Decimal(self.electrum) / Decimal(2)
-            + Decimal(self.gold)
-            + Decimal(self.platinum) * Decimal(10)
-        )
-
-
 class Character(models.Model):
+    """A local campaign link to a public DiceCloud creature, not a character sheet."""
+
     campaign_id: int
     context_id: int | None
 
@@ -254,113 +214,57 @@ class Character(models.Model):
         CampaignContext,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="character",
     )
-
-    class Kind(models.TextChoices):
-        PC = "pc", "Player character"
-        NPC = "npc", "Non-player character"
-
-    kind = models.CharField(max_length=3, choices=Kind.choices, default=Kind.PC)
+    name = models.CharField(max_length=200, blank=True)
+    current_hp = models.PositiveIntegerField(null=True, blank=True)
+    max_hp = models.PositiveIntegerField(null=True, blank=True)
+    dicecloud_creature_id = models.CharField(max_length=80, blank=True)
     is_active = models.BooleanField("Is Active", default=False)
-    name = models.CharField("Character Name", max_length=200)
-    portrait = models.FileField(upload_to="character-portraits/", blank=True)
-    race = models.CharField(max_length=100, blank=True)
-    character_class = models.CharField("Class", max_length=100, blank=True)
-    rolled_hit_points = models.PositiveIntegerField("Rolled Hit Points", default=1)
-    current_hp = models.PositiveIntegerField("Current HP", default=1)
-    temporary_hp = models.PositiveIntegerField("Temporary HP", default=0)
-    hp_ability = models.CharField(max_length=20, default="constitution")
-    hp_adjustment = models.SmallIntegerField(default=0)
-    initiative_adjustment = models.SmallIntegerField(default=0)
-    proficiency_bonus_adjustment = models.SmallIntegerField(default=0)
-    ability_bonuses = models.JSONField(default=dict, blank=True)
-    background_ability_bonuses = models.JSONField(default=dict, blank=True)
-    ability_score_adjustments = models.JSONField(default=dict, blank=True)
-    skill_proficiencies = models.JSONField(default=dict, blank=True)
-    skill_adjustments = models.JSONField(default=dict, blank=True)
-    save_proficiencies = models.JSONField(default=dict, blank=True)
-    save_adjustments = models.JSONField(default=dict, blank=True)
-    jack_of_all_trades = models.BooleanField(default=False)
-    remarkable_athlete = models.BooleanField(default=False)
-    strength = models.PositiveSmallIntegerField(default=10)
-    dexterity = models.PositiveSmallIntegerField(default=10)
-    constitution = models.PositiveSmallIntegerField(default=10)
-    intelligence = models.PositiveSmallIntegerField(default=10)
-    wisdom = models.PositiveSmallIntegerField(default=10)
-    charisma = models.PositiveSmallIntegerField(default=10)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("campaign", "dicecloud_creature_id"),
+                condition=~models.Q(dicecloud_creature_id=""),
+                name="unique_dicecloud_creature_per_campaign",
+            )
+        ]
 
     def clean(self) -> None:
         super().clean()
-        if self.context_id and self.context.campaign_id != self.campaign_id:
+        if self.context_id is not None:
+            if self.context.campaign_id != self.campaign_id:
+                raise ValidationError(
+                    {"context": "A character context must belong to the same campaign."}
+                )
+            if self.context.kind != CampaignContext.Kind.PC:
+                raise ValidationError(
+                    {"context": "Only player contexts may have DiceCloud links."}
+                )
+        has_local_combat_fallback = (
+            bool(self.name.strip())
+            and self.current_hp is not None
+            and self.max_hp is not None
+        )
+        if (
+            self.is_active
+            and not self.dicecloud_creature_id
+            and not has_local_combat_fallback
+        ):
             raise ValidationError(
-                {"context": "A character context must belong to the same campaign."}
+                {
+                    "is_active": (
+                        "Connect DiceCloud or provide a local name and both HP values "
+                        "before activating this player."
+                    )
+                }
             )
-        if self.context_id and self.context.kind != CampaignContext.Kind.PC:
-            raise ValidationError({"context": "Only a PC context may own a character."})
-        if self.kind == self.Kind.NPC and self.context_id:
-            raise ValidationError(
-                {"context": "NPCs cannot belong to a player context."}
-            )
-        if self.hp_ability not in ABILITY_NAMES:
-            raise ValidationError({"hp_ability": "Choose a valid ability."})
-
-        validate_stat_map(
-            "ability_bonuses",
-            self.ability_bonuses,
-            ABILITY_NAMES,
-            minimum=-30,
-            maximum=30,
-        )
-        validate_stat_map(
-            "background_ability_bonuses",
-            self.background_ability_bonuses,
-            ABILITY_NAMES,
-            minimum=-30,
-            maximum=30,
-        )
-        validate_stat_map(
-            "ability_score_adjustments",
-            self.ability_score_adjustments,
-            ABILITY_NAMES,
-            minimum=-30,
-            maximum=30,
-        )
-        validate_stat_map(
-            "skill_adjustments",
-            self.skill_adjustments,
-            SKILL_NAMES,
-            minimum=-99,
-            maximum=99,
-        )
-        validate_stat_map(
-            "save_adjustments",
-            self.save_adjustments,
-            ABILITY_NAMES,
-            minimum=-99,
-            maximum=99,
-        )
-        validate_stat_map(
-            "skill_proficiencies",
-            self.skill_proficiencies,
-            SKILL_NAMES,
-            {"none", "proficient", "expertise"},
-        )
-        validate_stat_map(
-            "save_proficiencies",
-            self.save_proficiencies,
-            ABILITY_NAMES,
-            {"none", "proficient"},
-        )
 
     def save(self, *args, **kwargs) -> None:
         self.clean()
         super().save(*args, **kwargs)
-
-    @property
-    def is_player_character(self) -> bool:
-        return self.kind == self.Kind.PC
 
     @staticmethod
     def level_for_experience(experience: int) -> int:
@@ -370,147 +274,9 @@ class Character(models.Model):
             if experience >= threshold
         )
 
-    @property
-    def level(self) -> int:
-        return self.campaign.level
-
-    @property
-    def proficiency_bonus(self) -> int:
-        return 2 + (self.level - 1) // 4 + self.proficiency_bonus_adjustment
-
-    def ability_score(self, ability: str) -> int:
-        return (
-            getattr(self, ability)
-            + int(self.ability_bonuses.get(ability, 0))
-            + int(self.background_ability_bonuses.get(ability, 0))
-            + int(self.ability_score_adjustments.get(ability, 0))
-        )
-
-    def ability_modifier(self, ability: str) -> int:
-        return (self.ability_score(ability) - 10) // 2
-
-    def half_proficiency(self, ability: str, proficiency: str) -> int:
-        if proficiency != "none":
-            return 0
-        down = self.proficiency_bonus // 2 if self.jack_of_all_trades else 0
-        up = (
-            (self.proficiency_bonus + 1) // 2
-            if self.remarkable_athlete
-            and ability in {"strength", "dexterity", "constitution"}
-            else 0
-        )
-        return max(down, up)
-
-    def saving_throw(self, ability: str) -> int:
-        proficiency = self.save_proficiencies.get(ability, "none")
-        contribution = self.proficiency_bonus if proficiency == "proficient" else 0
-        return (
-            self.ability_modifier(ability)
-            + contribution
-            + int(self.save_adjustments.get(ability, 0))
-        )
-
-    def ability_check(self, ability: str) -> int:
-        return self.ability_modifier(ability) + self.half_proficiency(ability, "none")
-
-    def skill_bonus(self, skill: str, ability: str) -> int:
-        proficiency = self.skill_proficiencies.get(skill, "none")
-        contribution = {
-            "proficient": self.proficiency_bonus,
-            "expertise": self.proficiency_bonus * 2,
-        }.get(proficiency, self.half_proficiency(ability, proficiency))
-        return (
-            self.ability_modifier(ability)
-            + contribution
-            + int(self.skill_adjustments.get(skill, 0))
-        )
-
-    @property
-    def max_hp(self) -> int:
-        return max(
-            1,
-            self.rolled_hit_points
-            + self.ability_modifier(self.hp_ability) * self.level
-            + self.hp_adjustment,
-        )
-
-    @property
-    def initiative_bonus(self) -> int:
-        return (
-            self.ability_modifier("dexterity")
-            + self.half_proficiency("dexterity", "none")
-            + self.initiative_adjustment
-        )
-
-    @property
-    def experience(self) -> int:
-        from .experience import ExperienceEntry
-
-        return (
-            ExperienceEntry.objects.filter(account__character=self).aggregate(
-                total=Sum("amount")
-            )["total"]
-            or 0
-        )
-
-    @property
-    def money(self) -> MoneyBalance:
-        from .money import MoneyEntry
-
-        totals = defaultdict(int)
-        for entry in (
-            MoneyEntry.objects.filter(account__character=self)
-            .values("denomination")
-            .annotate(total=Sum("amount"))
-        ):
-            totals[entry["denomination"]] = entry["total"]
-        return MoneyBalance(
-            copper=totals[MoneyEntry.Denomination.COPPER],
-            silver=totals[MoneyEntry.Denomination.SILVER],
-            electrum=totals[MoneyEntry.Denomination.ELECTRUM],
-            gold=totals[MoneyEntry.Denomination.GOLD],
-            platinum=totals[MoneyEntry.Denomination.PLATINUM],
-        )
-
-    def activate(self) -> Character:
-        from ..services.experience import activate_character
-
-        return activate_character(self)
-
-    def grant_coins(
-        self, coins: CoinAmounts, description: str = ""
-    ) -> MoneyTransaction:
-        from ..services.actions import grant_coins
-
-        return grant_coins(recipient=self, coins=coins, description=description)
-
-    def spend_coins(
-        self, coins: CoinAmounts, description: str = ""
-    ) -> MoneyTransaction:
-        from ..services.actions import spend_coins
-
-        return spend_coins(spender=self, coins=coins, description=description)
-
-    def exchange_coins(
-        self, given: CoinAmounts, received: CoinAmounts, description: str = ""
-    ) -> MoneyTransaction:
-        from ..services.actions import exchange_coins
-
-        return exchange_coins(
-            character=self, given=given, received=received, description=description
-        )
-
-    def money_account(self) -> MoneyAccount:
-        from ..services.ledger import character_account
-        from .money import MoneyAccount
-
-        return character_account(MoneyAccount, self)
-
-    def experience_account(self) -> ExperienceAccount:
-        from ..services.ledger import character_account
-        from .experience import ExperienceAccount
-
-        return character_account(ExperienceAccount, self)
-
     def __str__(self) -> str:
-        return self.name
+        if self.context_id is not None:
+            return self.context.user.get_username()
+        if self.dicecloud_creature_id:
+            return f"Linked player {self.pk}"
+        return self.name or f"Unlinked player {self.pk}"

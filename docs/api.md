@@ -28,12 +28,11 @@ Query-result data, command payloads, and domain-event data are defined with
 Pydantic models. These models are transport-neutral: WebSocket consumers and
 temporary HTTP compatibility handlers serialize them with `model_dump(mode="json")`.
 
-The context socket exposes campaign state/calendar, members, invitations, group
-levels, characters and builder drafts, HP history, `.cah` imports, sheet records,
-inventory, money, XP, history, and Compendium operations. Commands follow the
-names visible in `ContextConsumer`, for example `campaign.get`,
-`characters.builder.save`, `characters.health.post`,
-`inventory.transactions.create`, and `compendium.search`.
+The context socket exposes campaign state/calendar, members, invitations, party XP,
+encounters, and read-only DiceCloud character projections. Commands include
+`campaign.get`, `characters.dicecloud.link`, `characters.dicecloud.unlink`,
+`characters.active.set`, `campaign.experience.recipients.set`, and
+`experience.shared_awards.create`.
 
 The invite socket supports `invite.inspect`, `invite.accept`, and
 `invite.register_and_accept`. The user socket supports `user.contexts.list`.

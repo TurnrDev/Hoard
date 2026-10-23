@@ -2,7 +2,13 @@
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ExperienceRecipientCountCommand(BaseModel):
+    """Validated input for the campaign-wide XP divisor."""
+
+    experience_recipient_count: int = Field(gt=0, le=100)
 
 
 class CampaignStateChangedEvent(BaseModel):

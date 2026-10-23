@@ -22,7 +22,7 @@ class WebSocketProtocolTests(SimpleTestCase):
         self.assertEqual(error_type(kind), "query.error")
 
     def test_commands_have_acknowledgement_and_error_envelopes(self) -> None:
-        kind = operation_kind("characters.update")
+        kind = operation_kind("characters.dicecloud.link")
 
         self.assertEqual(kind, OperationKind.COMMAND)
         self.assertEqual(result_type(kind), "command.ack")
@@ -62,7 +62,6 @@ class WebSocketProtocolTests(SimpleTestCase):
     def test_deferred_operations_are_not_registered(self) -> None:
         operations = operation_definitions()
         deferred_prefixes = (
-            "compendium.",
             "characters.builder.",
             "characters.conditions.",
             "characters.imports.",
@@ -83,8 +82,10 @@ class WebSocketProtocolTests(SimpleTestCase):
         }
 
         self.assertEqual(exposed, set())
-        self.assertIn("characters.health.post", operations)
-        self.assertIn("characters.rest", operations)
+        self.assertIn("characters.dicecloud.link", operations)
+        self.assertIn("characters.dicecloud.unlink", operations)
+        self.assertIn("campaign.experience.recipients.set", operations)
+        self.assertNotIn("characters.health.post", operations)
         self.assertIn("campaign.encounter.start", operations)
         self.assertIn("campaign.encounter.initiative.roll", operations)
         self.assertNotIn("campaign.level.approve", operations)
