@@ -75,7 +75,9 @@ def creature_id_from_input(value: str) -> str:
     )
     creature_id = match.group("id") if match else candidate
     if not CREATURE_ID_PATTERN.fullmatch(creature_id):
-        raise DiceCloudError("Enter a DiceCloud creature ID or public character/API URL.")
+        raise DiceCloudError(
+            "Enter a DiceCloud creature ID or public character/API URL."
+        )
 
     return creature_id
 
@@ -128,7 +130,10 @@ def refresh_is_allowed(creature_id: str) -> bool:
         return True
 
     retry_after = state.get("retry_after")
-    return not isinstance(retry_after, (int, float)) or retry_after <= timezone.now().timestamp()
+    return (
+        not isinstance(retry_after, (int, float))
+        or retry_after <= timezone.now().timestamp()
+    )
 
 
 def record_refresh_failure(creature_id: str) -> int:
@@ -202,7 +207,11 @@ def normalize_creature(creature_id: str, payload: object) -> dict[str, object]:
     if not isinstance(payload, Mapping):
         raise DiceCloudError("DiceCloud returned an invalid creature document.")
     creatures = payload.get("creatures")
-    if not isinstance(creatures, list) or not creatures or not isinstance(creatures[0], Mapping):
+    if (
+        not isinstance(creatures, list)
+        or not creatures
+        or not isinstance(creatures[0], Mapping)
+    ):
         raise DiceCloudError("The DiceCloud creature is unavailable or not public.")
     creature = creatures[0]
     if creature.get("_id") != creature_id or not creature.get("public"):
@@ -326,7 +335,9 @@ def class_level(
 
     name = clean_class_name(text(class_property.get("name"), ""))
     variable_name = "".join(character for character in name if character.isalnum())
-    return integer(variables.get(f"{variable_name[:1].lower()}{variable_name[1:]}Level"))
+    return integer(
+        variables.get(f"{variable_name[:1].lower()}{variable_name[1:]}Level")
+    )
 
 
 def class_subclass(
@@ -355,7 +366,9 @@ def class_subclass(
 
 
 def property_is_descended_from(
-    property_value: Mapping[str, object], ancestor_id: str, properties: list[Mapping[str, object]]
+    property_value: Mapping[str, object],
+    ancestor_id: str,
+    properties: list[Mapping[str, object]],
 ) -> bool:
     properties_by_id = {
         value.get("_id"): value
@@ -564,7 +577,9 @@ def canonical_stats(
 def statistic_group(
     variables: Mapping[str, object], names: tuple[str, ...]
 ) -> dict[str, int | str | None]:
-    return {name: display_value(variables.get(name)) for name in names if name in variables}
+    return {
+        name: display_value(variables.get(name)) for name in names if name in variables
+    }
 
 
 def skill_entries(values: object) -> list[dict[str, int | float | str | None]]:
@@ -580,9 +595,10 @@ def skill_entries(values: object) -> list[dict[str, int | float | str | None]]:
         for fallback_name, variable in group.items():
             if not isinstance(variable, Mapping):
                 continue
-            if text(variable.get("skillType"), "") != "skill" and text(
-                variable.get("type"), ""
-            ) != "skill":
+            if (
+                text(variable.get("skillType"), "") != "skill"
+                and text(variable.get("type"), "") != "skill"
+            ):
                 continue
 
             key = text(variable.get("variableName"), text(fallback_name, ""))
@@ -649,11 +665,15 @@ def collection_entries(
         result.extend(property_entries(properties, category))
         plural = f"{category}s"
         result.extend(raw_entries(payload.get(plural), category))
-        result.extend(raw_entries(payload.get(f"creature{category.title()}s"), category))
+        result.extend(
+            raw_entries(payload.get(f"creature{category.title()}s"), category)
+        )
     return unique_entries(result)
 
 
-def property_entries(properties: object, category: str) -> list[dict[str, int | str | None]]:
+def property_entries(
+    properties: object, category: str
+) -> list[dict[str, int | str | None]]:
     if not isinstance(properties, list):
         return []
     return [
@@ -700,7 +720,7 @@ def entry(
 
 
 def unique_entries(
-    entries: list[dict[str, int | str | None]]
+    entries: list[dict[str, int | str | None]],
 ) -> list[dict[str, int | str | None]]:
     result = []
     seen = set()
@@ -722,8 +742,22 @@ def currency(
     variables: Mapping[str, object], payload: Mapping[str, object], properties: object
 ) -> dict[str, int | str]:
     aliases = {
-        "cp": ("cp", "copper", "copperPiece", "copperPieces", "copperCoin", "copperCoins"),
-        "sp": ("sp", "silver", "silverPiece", "silverPieces", "silverCoin", "silverCoins"),
+        "cp": (
+            "cp",
+            "copper",
+            "copperPiece",
+            "copperPieces",
+            "copperCoin",
+            "copperCoins",
+        ),
+        "sp": (
+            "sp",
+            "silver",
+            "silverPiece",
+            "silverPieces",
+            "silverCoin",
+            "silverCoins",
+        ),
         "ep": (
             "ep",
             "electrum",
@@ -743,7 +777,9 @@ def currency(
         ),
     }
     variable_totals = {
-        denomination: integer(next((variables.get(key) for key in keys if key in variables), 0))
+        denomination: integer(
+            next((variables.get(key) for key in keys if key in variables), 0)
+        )
         for denomination, keys in aliases.items()
     }
     inventory_totals = inventory_currency(payload, properties)
@@ -813,8 +849,22 @@ def nested_mappings(value: object) -> list[Mapping[str, object]]:
 
 def currency_denomination(item: Mapping[str, object]) -> str | None:
     denominations = {
-        "cp": ("cp", "copper", "copper coin", "copper coins", "copper piece", "copper pieces"),
-        "sp": ("sp", "silver", "silver coin", "silver coins", "silver piece", "silver pieces"),
+        "cp": (
+            "cp",
+            "copper",
+            "copper coin",
+            "copper coins",
+            "copper piece",
+            "copper pieces",
+        ),
+        "sp": (
+            "sp",
+            "silver",
+            "silver coin",
+            "silver coins",
+            "silver piece",
+            "silver pieces",
+        ),
         "ep": (
             "ep",
             "electrum",
@@ -877,7 +927,7 @@ def integer(value: object) -> int:
         return 0
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 
@@ -886,7 +936,7 @@ def decimal_value(value: object) -> int | float | None:
         return None
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

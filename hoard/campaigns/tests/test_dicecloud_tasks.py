@@ -59,7 +59,9 @@ class DiceCloudLiveSyncTaskTests(TestCase):
 
     @patch("hoard.campaigns.tasks.notify_campaign_changed")
     @patch("hoard.campaigns.tasks.refresh_creature")
-    def test_refreshes_active_linked_profiles_for_present_campaigns(self, refresh, notify):
+    def test_refreshes_active_linked_profiles_for_present_campaigns(
+        self, refresh, notify
+    ):
         self.make_campaign_present()
         Character.objects.create(
             campaign=self.campaign,

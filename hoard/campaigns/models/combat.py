@@ -95,7 +95,10 @@ class EncounterCombatant(models.Model):
     def clean(self) -> None:
         super().clean()
 
-        if self.character_id and self.character.campaign_id != self.encounter.campaign_id:
+        if (
+            self.character_id
+            and self.character.campaign_id != self.encounter.campaign_id
+        ):
             raise ValidationError(
                 {"character": "A combatant must belong to the encounter campaign."}
             )

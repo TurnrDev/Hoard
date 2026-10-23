@@ -12,7 +12,13 @@ from .models import (
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = ("name", "calendar_era_abbreviation", "calendar_year", "calendar_day", "shared_experience")
+    list_display = (
+        "name",
+        "calendar_era_abbreviation",
+        "calendar_year",
+        "calendar_day",
+        "shared_experience",
+    )
     search_fields = ("name",)
 
 
