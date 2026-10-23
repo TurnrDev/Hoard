@@ -215,7 +215,9 @@ def agreed_tie_winner(
 
 
 def tie_group_key(group: list[EncounterCombatant]) -> str:
-    return ",".join(str(entry.pk) for entry in sorted(group, key=lambda entry: entry.pk))
+    return ",".join(
+        str(entry.pk) for entry in sorted(group, key=lambda entry: entry.pk)
+    )
 
 
 def valid_tie_votes(
@@ -384,13 +386,17 @@ def reorder_combatants(
 ) -> list[EncounterCombatant]:
     require_game_master(context)
     encounter = active_encounter(context)
-    combatants = list(encounter.combatants.select_for_update().filter(pk__in=combatant_ids))
+    combatants = list(
+        encounter.combatants.select_for_update().filter(pk__in=combatant_ids)
+    )
     combatants_by_id = {combatant.pk: combatant for combatant in combatants}
     existing_ids = set(encounter.combatants.values_list("pk", flat=True))
     if set(combatant_ids) != existing_ids:
         raise ValidationError("Combatant order must include every initiative entry.")
 
-    initiatives = sorted((combatant.initiative for combatant in combatants), reverse=True)
+    initiatives = sorted(
+        (combatant.initiative for combatant in combatants), reverse=True
+    )
     if len(initiatives) != len(set(initiatives)):
         highest = min(100, max(max(initiatives), -100 + len(initiatives) - 1))
         initiatives = [highest - index for index in range(len(initiatives))]
@@ -454,11 +460,7 @@ def combatant_data(
     projection: dict[str, object] | None,
 ) -> dict[str, object]:
     current_hp, max_hp = combatant.health
-    if (
-        combatant.character_id
-        and projection
-        and not projection.get("unavailable")
-    ):
+    if combatant.character_id and projection and not projection.get("unavailable"):
         current_hp, max_hp = profile_hp(projection)
     is_player_character = bool(combatant.character_id)
     can_read_actual_health = (

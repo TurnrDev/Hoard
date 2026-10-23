@@ -89,6 +89,19 @@ docker compose ps
 docker compose logs -f app worker nginx
 ```
 
+### Periodic tasks
+
+Celery Beat runs the static DiceCloud-profile refresh every 10 seconds. Its local
+`celerybeat-schedule` file records when tasks last ran, but Hoard does not need to
+retain that state between container restarts: a restart may delay one refresh, and
+the next scheduled refresh restores normal operation. The entrypoint therefore
+stores it in `/tmp`, keeping generated scheduler files out of the repository and
+away from persistent application data.
+
+If Hoard later needs user-managed or durable periodic schedules, use a shared
+database-backed scheduler such as `django-celery-beat` rather than persisting the
+container-local schedule file.
+
 ## Architecture
 
 - Django owns authentication, campaign data, portrait uploads, and the initial SPA

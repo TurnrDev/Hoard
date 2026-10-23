@@ -5,46 +5,58 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('campaigns', '0002_character_ability_bonuses_and_more'),
+        ("campaigns", "0002_character_ability_bonuses_and_more"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='encounter',
-            options={'ordering': ('-started_at', '-pk')},
+            name="encounter",
+            options={"ordering": ("-started_at", "-pk")},
         ),
         migrations.AlterModelOptions(
-            name='encountercombatant',
-            options={'ordering': ('-initiative', 'pk')},
+            name="encountercombatant",
+            options={"ordering": ("-initiative", "pk")},
         ),
         migrations.RemoveField(
-            model_name='encountercombatant',
-            name='position',
+            model_name="encountercombatant",
+            name="position",
         ),
         migrations.AddField(
-            model_name='encounter',
-            name='initiative_tie_breaks',
+            model_name="encounter",
+            name="initiative_tie_breaks",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='encounter',
-            name='initiative_tie_choices',
+            model_name="encounter",
+            name="initiative_tie_choices",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='encounter',
-            name='started_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='started_encounters', to='campaigns.campaigncontext'),
+            model_name="encounter",
+            name="started_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="started_encounters",
+                to="campaigns.campaigncontext",
+            ),
         ),
         migrations.AlterField(
-            model_name='encountercombatant',
-            name='current_hp',
+            model_name="encountercombatant",
+            name="current_hp",
             field=models.IntegerField(blank=True, null=True),
         ),
         migrations.AddConstraint(
-            model_name='encountercombatant',
-            constraint=models.CheckConstraint(condition=models.Q(('current_hp__isnull', True), ('current_hp__gte', 0), _connector='OR'), name='encounter_combatant_current_hp_nonnegative'),
+            model_name="encountercombatant",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    ("current_hp__isnull", True),
+                    ("current_hp__gte", 0),
+                    _connector="OR",
+                ),
+                name="encounter_combatant_current_hp_nonnegative",
+            ),
         ),
     ]

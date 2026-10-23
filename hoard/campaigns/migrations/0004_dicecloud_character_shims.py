@@ -19,9 +19,9 @@ def clear_legacy_character_data(apps, schema_editor):
         character.portrait.delete(save=False)
 
     npc_ids = list(Character.objects.filter(kind="npc").values_list("pk", flat=True))
-    for combatant in EncounterCombatant.objects.filter(character_id__in=npc_ids).select_related(
-        "character"
-    ):
+    for combatant in EncounterCombatant.objects.filter(
+        character_id__in=npc_ids
+    ).select_related("character"):
         character = combatant.character
         combatant.name = character.name
         combatant.current_hp = character.current_hp
@@ -43,9 +43,7 @@ def clear_legacy_character_data(apps, schema_editor):
         ]
         if not recipient_amounts:
             continue
-        per_player, remainder = divmod(
-            sum(recipient_amounts), len(recipient_amounts)
-        )
+        per_player, remainder = divmod(sum(recipient_amounts), len(recipient_amounts))
         PartyExperienceAward.objects.create(
             campaign=transaction.campaign,
             amount=(
@@ -130,7 +128,10 @@ class Migration(migrations.Migration):
                     models.CharField(blank=True, max_length=20, null=True),
                 ),
                 ("campaign_year", models.PositiveIntegerField(blank=True, null=True)),
-                ("campaign_day", models.PositiveSmallIntegerField(blank=True, null=True)),
+                (
+                    "campaign_day",
+                    models.PositiveSmallIntegerField(blank=True, null=True),
+                ),
                 (
                     "occurred_at",
                     models.DateTimeField(
@@ -161,8 +162,12 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(clear_legacy_character_data, migrations.RunPython.noop),
         migrations.RemoveField(model_name="character", name="ability_bonuses"),
-        migrations.RemoveField(model_name="character", name="ability_score_adjustments"),
-        migrations.RemoveField(model_name="character", name="background_ability_bonuses"),
+        migrations.RemoveField(
+            model_name="character", name="ability_score_adjustments"
+        ),
+        migrations.RemoveField(
+            model_name="character", name="background_ability_bonuses"
+        ),
         migrations.RemoveField(model_name="character", name="character_class"),
         migrations.RemoveField(model_name="character", name="charisma"),
         migrations.RemoveField(model_name="character", name="constitution"),
@@ -174,7 +179,9 @@ class Migration(migrations.Migration):
         migrations.RemoveField(model_name="character", name="jack_of_all_trades"),
         migrations.RemoveField(model_name="character", name="kind"),
         migrations.RemoveField(model_name="character", name="portrait"),
-        migrations.RemoveField(model_name="character", name="proficiency_bonus_adjustment"),
+        migrations.RemoveField(
+            model_name="character", name="proficiency_bonus_adjustment"
+        ),
         migrations.RemoveField(model_name="character", name="race"),
         migrations.RemoveField(model_name="character", name="remarkable_athlete"),
         migrations.RenameField(

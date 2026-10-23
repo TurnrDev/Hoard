@@ -237,14 +237,17 @@ class DiceCloudServiceTests(SimpleTestCase):
 
         profile = normalize_creature(self.creature_id, payload)
 
-        self.assertEqual(profile["currency"], {
-            "cp": 0,
-            "sp": 7,
-            "ep": 0,
-            "gp": 14,
-            "pp": 0,
-            "gold_value": "14.7",
-        })
+        self.assertEqual(
+            profile["currency"],
+            {
+                "cp": 0,
+                "sp": 7,
+                "ep": 0,
+                "gp": 14,
+                "pp": 0,
+                "gold_value": "14.7",
+            },
+        )
 
     @patch("hoard.campaigns.services.dicecloud.cache.set")
     @patch("hoard.campaigns.services.dicecloud.requests.get")
@@ -257,7 +260,10 @@ class DiceCloudServiceTests(SimpleTestCase):
 
         get.assert_called_once_with(
             f"https://dicecloud.com/api/creature/{self.creature_id}",
-            headers={"Accept": "application/json", "User-Agent": "Hoard DiceCloud reader"},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Hoard DiceCloud reader",
+            },
             timeout=10,
         )
         response.raise_for_status.assert_called_once_with()
