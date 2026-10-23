@@ -7,6 +7,8 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [0.2.0] - 2026-10-23
+
 ### Added
 
 - Read-only public DiceCloud character-sheet links, live sheet projection with a
@@ -36,6 +38,9 @@ and Hoard adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Local NPC profiles, editable local character-sheet state, portrait uploads,
   personal money ledgers, individual XP accounts, and local HP/rest mutations.
 - Compendium pages, routes, and supporting data.
+- The upgrade migration permanently removes existing local NPC, portrait, money,
+  individual-XP, health, and character-sheet data. Back up a `0.1.x` database
+  before deploying `0.2.0` if any of that information must be retained.
 
 ## [0.1.2] - 2026-10-07
 
