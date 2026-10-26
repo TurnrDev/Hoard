@@ -37,7 +37,7 @@ services:
       homepage.siteMonitor: http://hoard_app:8000
       traefik.enable: true
       traefik.docker.network: web
-      traefik.http.routers.hoard.entrypoints: public
+      traefik.http.routers.hoard.entrypoints: public-https
       traefik.http.routers.hoard.rule: Host(`dnd.turnr.net`)
       traefik.http.routers.hoard.tls: true
       traefik.http.routers.hoard.tls.certresolver: cloudflare
@@ -114,7 +114,7 @@ services:
     labels:
       traefik.enable: true
       traefik.docker.network: web
-      traefik.http.routers.hoard-assets.entrypoints: public
+      traefik.http.routers.hoard-assets.entrypoints: public-https
       traefik.http.routers.hoard-assets.rule: Host(`dnd.turnr.net`) && (PathPrefix(`/static/`) || PathPrefix(`/media/`))
       traefik.http.routers.hoard-assets.tls: true
       traefik.http.routers.hoard-assets.tls.certresolver: cloudflare
