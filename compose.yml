@@ -10,6 +10,7 @@ services:
     build: .
     command: app
     container_name: hoard_app
+    restart: unless-stopped
     environment: &app-environment
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: dnd.turnr.net
@@ -51,6 +52,7 @@ services:
     build: .
     command: worker
     container_name: hoard_worker
+    restart: unless-stopped
     environment: *app-environment
     depends_on:
       db:
@@ -66,6 +68,7 @@ services:
     build: .
     command: beat
     container_name: hoard_beat
+    restart: unless-stopped
     environment: *app-environment
     depends_on:
       db:
@@ -78,6 +81,7 @@ services:
   db:
     image: postgres:18-alpine
     container_name: hoard_db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hoard}
       POSTGRES_USER: ${POSTGRES_USER:-hoard}
@@ -99,6 +103,7 @@ services:
   redis:
     image: redis:8-alpine
     container_name: hoard_redis
+    restart: unless-stopped
     volumes:
       - /data/appdata/hoard/redis-data:/data
     networks:
@@ -107,6 +112,7 @@ services:
   nginx:
     image: nginx:1.29-alpine
     container_name: hoard_nginx
+    restart: unless-stopped
     depends_on:
       - app
     labels:
