@@ -18,6 +18,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
+    "blacknoise>=1.2.0",
 ]
 
 [dependency-groups]

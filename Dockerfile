@@ -29,8 +29,8 @@ COPY --from=frontend /build/hoard/dist ./hoard/dist
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/hoard-entrypoint
 
 RUN useradd --create-home --uid 1000 hoard \
-    && mkdir -p /app/media /app/staticfiles \
-    && chown -R hoard:hoard /app/media /app/staticfiles
+    && mkdir -p /app/staticfiles \
+    && chown -R hoard:hoard /app/staticfiles
 
 USER hoard
 
