@@ -214,8 +214,6 @@ USE_TZ: bool = True
 STATIC_URL: str = "static/"
 STATICFILES_DIRS: list[Path] = [VITE_DIST_DIR]
 STATIC_ROOT: Path = Path(os.environ.get("HOARD_STATIC_ROOT", BASE_DIR / "staticfiles"))
-MEDIA_URL: str = "media/"
-MEDIA_ROOT: Path = Path(os.environ.get("HOARD_MEDIA_ROOT", BASE_DIR / "media"))
 
 DJANGO_VITE: dict[str, dict[str, object]] = {
     "default": {

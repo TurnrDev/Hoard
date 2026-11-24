@@ -30,7 +30,6 @@ export default defineConfig({
     origin: "http://localhost:5173",
     proxy: {
       "/api": backendUrl,
-      "/media": backendUrl,
       "/release-manifest.json": backendUrl,
       "/ws": { target: backendUrl, ws: true },
     },

@@ -72,7 +72,6 @@
         in
         {
           runtime = pkgs.runCommand "hoard-runtime-check" { } ''
-            export HOARD_MEDIA_ROOT=/tmp/hoard-media
             export HOARD_STATIC_ROOT=/tmp/hoard-static
             ${app}/bin/hoard-python - <<'PY'
             from pathlib import Path
@@ -82,9 +81,20 @@
             import django
             import psycopg
             from hoard import settings
-            assert settings.MEDIA_ROOT == Path('/tmp/hoard-media')
             assert settings.STATIC_ROOT == Path('/tmp/hoard-static')
             assert (settings.VITE_DIST_DIR / '.vite' / 'manifest.json').is_file()
+            from asgiref.sync import async_to_sync
+            from channels.testing import HttpCommunicator
+            from hoard.staticfiles import serve_static_files
+            async def fallback(scope, receive, send):
+                await send({'type': 'http.response.start', 'status': 404, 'headers': []})
+                await send({'type': 'http.response.body', 'body': b""})
+            application = serve_static_files(fallback, settings.VITE_DIST_DIR)
+            communicator = HttpCommunicator(application, 'GET', '/static/favicon.svg')
+            communicator.scope["root_path"] = ""
+            response = async_to_sync(communicator.get_response)()
+            assert response['status'] == 200
+            assert b'<svg' in response['body']
             PY
             touch "$out"
           '';

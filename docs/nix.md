@@ -25,10 +25,13 @@ The deployment owns accounts, service dependencies and persistent directories.
 files (for example systemd credentials). When set, a file takes precedence over
 the corresponding environment value. Existing environment-only setups still work.
 
-Set `HOARD_MEDIA_ROOT` and `HOARD_STATIC_ROOT` to writable absolute paths for
-production. Their defaults remain `media` and `staticfiles` beneath the project
-root for existing development and Docker deployments. The packaged frontend
-and application code stay read-only in the Nix store.
+Set `HOARD_STATIC_ROOT` to a writable absolute path for production. Its default
+remains `staticfiles` beneath the project root for development and Docker.
+BlackNoise serves collected static files through the existing ASGI process;
+no separate nginx service is needed. Hashed Vite assets get immutable caching;
+stable filenames get a short cache lifetime. WebSockets retain their existing
+Channels application. User-uploaded media is no longer served or mounted.
+The packaged frontend and application code stay read-only in the Nix store.
 
 After changing `package-lock.json`, update `npmDepsHash` in `nix/package.nix`:
 

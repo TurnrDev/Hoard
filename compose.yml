@@ -45,7 +45,6 @@ services:
       - web
       - hoard
     volumes:
-      - /data/appdata/hoard/media:/app/media
       - /data/appdata/hoard/static:/app/staticfiles
 
   worker:
@@ -61,8 +60,6 @@ services:
         condition: service_started
     networks:
       - hoard
-    volumes:
-      - /data/appdata/hoard/media:/app/media
 
   beat:
     build: .
@@ -109,21 +106,3 @@ services:
     networks:
       - hoard
 
-  nginx:
-    image: nginx:1.29-alpine
-    container_name: hoard_nginx
-    restart: unless-stopped
-    depends_on:
-      - app
-    labels:
-      traefik.enable: true
-      traefik.docker.network: web
-      traefik.http.routers.hoard-assets.entrypoints: public-https
-      traefik.http.routers.hoard-assets.rule: Host(`dnd.turnr.net`) && (PathPrefix(`/static/`) || PathPrefix(`/media/`))
-      traefik.http.services.hoard-assets.loadbalancer.server.port: 80
-    networks:
-      - web
-    volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /data/appdata/hoard/media:/srv/media:ro
-      - /data/appdata/hoard/static:/srv/static:ro

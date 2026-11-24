@@ -45,7 +45,6 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
-      - dev_media:/app/media
 
   worker:
     build: .
@@ -68,7 +67,6 @@ services:
         condition: service_started
     volumes:
       - .:/app
-      - dev_media:/app/media
 
   beat:
     build: .
@@ -81,7 +79,6 @@ services:
         condition: service_started
     volumes:
       - .:/app
-      - dev_media:/app/media
 
   frontend:
     image: node:22-bookworm-slim
@@ -99,6 +96,5 @@ services:
 
 volumes:
   dev_db_data:
-  dev_media:
   dev_node_modules:
   dev_redis_data:
