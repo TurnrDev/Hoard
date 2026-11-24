@@ -21,11 +21,19 @@ VITE_DIST_DIR: Path = BASE_DIR / "hoard" / "dist"
 load_dotenv(BASE_DIR / ".env")
 
 
+def read_secret(name: str, default: str) -> str:
+    """Read an optional runtime secret file, retaining existing env defaults."""
+    secret_file = os.environ.get(f"{name}_FILE")
+    if secret_file:
+        return Path(secret_file).read_text().rstrip("\r\n")
+    return os.environ.get(name, default)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY: str = os.environ.get(
+SECRET_KEY: str = read_secret(
     "DJANGO_SECRET_KEY",
     "django-insecure-xi61o2kh&-5io)knp@9((ni%dw1tyx&-rpby^l84&#40kg&-1m",
 )
@@ -162,7 +170,7 @@ DATABASES: dict[str, dict[str, str]] = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "hoard"),
         "USER": os.environ.get("POSTGRES_USER", "hoard"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "hoard"),
+        "PASSWORD": read_secret("POSTGRES_PASSWORD", "hoard"),
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
@@ -205,9 +213,9 @@ USE_TZ: bool = True
 
 STATIC_URL: str = "static/"
 STATICFILES_DIRS: list[Path] = [VITE_DIST_DIR]
-STATIC_ROOT: Path = BASE_DIR / "staticfiles"
+STATIC_ROOT: Path = Path(os.environ.get("HOARD_STATIC_ROOT", BASE_DIR / "staticfiles"))
 MEDIA_URL: str = "media/"
-MEDIA_ROOT: Path = BASE_DIR / "media"
+MEDIA_ROOT: Path = Path(os.environ.get("HOARD_MEDIA_ROOT", BASE_DIR / "media"))
 
 DJANGO_VITE: dict[str, dict[str, object]] = {
     "default": {
